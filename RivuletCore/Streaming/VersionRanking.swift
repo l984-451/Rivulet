@@ -23,6 +23,8 @@ nonisolated enum VersionRanking {
         let range: Int
         /// Bits per second; 0 when unknown.
         let bitrate: Int
+        /// False for a version the server lists but cannot read; never picked while another plays.
+        var present = true
 
         static func < (a: Key, b: Key) -> Bool {
             (a.tier, a.range, a.bitrate) < (b.tier, b.range, b.bitrate)
@@ -65,7 +67,8 @@ nonisolated enum VersionRanking {
         }
         return Key(tier: tier(label: media.videoResolution, height: media.height ?? video?.height),
                    range: range,
-                   bitrate: (media.bitrate ?? 0) * 1000)
+                   bitrate: (media.bitrate ?? 0) * 1000,
+                   present: !media.isMissing)
     }
 
     /// Moves the chosen version of a server-ordered `Media` array to the front.
@@ -88,7 +91,9 @@ nonisolated enum VersionRanking {
     /// Under a cap, `.best` and `.matchingTier` prefer a version that fits without
     /// dropping below the tier the cap's step would give; `.source` ignores the cap.
     static func pick(_ choice: VersionChoice, ids: [String], keys: [Key], capKbps: Int? = nil) -> Int? {
-        let ranked = rankedIndices(keys)
+        let all = rankedIndices(keys)
+        let live = all.filter { keys[$0].present }
+        let ranked = live.isEmpty ? all : live
         let pool: [Int]
         switch choice {
         case .best:

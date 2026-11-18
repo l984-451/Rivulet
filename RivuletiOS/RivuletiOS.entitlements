@@ -14,5 +14,8 @@
 	<array>
 		<string>iCloud.com.gstudios.rivulet.sync</string>
 	</array>
+	<!-- CarPlay video app (iOS 27) and Apple HomeView. Apple grants this per team: delete the key to sign with another one. -->
+	<key>com.apple.developer.carplay-video</key>
+	<true/>
 </dict>
 </plist>

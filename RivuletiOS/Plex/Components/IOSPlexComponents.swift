@@ -12,6 +12,7 @@ import UIKit
 struct IOSPlexImage: View {
     let url: URL?
     @State private var image: UIImage?
+    @Environment(\.onArtworkShown) private var onArtworkShown
 
     init(url: URL?) {
         self.url = url
@@ -32,12 +33,19 @@ struct IOSPlexImage: View {
                 guard let url else { return }
                 if let cached = IOSArtworkCache.shared.cachedImage(for: url) {
                     image = cached
+                    onArtworkShown?()
                     return
                 }
                 guard let loaded = await IOSArtworkCache.shared.image(for: url), !Task.isCancelled else { return }
-                withAnimation(.easeOut(duration: 0.2)) { image = loaded }
+                // Shown once its fade-in has finished, not when it starts.
+                withAnimation(.easeOut(duration: 0.2)) { image = loaded } completion: { onArtworkShown?() }
             }
     }
+}
+
+extension EnvironmentValues {
+    /// Called when an `IOSPlexImage` below has its artwork on screen (the launch splash waits on the hero's).
+    @Entry var onArtworkShown: (() -> Void)?
 }
 
 /// An item's artwork, transcoded to the pixel size the tile draws at. Widths
@@ -176,7 +184,8 @@ struct IOSPlexResolvedLogo: View {
 // MARK: - Watch state
 
 extension View {
-    /// Progress bar along the bottom, or the watched check when there is no bar.
+    /// Progress bar along the bottom, or the watched check when there is no bar. A show with
+    /// episodes left wears their count instead (#658).
     func plexWatchState(_ item: MediaItem) -> some View {
         overlay(alignment: .bottom) {
             if let fraction = item.progressBarFraction {
@@ -189,7 +198,9 @@ extension View {
             }
         }
         .overlay(alignment: .topTrailing) {
-            if item.progressBarFraction == nil, item.isWatched {
+            if let count = item.unwatchedEpisodeCount {
+                UnwatchedCountPill(count: count)
+            } else if item.progressBarFraction == nil, item.isWatched {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.subheadline)
                     .symbolRenderingMode(.palette)
@@ -197,6 +208,22 @@ extension View {
                     .padding(6)
             }
         }
+    }
+}
+
+/// A show's unwatched episodes, in the edition badge's dark capsule.
+private struct UnwatchedCountPill: View {
+    let count: Int
+
+    var body: some View {
+        Text(count, format: .number)
+            .font(.caption2.weight(.semibold))
+            .monospacedDigit()
+            .foregroundStyle(.white)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(.black.opacity(0.55), in: Capsule())
+            .padding(6)
     }
 }
 

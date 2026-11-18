@@ -14,6 +14,8 @@ struct MacHomeHero: View {
     /// Side safe-area insets the artwork runs under: the floating sidebar's.
     var bleed = EdgeInsets()
     @Binding var selection: MediaItemRef?
+    /// A page's artwork is on screen.
+    var onPageShown: ((MediaItemRef) -> Void)?
     @State private var hovering = false
     @State private var inView = true
     @State private var isPaging = false
@@ -94,6 +96,7 @@ struct MacHomeHero: View {
                     ForEach(items) { item in
                         // Pages take the pager's own width, so they always match its paging step.
                         MacItemArtwork(item: item, kind: .backdrop, width: pageWidth, aspectRatio: 16 / 9, swapsTitledBackdrop: true)
+                            .environment(\.onArtworkShown, onPageShown.map { report in { report(item.id) } })
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .clipped()
                             .visualEffect { content, proxy in

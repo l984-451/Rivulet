@@ -274,6 +274,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         // so there's NO supplementary header — just one full-width item tall
         // enough for the header + the row.
         let rowHeight = ShelfRowCell.headerHeight + MediaRowMetrics.posterHeight + MediaRowMetrics.focusGrowthPadding
+            + MediaRowMetrics.posterCaptionSpace
         let itemSize = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1),
                                               heightDimension: .absolute(rowHeight))
         let item = NSCollectionLayoutItem(layoutSize: itemSize)
@@ -494,7 +495,10 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         }
         cell.cellProvider = { innerCV, ip in
             let poster = innerCV.dequeueReusableCell(withReuseIdentifier: PosterCell.reuseID, for: ip) as! PosterCell
-            if ip.item < tiles.count { poster.configure(item: tiles[ip.item]) }
+            if ip.item < tiles.count {
+                poster.configure(item: tiles[ip.item])
+                poster.setCaption(MediaRowMetrics.showsPosterTitles ? PosterCaption.text(for: tiles[ip.item]) : nil)
+            }
             return poster
         }
         cell.onSelect = { [weak self] idx in
@@ -512,7 +516,8 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             hasSkeleton: false,
             contentToken: hasher.finalize(),
             initialOffset: shelfOffsets[section] ?? 0,
-            panelOvershoot: (left: Self.rowLeading - MediaRowMetrics.rowLeading, right: 0)
+            panelOvershoot: (left: Self.rowLeading - MediaRowMetrics.rowLeading, right: 0),
+            captionHeight: MediaRowMetrics.posterCaptionSpace
         )
     }
 

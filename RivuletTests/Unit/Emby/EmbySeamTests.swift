@@ -170,6 +170,7 @@ final class EmbySeamTests: XCTestCase {
     func test_library_isPinnedToHome() {
         let view = decode(#"{"Id":"3","Name":"Movies","Type":"CollectionFolder","CollectionType":"movies"}"#)
         XCTAssertEqual(EmbyMediaMapper.library(view, providerID: "emby:srv")?.isPinnedToHome, true)
+        XCTAssertEqual(EmbyMediaMapper.library(view, providerID: "emby:srv", homeExcludes: ["3"])?.isPinnedToHome, false)
     }
 
     func test_item_carriesGenresAndExternalIDsWhateverTheirCase() {

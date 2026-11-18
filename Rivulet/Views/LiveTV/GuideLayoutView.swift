@@ -102,42 +102,6 @@ struct GuideLayoutView: View {
         }
     }
 
-    /// Programmes keyed by channel id (the EPGGuide indexes by `channel.id`).
-    /// Channels with no matched guide data get placeholder 4-hour blocks so
-    /// their rows still render focusable cells — without them the row has
-    /// nothing to land on and the channel can't be selected at all.
-    private var programsByChannel: [String: [UnifiedProgram]] {
-        var epg = dataStore.epg
-        let spanMinutes = totalMinutes
-        for channel in channels where (epg[channel.id]?.isEmpty ?? true) {
-            epg[channel.id] = Self.placeholderPrograms(
-                channelId: channel.id, from: timelineStart, spanMinutes: spanMinutes)
-        }
-        return epg
-    }
-
-    /// 4-hour "No guide data available." blocks spanning the visible timeline.
-    /// Block boundaries are derived from the (fixed) timeline start, so ids
-    /// stay stable across the 30s `now` ticks and don't churn the grid.
-    private static func placeholderPrograms(channelId: String, from start: Date, spanMinutes: Int) -> [UnifiedProgram] {
-        let blockSeconds: TimeInterval = 4 * 3600
-        let span = TimeInterval(spanMinutes * 60)
-        var programs: [UnifiedProgram] = []
-        var blockStart = start
-        while blockStart < start.addingTimeInterval(span) {
-            let blockEnd = blockStart.addingTimeInterval(blockSeconds)
-            programs.append(UnifiedProgram(
-                id: "\(channelId):placeholder:\(Int(blockStart.timeIntervalSince1970))",
-                channelId: channelId,
-                title: String(localized: "No guide data available."),
-                startTime: blockStart,
-                endTime: blockEnd
-            ))
-            blockStart = blockEnd
-        }
-        return programs
-    }
-
     /// Timeline width in minutes, tracking the loaded EPG window so the grid
     /// grows as the store fills in more programming. Floors at the initial load
     /// so the first paint has room, and never runs past the placeholder ceiling.
@@ -162,7 +126,6 @@ struct GuideLayoutView: View {
     /// (issue #318). Owned here until it is handed back full screen, replaced,
     /// or the guide goes away.
     @State private var miniSession: LiveTVSessionHandoff?
-    @AppStorage("liveTVKeepPlayingInGuide") private var keepPlayingInGuide = true
 
     // Backdrop transition state. Each image is one layer (wash plus crisp
     // artwork), and the incoming layer fades in over the outgoing one.
@@ -258,7 +221,7 @@ struct GuideLayoutView: View {
 
             EPGGuide(
                 channels: channels,
-                programsByChannel: programsByChannel,
+                programsByChannel: dataStore.epg,
                 timelineStart: timelineStart,
                 totalMinutes: totalMinutes,
                 now: now,
@@ -466,10 +429,8 @@ struct GuideLayoutView: View {
     private func presentPlayer(_ vc: LiveTVAetherPlayerViewController, from top: UIViewController,
                                animated: Bool = true) {
         vc.modalPresentationStyle = .fullScreen
-        if keepPlayingInGuide {
-            vc.onMinimize = { session in
-                miniSession = session
-            }
+        vc.onMinimize = { session in
+            miniSession = session
         }
         vc.onOpenMultiview = { session in
             presentMultiview(adopting: session, adding: nil, fromPlayer: true)

@@ -251,15 +251,46 @@ struct EPGGuide: UIViewRepresentable {
         /// Pushes data into the layout. Returns true if channels/programs changed.
         @discardableResult
         func apply(_ p: EPGGuide, to layout: EPGLayout) -> Bool {
+            // Signature to detect data changes. Includes logoURL so a late
+            // channel-logo patch triggers a reload, and per-channel programme
+            // counts and ends so EPG arriving AFTER the channels (Rivulet loads
+            // them separately) reloads the grid and the rows populate.
+            var sig = Hasher()
+            sig.combine(p.channels.count)
+            for c in p.channels {
+                let guide = p.programsByChannel[c.id]
+                sig.combine(c.id)
+                sig.combine(c.logoURL)
+                sig.combine(guide?.count ?? 0)
+                sig.combine(guide?.first?.id)
+                sig.combine(guide?.last?.id)
+            }
+            sig.combine(p.timelineStart)
+            sig.combine(p.totalMinutes)
+            let signature = sig.finalize()
+            // Focus moves and the clock tick land here too: rebuilding every row
+            // each time hung the main thread on lineups of thousands of channels.
+            guard signature != lastSignature else {
+                layout.now = p.now
+                return false
+            }
+            lastSignature = signature
+
             let ppm = EPGTheme.pointsPerMinute
             let total = Double(p.totalMinutes)
+            let placeholderTitle = String(localized: "No guide data available.")
             var rows: [[EPGLayout.Span]] = []
             var progs: [[UnifiedProgram]] = []
             var chans: [UnifiedChannel] = []
 
             for channel in p.channels {
                 let minStart = -Double(EPGTheme.channelColumnWidth) / Double(ppm)
-                let ranges = (p.programsByChannel[channel.id] ?? []).compactMap { program -> (cs: Double, ce: Double, prog: UnifiedProgram)? in
+                let guide = p.programsByChannel[channel.id] ?? []
+                let rowGuide = guide.isEmpty
+                    ? Self.placeholderPrograms(channelId: channel.id, title: placeholderTitle,
+                                               from: p.timelineStart, spanMinutes: p.totalMinutes)
+                    : guide
+                let ranges = rowGuide.compactMap { program -> (cs: Double, ce: Double, prog: UnifiedProgram)? in
                     let startMin = program.start.timeIntervalSince(p.timelineStart) / 60
                     let endMin = program.stop.timeIntervalSince(p.timelineStart) / 60
                     guard endMin > 0, startMin < total else { return nil }
@@ -282,22 +313,6 @@ struct EPGGuide: UIViewRepresentable {
                 chans.append(channel)
             }
 
-            // Signature to detect data changes. Includes logoURL so a late
-            // channel-logo patch triggers a reload, and per-channel programme
-            // counts so EPG arriving AFTER the channels (Rivulet loads them
-            // separately) reloads the grid and the rows populate.
-            var sig = Hasher()
-            sig.combine(p.channels.count)
-            for c in p.channels {
-                sig.combine(c.id)
-                sig.combine(c.logoURL)
-                sig.combine(p.programsByChannel[c.id]?.count ?? 0)
-            }
-            sig.combine(p.timelineStart)
-            let signature = sig.finalize()
-            let changed = signature != lastSignature
-            lastSignature = signature
-
             sections = chans
             programs = progs
             lastTimelineStart = p.timelineStart
@@ -306,7 +321,29 @@ struct EPGGuide: UIViewRepresentable {
                              totalMinutes: p.totalMinutes,
                              timelineStart: p.timelineStart,
                              now: p.now)
-            return changed
+            return true
+        }
+
+        /// 4-hour "No guide data available." blocks spanning the timeline, so a
+        /// channel with no guide data still has cells to focus and select. Block
+        /// boundaries come from the timeline start, so ids stay stable.
+        private static func placeholderPrograms(channelId: String, title: String, from start: Date, spanMinutes: Int) -> [UnifiedProgram] {
+            let blockSeconds: TimeInterval = 4 * 3600
+            let end = start.addingTimeInterval(TimeInterval(spanMinutes * 60))
+            var programs: [UnifiedProgram] = []
+            var blockStart = start
+            while blockStart < end {
+                let blockEnd = blockStart.addingTimeInterval(blockSeconds)
+                programs.append(UnifiedProgram(
+                    id: "\(channelId):placeholder:\(Int(blockStart.timeIntervalSince1970))",
+                    channelId: channelId,
+                    title: title,
+                    startTime: blockStart,
+                    endTime: blockEnd
+                ))
+                blockStart = blockEnd
+            }
+            return programs
         }
 
         func numberOfSections(in collectionView: UICollectionView) -> Int { programs.count }
@@ -1339,7 +1376,7 @@ final class EPGLayout: UICollectionViewLayout {
     private var channelCount = 0
     private var totalMinutes = 0
     private var timelineStart = Date()
-    private var now = Date()
+    var now = Date()
 
     private let colW = EPGTheme.channelColumnWidth
     private let rowH = EPGTheme.rowHeight

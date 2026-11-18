@@ -166,9 +166,10 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
 
             // 404 is an item the server deleted or rematched, 421 a connection
             // address now answered by another server (RIVULET-2): server state,
-            // so a log. Other 4xx can mean we sent a bad request, so capture.
+            // so a log, as is a guid lookup every caller tolerates failing. Other 4xx can mean we
+            // sent a bad request, so capture.
             let status = httpResponse.statusCode
-            if status == 404 || status == 421 {
+            if status == 404 || status == 421 || Self.isGuidLookup(url) {
                 SentryBridge.log(.warn, "Plex request returned \(status)", attributes: [
                     "component": "plex_network",
                     "error_type": "http",
@@ -203,6 +204,18 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             return try await Self.decodeDetached(data)
         } catch {
             DiagLog.error(.network, "\(method) \(endpoint) decode failed (\(data.count) B): \(String(String(describing: error).prefix(300)))")
+
+            // A 2xx web page (a reverse proxy's Plex Web, a captive portal) is not our decode bug.
+            let head = String(decoding: data.prefix(64), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if head.hasPrefix("<!doctype html") || head.hasPrefix("<html") {
+                SentryBridge.log(.warn, "Plex request returned HTML", attributes: [
+                    "component": "plex_network",
+                    "error_type": "html_body",
+                    "endpoint": endpoint,
+                    "method": method,
+                ])
+                throw error
+            }
 
             // Capture JSON decode errors to Sentry
             SentryBridge.capture(error: error) { scope in
@@ -670,7 +683,9 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             // Watchlist and Common Sense both key on the external tmdb:// guid,
             // and the Guid array is the only place a Plex-agent item carries one.
             URLQueryItem(name: "includeGuids", value: "1"),
-            URLQueryItem(name: "includeReviews", value: "1")
+            URLQueryItem(name: "includeReviews", value: "1"),
+            // Without it a version whose file was deleted looks playable (#645).
+            URLQueryItem(name: "checkFiles", value: "1")
         ]
 
         guard let url = components.url else {
@@ -715,6 +730,12 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             headers: plexHeaders(authToken: authToken)
         )
         return container.MediaContainer.Metadata?.first
+    }
+
+    /// `/library/all?guid=`: a best-effort lookup. One server answering 400 is its state, not a bug.
+    nonisolated static func isGuidLookup(_ url: URL) -> Bool {
+        url.path == "/library/all"
+            && URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.contains { $0.name == "guid" } == true
     }
 
     /// Every owned library item among `guids` (plex:// guids; the server indexes no external ones),
@@ -2131,9 +2152,9 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
     /// Opens a transcode session with a `/decision` request carrying the same parameters.
     /// PMS can answer `start.m3u8` with 400 (measured on 1.43.4) or start a session that never
     /// muxes until a decision has run, so call this before the first playlist fetch.
-    /// Returns the server's verdict for the diagnostics, nil when it gave none.
+    /// Returns the server's verdict and any refusal, nil when it gave none.
     @discardableResult
-    func startTranscodeDecision(hlsURL: URL, headers: [String: String]) async -> String? {
+    func startTranscodeDecision(hlsURL: URL, headers: [String: String]) async -> PlexTranscodeDecision? {
         let startPath = "/video/:/transcode/universal/start.m3u8"
         guard var components = URLComponents(url: hlsURL, resolvingAgainstBaseURL: false),
               components.path.hasSuffix(startPath) else { return nil }
@@ -2150,7 +2171,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             if let status = (response as? HTTPURLResponse)?.statusCode, status != 200 {
                 print("[Plex] Transcode decision returned HTTP \(status)")
             }
-            return Self.transcodeVerdict(in: data)
+            return Self.transcodeDecision(in: data)
         } catch {
             print("[Plex] Decision request failed: \(error.localizedDescription)")
             return nil
@@ -2159,12 +2180,54 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
 
     /// A decision body's codes and PMS's own sentence: "general=2000 transcode=4005: Cannot convert this item. …".
     nonisolated static func transcodeVerdict(in data: Data) -> String? {
+        transcodeDecision(in: data)?.verdict
+    }
+
+    nonisolated static func transcodeDecision(in data: Data) -> PlexTranscodeDecision? {
         guard let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let container = body["MediaContainer"] as? [String: Any],
               let general = container["generalDecisionCode"] else { return nil }
         let transcode = container["transcodeDecisionCode"].map { "\($0)" } ?? "none"
         let text = container["transcodeDecisionText"] ?? container["generalDecisionText"] ?? ""
-        return "general=\(general) transcode=\(transcode): \(text)"
+        return PlexTranscodeDecision(
+            verdict: "general=\(general) transcode=\(transcode): \(text)" + streamDecisions(in: container),
+            refusal: ServerRefusal.decision(
+                general: general as? Int, generalText: container["generalDecisionText"] as? String,
+                transcode: container["transcodeDecisionCode"] as? Int,
+                transcodeText: container["transcodeDecisionText"] as? String))
+    }
+
+    /// " [video copy hevc 4K, audio transcode aac]": whether the session copies or re-encodes.
+    private nonisolated static func streamDecisions(in container: [String: Any]) -> String {
+        guard let media = ((container["Metadata"] as? [[String: Any]])?.first?["Media"] as? [[String: Any]])?.first,
+              let streams = (media["Part"] as? [[String: Any]])?.first?["Stream"] as? [[String: Any]] else { return "" }
+        let parts = [(1, "video"), (2, "audio")].compactMap { type, name -> String? in
+            guard let stream = streams.first(where: { $0["streamType"] as? Int == type }) else { return nil }
+            let words = [name, stream["decision"] as? String ?? "?", stream["codec"] as? String,
+                         type == 1 ? media["videoResolution"] as? String : nil]
+            return words.compactMap { $0 }.joined(separator: " ")
+        }
+        return parts.isEmpty ? "" : " [\(parts.joined(separator: ", "))]"
+    }
+
+    /// What the server is doing with a running transcode, or nil when it has no such session.
+    func transcodeSessionStatus(serverURL: String, authToken: String, sessionId: String) async -> PlexTranscodeStatus? {
+        guard let url = URL(string: "\(serverURL)/transcode/sessions") else { return nil }
+        var headers = plexHeaders(authToken: authToken)
+        headers["Accept"] = "application/json"
+        guard let data = try? await requestData(url, headers: headers, timeout: 10) else { return nil }
+        return Self.transcodeStatus(in: data, sessionId: sessionId)
+    }
+
+    /// Measured on PMS 1.43.5: each `TranscodeSession.key` is the `session` the start URL carried.
+    nonisolated static func transcodeStatus(in data: Data, sessionId: String) -> PlexTranscodeStatus? {
+        guard let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let sessions = (body["MediaContainer"] as? [String: Any])?["TranscodeSession"] as? [[String: Any]],
+              let session = sessions.first(where: { ($0["key"] as? String)?.hasSuffix(sessionId) == true }) else { return nil }
+        return PlexTranscodeStatus(
+            videoDecision: session["videoDecision"] as? String, audioDecision: session["audioDecision"] as? String,
+            videoCodec: session["videoCodec"] as? String, speed: (session["speed"] as? NSNumber)?.doubleValue,
+            throttled: session["throttled"] as? Bool ?? false, hardware: session["transcodeHwRequested"] as? Bool ?? false)
     }
 
     /// The selected text subtitle of a `start.m3u8` transcode as one ASS document.
@@ -2217,9 +2280,12 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
     /// bandwidth (#423). Measured on PMS 1.43.5: a LAN direct play gets no `Session` (bandwidth 0)
     /// until a direct-play decision has run under the `X-Plex-Session-Identifier` its timeline sends.
     /// The wildcard profile makes the decision direct play whatever the file is; no transcoder starts.
+    /// Returns true when the server still refuses direct play: that is its own rule (a remote limit),
+    /// never the file's format, so the file would only fail.
+    @discardableResult
     func openDirectPlaySession(serverURL: String, authToken: String, ratingKey: String,
-                               mediaIndex: Int, sessionIdentifier: String) async {
-        guard var components = URLComponents(string: "\(serverURL)/video/:/transcode/universal/decision") else { return }
+                               mediaIndex: Int, sessionIdentifier: String) async -> Bool {
+        guard var components = URLComponents(string: "\(serverURL)/video/:/transcode/universal/decision") else { return false }
         components.queryItems = [
             URLQueryItem(name: "path", value: "/library/metadata/\(ratingKey)"),
             URLQueryItem(name: "mediaIndex", value: String(mediaIndex)),
@@ -2232,10 +2298,20 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
                          value: "add-direct-play-profile(type=videoProfile&protocol=http&container=*&videoCodec=*&audioCodec=*)"),
             URLQueryItem(name: "X-Plex-Session-Identifier", value: sessionIdentifier)
         ]
-        guard let url = components.url else { return }
+        guard let url = components.url else { return false }
         var headers = plexHeaders(authToken: authToken)
         headers["X-Plex-Session-Identifier"] = sessionIdentifier
-        _ = try? await requestData(url, method: "GET", headers: headers)
+        headers["Accept"] = "application/json"
+        guard let data = try? await requestData(url, method: "GET", headers: headers) else { return false }
+        return Self.refusesDirectPlay(data)
+    }
+
+    /// Measured on PMS 1.43.5: an allowed decision carries `directPlayDecisionCode` 1000, a refused one 3000.
+    nonisolated static func refusesDirectPlay(_ data: Data) -> Bool {
+        guard let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let container = body["MediaContainer"] as? [String: Any],
+              let code = container["directPlayDecisionCode"] as? Int else { return false }
+        return code != 1000
     }
 
     /// Build thumbnail URL
@@ -3439,6 +3515,33 @@ nonisolated struct PlexLiveTVTuneResult: Sendable {
     /// channel needs the deinterlacing path; nil must be treated as "assume
     /// interlaced", since combing is far worse than a decode we didn't need.
     let videoScanType: String?
+}
+
+/// The server's answer to a transcode decision request.
+nonisolated struct PlexTranscodeDecision: Sendable {
+    let verdict: String
+    /// Set when the server says no (decision 2xxx); nil when it would play it.
+    let refusal: ServerRefusal?
+}
+
+/// A running transcode as `/transcode/sessions` reports it.
+nonisolated struct PlexTranscodeStatus: Sendable, Equatable {
+    let videoDecision: String?
+    let audioDecision: String?
+    let videoCodec: String?
+    /// Times real time; 0 while throttled (far enough ahead that it paused).
+    let speed: Double?
+    let throttled: Bool
+    let hardware: Bool
+
+    /// Converting, not throttled, and slower than the video plays.
+    var isBehind: Bool { !throttled && (speed ?? 1) < 1 }
+
+    var summary: String {
+        let speedText = speed.map { String(format: "%.1fx", $0) } ?? "?"
+        return "video=\(videoDecision ?? "?") \(videoCodec ?? "?") audio=\(audioDecision ?? "?") speed=\(speedText)"
+            + " throttled=\(throttled) hw=\(hardware)"
+    }
 }
 
 /// Universal-transcoder verdict for a tuned live session.

@@ -248,7 +248,8 @@ final class NowPlayingService: ObservableObject {
         Publishers.CombineLatest4(viewModel.$audioTracks, viewModel.$subtitleTracks,
                                   viewModel.$currentAudioTrackId, viewModel.$currentSubtitleTrackId)
             .combineLatest(viewModel.$aetherPlayer.map { $0 != nil }.removeDuplicates(),
-                           SpeechModelStore.shared.$state.map { $0 == .ready }.removeDuplicates())
+                           SpeechModelStore.shared.$state.map { $0 == .ready }.removeDuplicates(),
+                           viewModel.$skipBackShowsSubtitles)
             .receive(on: RunLoop.main)
             .sink { [weak self, weak viewModel] _ in
                 guard let self, let viewModel else { return }
@@ -256,7 +257,7 @@ final class NowPlayingService: ObservableObject {
                     ? viewModel.subtitleMenuTracks : viewModel.subtitleTracks
                 self.publishTracks(audio: viewModel.audioTracks, subtitles: subtitles,
                                    audioId: viewModel.currentAudioTrackId,
-                                   subtitleId: viewModel.currentSubtitleTrackId)
+                                   subtitleId: viewModel.chosenSubtitleTrackId)
             }
             .store(in: &cancellables)
         selectTrack = { [weak viewModel] type, id in

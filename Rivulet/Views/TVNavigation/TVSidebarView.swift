@@ -37,6 +37,7 @@ struct TVSidebarView: View {
     @AppStorage("showDiscoverTab") private var showDiscoverTab = true
     @AppStorage("showWatchlistTab") private var showWatchlistTab = true
     @AppStorage("showFavoritesTab") private var showFavoritesTab = false
+    @AppStorage("showWatchTogetherTab") private var showWatchTogetherTab = true
     @State private var selectedTab: SidebarTab = .home
     @State private var showProfilePicker = false
     /// A profile was entered through the picker; any other close re-presents it.
@@ -51,8 +52,8 @@ struct TVSidebarView: View {
     @State private var sidebarProfileRowRequest = 0
     @State private var hasCheckedProfilePicker = false
     @State private var isAwaitingProfileSelection = false
-    /// When the app last stopped being active (Home, another app, the screensaver).
-    @State private var inactiveSince: Date?
+    /// The app is not active (Home, another app, the screensaver).
+    @State private var isAway = false
     @AppStorage("lastSeenBuild") private var lastSeenBuild = ""
     /// The setup landing was finished. Unset, an install that already has a source counts as set up.
     @AppStorage("setupComplete") private var setupComplete = SetupLandingViewController.hasAnySource
@@ -118,6 +119,7 @@ struct TVSidebarView: View {
             showDiscover: showDiscoverTab && authManager.hasCredentials,
             showWatchlist: showWatchlistTab && authManager.hasCredentials,
             showFavorites: showFavoritesTab && hasFavoritesServer,
+            showWatchTogether: showWatchTogetherTab,
             order: librarySettings.libraryOrder,
             hiddenKeys: librarySettings.hiddenLibraryKeys,
             profileName: profileName,
@@ -181,6 +183,7 @@ struct TVSidebarView: View {
         .ignoresSafeArea()
         .onChange(of: selectedTab) { _, newTab in
             nestedNavState.isNested = false
+            AppHangContext.setScreen(newTab.diagnosticsLabel)
         }
         .onChange(of: authManager.hasCredentials) { old, new in
             // Clear watchlist state on logout.
@@ -279,7 +282,7 @@ struct TVSidebarView: View {
 
             // A saved profile with no stored token of its own: nothing may load
             // until plex.tv lets it in, so resolve it now instead of deferring.
-            let wantsPicker = profileManager.showProfilePickerOnLaunch && !hasCheckedProfilePicker
+            let wantsPicker = profileManager.shouldAskWhoIsWatching() && !hasCheckedProfilePicker
             if wantsPicker || authManager.isContentWithheld {
                 // Block content immediately; profile data must load before the picker shows
                 isAwaitingProfileSelection = true
@@ -365,7 +368,7 @@ struct TVSidebarView: View {
             applyDebugLaunchTab()
             // Defer What's New check if profile picker needs to be shown first
             if authManager.isContentWithheld
-                || (profileManager.showProfilePickerOnLaunch && authManager.selectedServerToken != nil) {
+                || (profileManager.shouldAskWhoIsWatching() && authManager.selectedServerToken != nil) {
                 return
             }
             checkAndShowWhatsNew()
@@ -399,18 +402,18 @@ struct TVSidebarView: View {
                 }
             }
         }
-        // Profile Picker on Launch also covers coming back to the app: tvOS
-        // resumes it far more often than it relaunches it. UIApplication's
-        // notifications, not scenePhase, because scenePhase does not report
-        // the trip while the player is up. A short absence (a stray Home
-        // press, a glance at Control Center) is let through.
+        // The Profile Picker also covers coming back to the app: tvOS resumes it
+        // far more often than it relaunches it. UIApplication's notifications, not
+        // scenePhase, because scenePhase does not report the trip while the player is up.
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
-            if inactiveSince == nil { inactiveSince = Date() }
+            guard !isAway else { return }
+            isAway = true
+            profileManager.noteLeftApp()
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-            guard let since = inactiveSince else { return }
-            inactiveSince = nil
-            if Date().timeIntervalSince(since) >= Self.profilePickerReturnGrace {
+            guard isAway else { return }
+            isAway = false
+            if profileManager.shouldAskWhoIsWatching() {
                 presentProfilePickerOnReturn()
             }
         }
@@ -443,14 +446,11 @@ struct TVSidebarView: View {
 
     // MARK: - Profile Picker on Return
 
-    /// How long the app may be away before coming back asks who is watching.
-    private static let profilePickerReturnGrace: TimeInterval = 30
-
     /// Asks who is watching again after the app comes back from the background,
     /// using the same hard gate as the launch picker: content stays hidden until
     /// a profile is entered, and backing out re-presents the picker.
     private func presentProfilePickerOnReturn() {
-        guard profileManager.showProfilePickerOnLaunch,
+        guard profileManager.profilePickerAfter != nil,
               authManager.hasCredentials,
               hasCheckedProfilePicker,
               !showProfilePicker,

@@ -99,6 +99,15 @@ final class TopShelfMapperTests: XCTestCase {
         XCTAssertEqual(item?.subtitle, "Breaking Bad")
     }
 
+    func testEpisodeCarriesSeasonAndEpisodeNumbers() {
+        var m = meta(ratingKey: "e1", type: "episode", title: "Ozymandias", grandparentTitle: "Breaking Bad", lastViewedAt: 100)
+        m.parentIndex = 5
+        m.index = 14
+        let item = TopShelfMapper.items(from: [m], serverURL: server, token: token).first
+        XCTAssertEqual(item?.seasonNumber, 5)
+        XCTAssertEqual(item?.episodeNumber, 14)
+    }
+
     func testMovieHasNoSubtitle() {
         let input = [meta(ratingKey: "m1", type: "movie", title: "Blade Runner", thumb: "/t", lastViewedAt: 100)]
         let item = TopShelfMapper.items(from: input, serverURL: server, token: token).first
@@ -124,11 +133,11 @@ final class TopShelfMapperTests: XCTestCase {
 
     // MARK: - Jellyfin and merge
 
-    private func jellyfinEpisode(_ id: String, lastViewed: Date?) -> MediaItem {
+    private func jellyfinEpisode(_ id: String, lastViewed: Date?, kind: MediaKind = .episode) -> MediaItem {
         let url = { (s: String) in URL(string: "http://jf.local/Items/\(s)") }
         return MediaItem(
             ref: MediaItemRef(providerID: "jellyfin:abc", itemID: id),
-            kind: .episode, title: "Ep \(id)", sortTitle: nil, overview: nil,
+            kind: kind, title: "Ep \(id)", sortTitle: nil, overview: nil,
             year: nil, runtime: nil, parentRef: nil, grandparentRef: nil,
             seriesTitle: "Show", episodeNumber: 1, seasonNumber: 1, childProgress: nil,
             userState: MediaUserState(isPlayed: false, viewOffset: 0, isFavorite: false, lastViewedAt: lastViewed),
@@ -146,6 +155,11 @@ final class TopShelfMapperTests: XCTestCase {
         XCTAssertEqual(item.imageURL, "http://jf.local/Items/showposter")
         XCTAssertEqual(item.wideImageURL, "http://jf.local/Items/backdrop")
         XCTAssertEqual(item.lastWatched, .distantPast)
+    }
+
+    func testSeasonCarriesItsShowName() {
+        let item = TopShelfMapper.items(from: [jellyfinEpisode("s1", lastViewed: nil, kind: .season)]).first!
+        XCTAssertEqual(item.subtitle, "Show")
     }
 
     func testMergeOrdersAcrossServersByLastWatched() {

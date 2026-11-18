@@ -261,6 +261,7 @@ final class AetherPlayer: PlayerProtocol {
                 // Convert here: each cue's type is inferred as
                 // AetherEngine.SubtitleCue (it cannot be named explicitly),
                 // and the body cases are pattern-matched without naming them.
+                let isDVB = self?.activeSubtitleIsDVB ?? false
                 self?.subtitleCues = cues.map { cue in
                     let body: AetherSubtitleCue.Body
                     switch cue.body {
@@ -294,6 +295,10 @@ final class AetherPlayer: PlayerProtocol {
                             )
                         })
                     case .image(let image):
+                        if isDVB {
+                            ReleaseFixChecks.dvbSubtitle(position: image.position, canvas: image.canvasSize,
+                                                         video: self?.videoSize ?? .zero)
+                        }
                         body = .image(cgImage: image.cgImage, position: image.position)
                     }
                     // Placement the source asked for (ASS \an / \pos), nil for
@@ -312,6 +317,8 @@ final class AetherPlayer: PlayerProtocol {
                 }
             }
             .store(in: &cancellables)
+
+        observeReleaseFixChecks()
 
         engine.$isSubtitleActive
             .receive(on: DispatchQueue.main)
@@ -895,6 +902,7 @@ final class AetherPlayer: PlayerProtocol {
             // Costs rewind depth on short-GOP channels: the playlist caps at 900 segments.
             options.liveJoinProfile = .fastZap
             options.audioDelaySeconds = AudioSync.seconds()
+            options.audioShaping = Self.audioShaping()
             if role == .multiviewSlot {
                 // Field-rate deinterlacing on a quarter-screen tile only
                 // doubles decoder output for nothing.
@@ -1026,6 +1034,11 @@ final class AetherPlayer: PlayerProtocol {
     /// ML upscaling of SDR below 1080p (#846); absent = off.
     static let upscaleKey = "upscaleLowResolution"
 
+    /// Stereo with Subwoofer (#614): a stereo fold that keeps the LFE.
+    static func audioShaping() -> AudioShaping {
+        StereoWithSubwoofer.isOn() ? AudioShaping(maxChannels: 2, lfeMixDB: StereoWithSubwoofer.lfeMixDB) : AudioShaping()
+    }
+
     /// Profile 7 FEL composition; absent = on.
     static let dolbyVisionFELKey = "dolbyVisionFEL"
 
@@ -1069,6 +1082,7 @@ final class AetherPlayer: PlayerProtocol {
         startTime: TimeInterval?,
         subtitleLanguageHintsByStreamIndex: [Int: String],
         preferredAudioLanguages: [String] = [],
+        audioStreamIndex: Int? = nil,
         preferredSubtitleLanguages: [String] = [],
         externalSubtitles: [SidecarSubtitle] = [],
         isLive: Bool = false,
@@ -1081,6 +1095,7 @@ final class AetherPlayer: PlayerProtocol {
             partLoad = nil
             try await loadFile(url: url, headers: headers, startTime: startTime,
                                preferredAudioLanguages: preferredAudioLanguages,
+                               audioStreamIndex: audioStreamIndex,
                                preferredSubtitleLanguages: preferredSubtitleLanguages,
                                externalSubtitles: externalSubtitles, isLive: isLive)
             return
@@ -1088,8 +1103,10 @@ final class AetherPlayer: PlayerProtocol {
         partLoad = (headers, preferredAudioLanguages, preferredSubtitleLanguages)
         let (index, offset) = stackedParts.locate(startTime ?? 0)
         partIndex = index
+        // Stream indexes match across the files of one release.
         try await loadFile(url: stackedParts.files[index].url, headers: headers, startTime: offset,
                            preferredAudioLanguages: preferredAudioLanguages,
+                           audioStreamIndex: audioStreamIndex,
                            preferredSubtitleLanguages: preferredSubtitleLanguages,
                            externalSubtitles: stackedParts.files[index].externalSubtitles, isLive: false)
     }
@@ -1107,15 +1124,15 @@ final class AetherPlayer: PlayerProtocol {
         partIndex = index
         engine.prepareForItemReplacement()
         do {
+            // Stream indexes match across the files of one release, so the part opens on the playing audio.
             try await loadFile(url: stack.files[index].url, headers: partLoad.headers, startTime: offset,
-                               preferredAudioLanguages: partLoad.audio,
+                               preferredAudioLanguages: partLoad.audio, audioStreamIndex: audio,
                                preferredSubtitleLanguages: partLoad.subtitles,
                                externalSubtitles: stack.files[index].externalSubtitles, isLive: false)
         } catch {
             // The load already published the failure.
             return
         }
-        // Stream indexes match across the files of one release.
         if let audio, audio != activeAudioTrackId, audioTracks.contains(where: { $0.id == audio }) {
             selectAudioTrack(id: audio)
         }
@@ -1140,6 +1157,7 @@ final class AetherPlayer: PlayerProtocol {
         headers: [String: String]?,
         startTime: TimeInterval?,
         preferredAudioLanguages: [String],
+        audioStreamIndex: Int? = nil,
         preferredSubtitleLanguages: [String],
         externalSubtitles: [SidecarSubtitle],
         isLive: Bool
@@ -1191,6 +1209,7 @@ final class AetherPlayer: PlayerProtocol {
         // The engine takes it only for SDR below 1080p and switches it off if it can't keep up.
         options.upscalesLowResolutionVideo = UserDefaults.standard.bool(forKey: Self.upscaleKey)
         options.audioDelaySeconds = AudioSync.seconds()
+        options.audioShaping = Self.audioShaping()
         // Read ahead as far as the engine's disk budget allows; live sizes its own window.
         if !isLive { options.forwardBufferSegments = .max }
         // New content, so the previous item's aspect ratio describes nothing.
@@ -1212,7 +1231,11 @@ final class AetherPlayer: PlayerProtocol {
         userIntendsToPlay = true
         pendingReloadSince = nil
         do {
-            try await engine.load(url: url, startPosition: startTime, options: options)
+            // Opens on the host's audio pick. Switching once the engine lists its tracks rebuilds
+            // the load before its display handshake ends, and the rebuild serves Dolby Vision as
+            // its HDR10 base (#627).
+            try await engine.load(url: url, startPosition: startTime, options: options,
+                                  audioSourceStreamIndex: audioStreamIndex.flatMap { Int32(exactly: $0) })
         } catch {
             // User navigated away / switched items mid-load. Rethrow untouched
             // and stay off errorSubject: wrapping it as PlayerError.loadFailed
@@ -1844,5 +1867,27 @@ private extension PlaybackPhase {
         case .rebuffering: .rebuffering
         default: .loading
         }
+    }
+}
+
+// MARK: - Release fix checks (temporary: delete with ReleaseFixChecks)
+
+extension AetherPlayer {
+    var activeSubtitleIsDVB: Bool {
+        engine.subtitleTracks.first { $0.id == engine.activeSubtitleTrackIndex }?.codec == "dvb_subtitle"
+    }
+
+    func observeReleaseFixChecks() {
+        EngineLog.structuredHandler = { @Sendable line, _, _ in ReleaseFixChecks.engineLine(line) }
+        engine.$audioShapingState
+            .removeDuplicates()
+            .filter { $0 != .off }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] state in
+                guard let self else { return }
+                let track = self.engine.audioTracks.first { $0.id == self.engine.activeAudioTrackIndex }
+                ReleaseFixChecks.audioShaping(state: state.rawValue, codec: track?.codec, channels: track?.channels)
+            }
+            .store(in: &cancellables)
     }
 }

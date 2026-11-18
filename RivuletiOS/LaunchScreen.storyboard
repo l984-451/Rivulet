@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- The launch screen: the app icon's starry sky (its back layer, WelcomeStars), filling the screen the way
+     the launch splash's sky does (aspect fill, centred), so the splash takes over without a visible change. -->
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="13122.16" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" launchScreen="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="Lsc-Vc-001">
+    <dependencies>
+        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="13104.12"/>
+        <capability name="Safe area layout guides" minToolsVersion="9.0"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <scenes>
+        <scene sceneID="Lsc-Sc-001">
+            <objects>
+                <viewController id="Lsc-Vc-001" sceneMemberID="viewController">
+                    <view key="view" contentMode="scaleToFill" id="Lsc-Vw-001">
+                        <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <subviews>
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFill" image="WelcomeStars" translatesAutoresizingMaskIntoConstraints="NO" id="Lsc-Iv-001">
+                                <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                            </imageView>
+                        </subviews>
+                        <color key="backgroundColor" red="0.0" green="0.0" blue="0.0" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                        <constraints>
+                            <constraint firstItem="Lsc-Iv-001" firstAttribute="top" secondItem="Lsc-Vw-001" secondAttribute="top" id="Lsc-Ct-001"/>
+                            <constraint firstItem="Lsc-Iv-001" firstAttribute="bottom" secondItem="Lsc-Vw-001" secondAttribute="bottom" id="Lsc-Ct-002"/>
+                            <constraint firstItem="Lsc-Iv-001" firstAttribute="leading" secondItem="Lsc-Vw-001" secondAttribute="leading" id="Lsc-Ct-003"/>
+                            <constraint firstItem="Lsc-Iv-001" firstAttribute="trailing" secondItem="Lsc-Vw-001" secondAttribute="trailing" id="Lsc-Ct-004"/>
+                        </constraints>
+                        <viewLayoutGuide key="safeArea" id="Lsc-Sa-001"/>
+                    </view>
+                </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="Lsc-Fr-001" sceneMemberID="firstResponder"/>
+            </objects>
+        </scene>
+    </scenes>
+    <resources>
+        <image name="WelcomeStars" width="960" height="576"/>
+    </resources>
+</document>

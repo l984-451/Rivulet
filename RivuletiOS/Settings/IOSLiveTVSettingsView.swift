@@ -3,13 +3,11 @@
 
 import SwiftUI
 
-/// Account > Live TV: sources, favorites, suggestions and the default layout.
+/// Account > Live TV: sources, favorites and the default layout.
 struct IOSLiveTVSettingsView: View {
     @ObservedObject private var store = LiveTVDataStore.shared
     @AppStorage(LiveLayout.storageKey) private var layoutRaw = LiveLayout.browse.rawValue
-    @AppStorage(LiveTVDataStore.suggestionsKey) private var suggestions = true
     @State private var showingAddSource = false
-    @State private var askingToErase = false
 
     var body: some View {
         Form {
@@ -40,22 +38,9 @@ struct IOSLiveTVSettingsView: View {
                     ForEach(LiveLayout.allCases, id: \.self) { Text($0.title).tag($0.rawValue) }
                 }
             }
-
-            Section {
-                Toggle("Suggestions", isOn: $suggestions)
-            } footer: {
-                Text("For You picks channels from what you watch. It learns on this device only.")
-            }
         }
         .navigationTitle("Live TV")
         .sheet(isPresented: $showingAddSource) { IOSLiveAddSourceSheet() }
-        .onChange(of: suggestions) { _, on in
-            if !on { askingToErase = true }
-        }
-        .confirmationDialog("Erase What For You Learned?", isPresented: $askingToErase, titleVisibility: .visible) {
-            Button("Erase", role: .destructive) { store.forgetViewings() }
-            Button("Keep", role: .cancel) {}
-        }
     }
 }
 

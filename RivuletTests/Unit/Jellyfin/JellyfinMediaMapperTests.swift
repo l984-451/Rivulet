@@ -207,6 +207,19 @@ final class JellyfinMediaMapperTests: XCTestCase {
         XCTAssertEqual(range("DOVIInvalid", transfer: nil), .sdr)
     }
 
+    /// The frame size decides; the server's AspectRatio only when the pixels aren't square.
+    func test_video_aspectRatio() throws {
+        func aspect(_ fields: String) -> Double? {
+            let stream: JFMediaStream = JellyfinFixtures.decode(#"{"Index":0,"Type":"Video","Codec":"hevc",\#(fields)}"#)
+            return JellyfinMediaMapper.videoTrack(stream)?.aspectRatio
+        }
+        XCTAssertEqual(try XCTUnwrap(aspect(#""Width":1920,"Height":804,"AspectRatio":"2.40:1","IsAnamorphic":false"#)),
+                       2.388, accuracy: 0.001)
+        XCTAssertEqual(try XCTUnwrap(aspect(#""Width":720,"Height":480,"AspectRatio":"16:9","IsAnamorphic":true"#)),
+                       16.0 / 9, accuracy: 0.001)
+        XCTAssertNil(aspect(#""AspectRatio":"16:9""#))
+    }
+
     // MARK: - Detail
 
     private func detail() -> MediaItemDetail {

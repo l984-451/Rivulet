@@ -92,6 +92,13 @@ public enum SentryStartup {
             configure(options)
 
             options.beforeSend = { event in
+                // A hang is reported by the process that hung, so its footprint now is the one that
+                // mattered. (A watchdog kill arrives next launch: it reads the scope's `memory` context.)
+                if event.exceptions?.first?.type?.hasPrefix("App Hang") == true {
+                    var context = event.context ?? [:]
+                    context["hang_process"] = ["footprint_mb": DiagnosticsHistory.footprintMB()]
+                    event.context = context
+                }
                 // Two non-fatal hangs per launch; "Fatal App Hang" (watchdog kills) always goes.
                 if event.exceptions?.first?.type?.hasPrefix("App Hang") == true,
                    !SentryBridge.admit("app-hang", limit: 2) {
@@ -124,5 +131,10 @@ public enum SentryStartup {
             }
         }
         SentryBridge.isActive = true
+        // Settings usage, at most daily, once launch work has settled.
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(60))
+            SettingsUsageTelemetry.sendIfDue()
+        }
     }
 }

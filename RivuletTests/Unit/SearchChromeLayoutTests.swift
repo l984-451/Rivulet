@@ -80,6 +80,19 @@ final class SearchChromeLayoutTests: XCTestCase {
                 frame.intersects(keyboard),
                 "the first row \(frame) overlaps the keyboard \(keyboard)")
         }
+
+        // The page clips for the grid keyboard (#657); full screen here, so the clip cuts nothing.
+        var page: UIView? = collection
+        while let view = page, !(view.next is UIViewController) { page = view.superview }
+        XCTAssertEqual(page.map { $0.convert($0.bounds, to: window) }, window.bounds)
+    }
+
+    /// Linear keyboard 1760x66 (measured); the grid shown for non-touch remotes is several rows.
+    @MainActor
+    func test_gridKeyboardIsToldApartFromLinear() {
+        XCTAssertFalse(SearchContainerViewController.isGridKeyboard(CGSize(width: 1760, height: 66)))
+        XCTAssertFalse(SearchContainerViewController.isGridKeyboard(CGSize(width: 1760, height: 70)))
+        XCTAssertTrue(SearchContainerViewController.isGridKeyboard(CGSize(width: 700, height: 420)))
     }
 }
 

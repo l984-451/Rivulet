@@ -151,7 +151,10 @@ enum PlexMediaMapper {
             videoRange: range,
             isDefault: stream.default ?? false,
             scanType: stream.scanType,
-            hasHDR10Plus: stream.HDR10PlusPresent == true
+            hasHDR10Plus: stream.HDR10PlusPresent == true,
+            // Not Media.aspectRatio: PMS rounds it to a few buckets, so 1920x800 and a 2.76:1 film both read 2.35.
+            aspectRatio: VideoTrack.aspectRatio(width: stream.width, height: stream.height,
+                                                pixelAspect: stream.pixelAspectRatio)
         )
     }
 
@@ -465,7 +468,8 @@ enum PlexMediaMapper {
                 thumbnailURL: personURL(ch.thumb)
             )
         }
-        let mediaSources: [MediaSource] = (meta.Media ?? []).flatMap { media in
+        let versions = (meta.Media ?? []).filter { !$0.isMissing }
+        let mediaSources: [MediaSource] = (versions.isEmpty ? meta.Media ?? [] : versions).flatMap { media in
             (media.Part ?? []).map { part in
                 mediaSource(media, part, serverURL: serverURL, authToken: authToken)
             }

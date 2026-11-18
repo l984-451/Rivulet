@@ -1,6 +1,50 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Aspect Ratio" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seitenverhältnis"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αναλογία διαστάσεων"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Format d’image"
+          }
+        }
+      }
+    },
+    "Leave a Tip" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trinkgeld geben"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Άφησε φιλοδώρημα"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laisser un pourboire"
+          }
+        }
+      }
+    },
     "Map" : {
       "localizations" : {
         "de" : {
@@ -49,6 +93,95 @@
         }
       }
     },
+    "Playing away from home needs a Plex Pass or Remote Watch Pass." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Für die Wiedergabe außer Haus brauchst du einen Plex Pass oder Remote Watch Pass."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Η αναπαραγωγή εκτός σπιτιού απαιτεί Plex Pass ή Remote Watch Pass."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La lecture hors de chez vous nécessite un Plex Pass ou un Remote Watch Pass."
+          }
+        }
+      }
+    },
+    "Plays surround soundtracks as stereo with the subwoofer channel mixed into left and right, for 2.1 speakers on a stereo connection." : {},
+    "Rivulet is free and open source. A tip helps keep it going." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rivulet ist kostenlos und Open Source. Ein Trinkgeld hilft, es am Leben zu halten."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το Rivulet είναι δωρεάν και ανοιχτού κώδικα. Ένα φιλοδώρημα το βοηθά να συνεχίσει."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rivulet est gratuit et open source. Un pourboire l’aide à continuer."
+          }
+        }
+      }
+    },
+    "Server Can't Play This" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vom Server nicht abspielbar"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής δεν μπορεί να το αναπαράγει"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lecture refusée par le serveur"
+          }
+        }
+      }
+    },
+    "Server Is Converting" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Server wandelt um"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής κάνει μετατροπή"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conversion par le serveur"
+          }
+        }
+      }
+    },
     "Slideshow" : {
       "localizations" : {
         "de" : {
@@ -77,6 +210,359 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Photos"
+          }
+        }
+      }
+    },
+    "Stereo with Subwoofer" : {},
+    "Still Waiting on the Server" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Warten auf den Server"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Αναμονή για τον διακομιστή"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En attente du serveur"
+          }
+        }
+      }
+    },
+    "The App Store couldn't be reached. Try again later." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der App Store ist nicht erreichbar. Versuche es später erneut."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η σύνδεση με το App Store. Δοκίμασε ξανά αργότερα."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de joindre l’App Store. Réessayez plus tard."
+          }
+        }
+      }
+    },
+    "Thank You" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Danke"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ευχαριστούμε"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Merci"
+          }
+        }
+      }
+    },
+    "The server can't find this video's file. It may have been moved or deleted." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server findet die Datei dieses Videos nicht. Sie wurde vielleicht verschoben oder gelöscht."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής δεν βρίσκει το αρχείο αυτού του βίντεο. Ίσως μετακινήθηκε ή διαγράφηκε."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur ne trouve pas le fichier de cette vidéo. Il a peut-être été déplacé ou supprimé."
+          }
+        }
+      }
+    },
+    "The server can't play or convert this video for this device." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server kann dieses Video für dieses Gerät weder abspielen noch umwandeln."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής δεν μπορεί να αναπαράγει ή να μετατρέψει αυτό το βίντεο για αυτή τη συσκευή."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur ne peut ni lire ni convertir cette vidéo pour cet appareil."
+          }
+        }
+      }
+    },
+    "The server can't play this video." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server kann dieses Video nicht abspielen."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής δεν μπορεί να αναπαράγει αυτό το βίντεο."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur ne peut pas lire cette vidéo."
+          }
+        }
+      }
+    },
+    "The server can't play this video: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server kann dieses Video nicht abspielen: %@"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής δεν μπορεί να αναπαράγει αυτό το βίντεο: %@"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur ne peut pas lire cette vidéo : %@"
+          }
+        }
+      }
+    },
+    "The server doesn't let this account play this video." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server erlaubt diesem Konto nicht, dieses Video abzuspielen."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής δεν επιτρέπει σε αυτόν τον λογαριασμό να αναπαράγει αυτό το βίντεο."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur n’autorise pas ce compte à lire cette vidéo."
+          }
+        }
+      }
+    },
+    "The server is at its stream limit. Try again in a moment." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat sein Stream-Limit erreicht. Versuche es gleich noch einmal."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής έφτασε στο όριο ροών του. Δοκίμασε ξανά σε λίγο."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur a atteint sa limite de flux. Réessayez dans un instant."
+          }
+        }
+      }
+    },
+    "The server is converting this at %@×, slower than it plays." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server wandelt dies mit %@× um, langsamer als die Wiedergabe."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής το μετατρέπει με %@×, πιο αργά από την αναπαραγωγή."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur le convertit à %@×, plus lentement que la lecture."
+          }
+        }
+      }
+    },
+    "The server is converting this, but it is slow to arrive." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server wandelt dies um, aber es kommt nur langsam an."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής το μετατρέπει, αλλά φτάνει αργά."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur le convertit, mais il arrive lentement."
+          }
+        }
+      }
+    },
+    "The server stopped converting this." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat die Umwandlung beendet."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής σταμάτησε τη μετατροπή."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur a arrêté la conversion."
+          }
+        }
+      }
+    },
+    "The server won't play this file directly." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server spielt diese Datei nicht direkt ab."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής δεν αναπαράγει απευθείας αυτό το αρχείο."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur ne lit pas ce fichier directement."
+          }
+        }
+      }
+    },
+    "The server won't play this file directly. It's sending %@." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server spielt diese Datei nicht direkt ab. Er sendet %@."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής δεν αναπαράγει απευθείας αυτό το αρχείο. Στέλνει %@."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur ne lit pas ce fichier directement. Il l'envoie en %@."
+          }
+        }
+      }
+    },
+    "The server won't play this file directly. It's sending the best quality it allows." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server spielt diese Datei nicht direkt ab. Er sendet die beste erlaubte Qualität."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής δεν αναπαράγει απευθείας αυτό το αρχείο. Στέλνει την καλύτερη ποιότητα που επιτρέπει."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur ne lit pas ce fichier directement. Il envoie la meilleure qualité qu'il autorise."
+          }
+        }
+      }
+    },
+    "The server wouldn't start a stream for this video." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Server hat keinen Stream für dieses Video gestartet."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ο διακομιστής δεν ξεκίνησε ροή για αυτό το βίντεο."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Le serveur n’a pas voulu lancer de flux pour cette vidéo."
           }
         }
       }
@@ -141,6 +627,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "De A à Z"
+          }
+        }
+      }
+    },
+    "Widescreen" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Breitbild"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ευρεία οθόνη"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Écran large"
+          }
+        }
+      }
+    },
+    "Your tip helps keep Rivulet going." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dein Trinkgeld hilft, Rivulet am Leben zu halten."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το φιλοδώρημά σου βοηθά το Rivulet να συνεχίσει."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Votre pourboire aide Rivulet à continuer."
           }
         }
       }
@@ -2533,6 +3063,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Choisir une bibliothèque"
+          }
+        }
+      }
+    },
+    "Choose a Profile on iPhone" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Profil auf dem iPhone wählen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Επιλογή προφίλ στο iPhone"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choisir un profil sur l’iPhone"
           }
         }
       }
@@ -11099,6 +11651,28 @@
         }
       }
     },
+    "Sign In on iPhone" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf dem iPhone anmelden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Σύνδεση στο iPhone"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se connecter sur l’iPhone"
+          }
+        }
+      }
+    },
     "Sign In to Plex" : {
       "localizations" : {
         "de" : {
@@ -15565,6 +16139,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@er"
+          }
+        }
+      }
+    },
+    "%lld unwatched episodes" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld unwatched episode"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld unwatched episodes"
+                }
+              }
+            }
           }
         }
       }

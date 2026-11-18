@@ -150,12 +150,12 @@ struct IOSPlexDetailView: View {
     /// The season menu: switch seasons, or download the one showing.
     @ViewBuilder
     private var seasonPicker: some View {
-        let title = currentSeason.map(seasonLabel) ?? String(localized: "Episodes")
+        let title = currentSeason?.seasonLabel ?? String(localized: "Episodes")
         if seasons.count > 1 || (currentSeason != nil && canDownload) {
             Menu {
                 if seasons.count > 1 {
                     Picker("Season", selection: $seasonKey) {
-                        ForEach(seasons) { Text(seasonLabel($0)).tag(Optional($0.ref)) }
+                        ForEach(seasons) { Text($0.seasonLabel).tag(Optional($0.ref)) }
                     }
                 }
                 if let season = currentSeason, canDownload {
@@ -177,11 +177,6 @@ struct IOSPlexDetailView: View {
     }
 
     private var canDownload: Bool { browse.canDownload(item) }
-
-    private func seasonLabel(_ season: MediaItem) -> String {
-        guard let index = season.seasonNumber else { return season.displayTitle }
-        return index == 0 ? String(localized: "Specials") : String(localized: "Season \(index)")
-    }
 
     // MARK: - Play target
 

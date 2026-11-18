@@ -63,6 +63,15 @@ final class QualityDecisionTests: XCTestCase {
         XCTAssertEqual(ThroughputProbe.kbps(bytes: 2_500_000, seconds: 0), 400000)
     }
 
+    func test_fallbackStep_followsTheSetting() {
+        // Original asks for everything and lets the server cap it.
+        XCTAssertNil(QualityDecision.fallbackStep(setting: .original, measuredKbps: 50000))
+        XCTAssertEqual(QualityDecision.fallbackStep(setting: .step(s8), measuredKbps: nil), s8)
+        // Auto: the best step under 75% of what was measured, or the probe-failure step.
+        XCTAssertEqual(QualityDecision.fallbackStep(setting: .auto, measuredKbps: 20000), QualityStep.step(kbps: 12000))
+        XCTAssertEqual(QualityDecision.fallbackStep(setting: .auto, measuredKbps: nil), s4)
+    }
+
     func test_sourceKbps_fallsBackToSizeOverDuration() throws {
         let json = #"{"id":1,"duration":7200000,"bitrate":null,"Part":[{"id":2,"key":"/k","duration":7200000,"size":9000000000}]}"#
         let media = try JSONDecoder().decode(PlexMedia.self, from: Data(json.utf8))

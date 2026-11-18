@@ -10,7 +10,7 @@ struct IOSRootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var sizeClass
     @SceneStorage("iosSelectedTab") private var selectedTab = "home"
-    @StateObject private var playback = IOSPlaybackController()
+    @ObservedObject private var playback = IOSPlaybackController.shared
     @State private var showingAccount = false
     @State private var showingWhatsNew = false
     @State private var whatsNewVersions: [String] = []
@@ -30,11 +30,24 @@ struct IOSRootView: View {
     @Namespace private var libraryZoom
     @Namespace private var sidebarZoom
     @Namespace private var searchZoom
+    /// The app's one gate: a window opened after launch finds it finished and shows no splash.
+    @ObservedObject private var splashGate: LaunchSplashGate
+    /// The splash's exit has played; launch sheets wait for it.
+    @State private var splashGone: Bool
+    /// What's New found at launch, held until the splash has gone.
+    @State private var whatsNewPending = false
+
+    init(splashGate: LaunchSplashGate) {
+        self.splashGate = splashGate
+        _splashGone = State(initialValue: splashGate.isFinished)
+    }
 
     var body: some View {
         TabView(selection: $selectedTab) {
             Tab("Home", systemImage: "house", value: "home") {
-                tabStack(homeZoom) { IOSPlexHomeView() }
+                tabStack(homeZoom) {
+                    IOSPlexHomeView().environment(\.launchHeroReady) { splashGate.heroIsReady() }
+                }
             }
             Tab("Library", systemImage: "rectangle.stack", value: "library") {
                 IOSPlexLibrarySplitView(selection: $librarySelection, column: $libraryColumn, path: $libraryPath)
@@ -89,6 +102,18 @@ struct IOSRootView: View {
             if needed { playback.close() }
             choosingProfile = needed
         }
+        // Over the tab bar, sidebar and bars too, until its exit has played.
+        .overlay {
+            if !splashGone {
+                IOSLaunchSplash(finished: splashGate.isFinished) { splashGone = true }
+                    .ignoresSafeArea()
+            }
+        }
+        // Only Home's hero is worth waiting for; another restored tab opens without it.
+        .onChange(of: showsHome, initial: true) { _, home in
+            if !home { splashGate.heroIsReady() }
+        }
+        .onChange(of: splashGone) { presentWhatsNewIfReady() }
         .iosPlaybackHost(playback)
         .task { showWhatsNewIfUpdated() }
         #if DEBUG
@@ -154,6 +179,12 @@ struct IOSRootView: View {
             librarySelection = nil
             libraryPath = NavigationPath()
         }
+    }
+
+    /// Home is on screen: its own tab, or a stored tab this window does not have (a tab from an
+    /// older build, or a library not loaded yet), for which the tab view shows its first tab, Home.
+    private var showsHome: Bool {
+        selectedTab == "home" || !(["library", "live-tv", "search"] + sidebarTabs).contains(selectedTab)
     }
 
     /// A sidebar library tab vanishes on a server without that library.
@@ -241,7 +272,15 @@ struct IOSRootView: View {
         guard plex.isConfigured, current != lastSeenBuild else { return }
         whatsNewVersions = WhatsNewRange.versions(IOSChangelog.entries.map(\.version), current: current, lastSeen: lastSeenBuild)
         lastSeenBuild = current
-        showingWhatsNew = !whatsNewVersions.isEmpty
+        whatsNewPending = !whatsNewVersions.isEmpty
+        presentWhatsNewIfReady()
+    }
+
+    /// What's New slides up once the launch splash has gone, never over it.
+    private func presentWhatsNewIfReady() {
+        guard whatsNewPending, splashGone else { return }
+        whatsNewPending = false
+        showingWhatsNew = true
     }
 
     #if DEBUG
@@ -304,7 +343,7 @@ struct IOSRootView: View {
 
 #Preview {
     let session = PlexSession()
-    IOSRootView()
+    IOSRootView(splashGate: LaunchSplashGate(browse: session.browse))
         .environmentObject(session)
         .environmentObject(session.browse)
         .environmentObject(IOSDownloadCenter.shared)

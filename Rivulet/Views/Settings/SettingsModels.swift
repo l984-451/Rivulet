@@ -52,7 +52,8 @@ enum SettingsPage: Hashable, CaseIterable {
     case liveTVSourceDetail, liveTVFavorites
     case addLiveTVSource, addXtream, addDispatcharr, addTvheadend, addThreadfin, addPlaylistURL
     case appIconPicker, homeHeroPicker, detailRatingPicker, autoplayCountdownPicker, skipIntervalPicker, skipBackIntervalPicker
-    case heightSpeakersPicker, subtitleModePicker, autoplayLimitPicker
+    case heightSpeakersPicker, subtitleModePicker, autoplayLimitPicker, profilePickerPicker
+    case skipModePicker, creditsPicker, cinemaTrailersPicker
     case homeQualityPicker, awayQualityPicker
     case audioLanguagePicker, subtitleLanguagePicker
     case contentFilter, contentFilterStrength, contentFilterWords
@@ -87,6 +88,10 @@ enum SettingsPage: Hashable, CaseIterable {
         case .homeHeroPicker: return String(localized: "Hero")
         case .detailRatingPicker: return String(localized: "Rating")
         case .autoplayCountdownPicker: return String(localized: "Autoplay Countdown")
+        case .profilePickerPicker: return String(localized: "Profile Picker")
+        case .skipModePicker: return SettingsContent.skipModeTarget.title
+        case .creditsPicker: return String(localized: "Credits")
+        case .cinemaTrailersPicker: return String(localized: "Trailers Before Movies")
         case .skipIntervalPicker: return String(localized: "Skip Forward Length")
         case .skipBackIntervalPicker: return String(localized: "Skip Back Length")
         case .heightSpeakersPicker: return String(localized: "Height Speakers")

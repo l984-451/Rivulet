@@ -636,4 +636,11 @@ final class PlexNetworkManagerURLTests: XCTestCase {
                        "general=2000 transcode=4005: Cannot convert this item. No conversion profile found for protocol hls.")
         XCTAssertNil(PlexNetworkManager.transcodeVerdict(in: Data("<html>400 Bad Request</html>".utf8)))
     }
+
+    /// A guid lookup is best-effort, so one server's 400 on it is a log; other /library/all calls keep their rule.
+    func testGuidLookupIsRecognisedOnlyOnLibraryAll() throws {
+        XCTAssertTrue(PlexNetworkManager.isGuidLookup(try XCTUnwrap(URL(string: "https://pms.test:32400/library/all?guid=plex://movie/1,plex://show/2"))))
+        XCTAssertFalse(PlexNetworkManager.isGuidLookup(try XCTUnwrap(URL(string: "https://pms.test:32400/library/all?sort=titleSort"))))
+        XCTAssertFalse(PlexNetworkManager.isGuidLookup(try XCTUnwrap(URL(string: "https://pms.test:32400/library/sections/1/all?guid=plex://movie/1"))))
+    }
 }

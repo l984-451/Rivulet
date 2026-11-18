@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2026 Bain Gurley
 
+import StoreKit
 import SwiftUI
 
 /// Settings > General: app icon, iCloud sync and About. Parity source: the lower sections of IOSAccountView.
@@ -13,6 +14,9 @@ struct MacGeneralSettingsView: View {
     @State private var appIcon = AppIcon.current
     @State private var showingChangelog = false
     @State private var showingLicenses = false
+    @State private var tips: [Product] = []
+    @State private var spaceUsed: Int64?
+    @State private var thanked = false
 
     var body: some View {
         Form {
@@ -36,6 +40,7 @@ struct MacGeneralSettingsView: View {
             }
 
             Section {
+                LabeledContent("Space Used", value: spaceUsed.map(StorageUsage.formatted) ?? String(localized: "Calculating…"))
                 Button("Clear Cache and Reload…", role: .destructive) { confirmingClear = true }
                     .disabled(isClearing)
             } header: {
@@ -44,10 +49,27 @@ struct MacGeneralSettingsView: View {
                 Text("Removes cached artwork and scrub thumbnails, then reloads your libraries and Home rows from your servers.")
             }
 
-            Section("About") {
+            Section {
                 LabeledContent("Version", value: MacChangelog.currentVersion)
                 LabeledContent("Changelog") { Button("Show…") { showingChangelog = true } }
                 LabeledContent("Licenses") { Button("Show…") { showingLicenses = true } }
+                if !tips.isEmpty {
+                    LabeledContent("Leave a Tip") {
+                        HStack {
+                            ForEach(tips, id: \.id) { product in
+                                Button(product.displayPrice) {
+                                    Task { thanked = await TipJar.purchase(product) }
+                                }
+                            }
+                        }
+                    }
+                }
+            } header: {
+                Text("About")
+            } footer: {
+                if !tips.isEmpty {
+                    Text("Rivulet is free and open source. A one-time tip helps keep it going.")
+                }
             }
         }
         .formStyle(.grouped)
@@ -61,6 +83,7 @@ struct MacGeneralSettingsView: View {
                     ArtworkTitleCheck.clearDisk()
                     await browse.watchStateDidChange()
                     isClearing = false
+                    await measureSpace()
                 }
             }
         } message: {
@@ -68,6 +91,18 @@ struct MacGeneralSettingsView: View {
         }
         .sheet(isPresented: $showingChangelog) { MacChangelogSheet() }
         .sheet(isPresented: $showingLicenses) { MacLicensesSheet() }
+        .task { tips = await TipJar.products() }
+        .task { await measureSpace() }
+        .alert("Thank You", isPresented: $thanked) {
+            Button("OK") {}
+        } message: {
+            Text("Your tip helps keep Rivulet going.")
+        }
+    }
+
+    private func measureSpace() async {
+        spaceUsed = nil
+        spaceUsed = await Task.detached(priority: .utility) { StorageUsage.totalBytes() }.value
     }
 }
 

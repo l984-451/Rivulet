@@ -114,7 +114,6 @@ extension LiveTVDataStore {
         LiveShelves.Input(
             channels: channels, epg: epg, recentChannelIds: recentChannelIds, favoriteIds: favoriteIds,
             unfavoritedIds: unfavoritedIds, eventSlotIds: eventSlotIds, viewings: viewings,
-            suggestionsEnabled: suggestionsEnabled,
             scheduledRecordings: scheduledRecordings,
             sourceNames: Dictionary(sources.map { ($0.id, $0.displayName) }, uniquingKeysWith: { first, _ in first }))
     }
@@ -272,7 +271,7 @@ nonisolated enum LiveShelves {
         if genres.count > 1 {
             for genre in genres {
                 let id = "genre|\(genre.rawValue)"
-                let list = Array((byGenre[genre] ?? []).prefix(60))
+                let list = byGenre[genre] ?? []
                 shelves.append(LiveShelf(id: id, title: genre.title, items: onNow(list, section: id)))
             }
         }
@@ -284,12 +283,13 @@ nonisolated enum LiveShelves {
         let sourceTitles = titles.count > 1 ? titles : []
         for title in sourceTitles {
             let id = "source|\(title)"
-            let list = Array((bySource[title] ?? []).prefix(60))
+            let list = bySource[title] ?? []
             shelves.append(LiveShelf(id: id, title: title, items: onNow(list, section: id)))
         }
 
         // A shelf per channel group, as the Guide's tabs, except a group that
         // holds every channel. A source row wins a name it shares with a group.
+        // Rows hold their whole group: Add More reads these rows, and a capped row hid channels (#654).
         let groups = Dictionary(grouping: channels) {
             $0.groupTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         }
@@ -299,7 +299,7 @@ nonisolated enum LiveShelves {
         }
         for title in groupTitles.prefix(16) {
             let id = "group|\(title)"
-            let list = Array((groups[title] ?? []).prefix(60))
+            let list = groups[title] ?? []
             shelves.append(LiveShelf(id: id, title: title, items: onNow(list, section: id)))
         }
 

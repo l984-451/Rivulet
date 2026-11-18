@@ -2,7 +2,7 @@
 // Copyright (C) 2025-2026 Bain Gurley
 
 // The hero's four buttons: Play, Watchlist, Info, Next.
-// Unfocused: white 20% fill, UIGlassEffect, 0.5pt stroke. Focused: solid white, 10 pt growth.
+// Unfocused: dark glass, faint stroke. Focused: solid white, 10 pt growth.
 // Pressed: -5% scale. Springs: focus (0.25, 0.8), press (0.15, 0.9).
 
 import UIKit
@@ -19,7 +19,8 @@ final class HeroButtonRowView: UIView {
     let playButton = HeroPillButton()
     let watchlistButton = HeroCircleButton()
     let infoButton = HeroCircleButton()
-    let nextButton = HeroCircleButton()
+    /// A bare chevron at rest, as the TV app draws it; the platter shows on focus only.
+    let nextButton = HeroCircleButton(restingPlatter: false)
 
     private let stack = UIStackView()
 
@@ -31,8 +32,20 @@ final class HeroButtonRowView: UIView {
     var canAdvance: Bool = false {
         didSet {
             nextButton.isHidden = !canAdvance
+            pastNextCatcher.isHidden = !canAdvance
         }
     }
+
+    /// Gives the engine a Right to ask for from Next, so a long swipe can carry past it
+    /// (`passesNext`), as the shell's edge catcher does left of Play. A real focusable view:
+    /// a focus guide here was never asked. Focusable only while Next holds focus, and every
+    /// move into it is refused, so focus never lands here.
+    private final class PastNextCatcher: UIView {
+        weak var button: UIView?
+        override var canBecomeFocused: Bool { button?.isFocused == true }
+    }
+    private let pastNextCatcher = PastNextCatcher()
+    private var nextPageGesture: Int?
 
     var canRetreat = false
     private var previousPageGesture: Int?
@@ -92,8 +105,9 @@ final class HeroButtonRowView: UIView {
         playButton.title = String(localized: "Play")
         playButton.iconImage = UIImage(systemName: "play.fill")
         watchlistButton.setImage(UIImage(systemName: "plus"), for: .normal)
-        infoButton.setImage(UIImage(systemName: "info.circle"), for: .normal)
-        nextButton.setImage(UIImage(systemName: "chevron.right"), for: .normal)
+        // Measured from the TV app: Info bold, the chevron 15 x 26 at rest.
+        infoButton.setImage(UIImage(systemName: "info.circle"), for: .normal, pointSize: 30, weight: .bold)
+        nextButton.setImage(UIImage(systemName: "chevron.right"), for: .normal, pointSize: 28)
 
         playButton.accessibilityLabel = String(localized: "Play")
         watchlistButton.accessibilityLabel = String(localized: "Toggle Watchlist")
@@ -124,6 +138,17 @@ final class HeroButtonRowView: UIView {
             stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
             stack.topAnchor.constraint(equalTo: topAnchor),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+        pastNextCatcher.button = nextButton
+        pastNextCatcher.isHidden = true
+        pastNextCatcher.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(pastNextCatcher)
+        NSLayoutConstraint.activate([
+            pastNextCatcher.leadingAnchor.constraint(equalTo: nextButton.trailingAnchor, constant: 40),
+            pastNextCatcher.trailingAnchor.constraint(equalTo: trailingAnchor),
+            pastNextCatcher.widthAnchor.constraint(equalToConstant: 2),
+            pastNextCatcher.topAnchor.constraint(equalTo: stack.topAnchor),
+            pastNextCatcher.bottomAnchor.constraint(equalTo: stack.bottomAnchor)
         ])
         pageSwipe = DirectionalInputBinding(
             gatedSwipesOn: self, directions: [.left, .right],
@@ -190,18 +215,57 @@ final class HeroButtonRowView: UIView {
         super.didUpdateFocus(in: context, with: coordinator)
         if let next = context.nextFocusedItem, next === playButton || next === nextButton,
            next !== context.previouslyFocusedItem {
-            arrivalGesture = MenuPressInterceptor.remoteGestures.count
+            let row: [UIControl] = [playButton, watchlistButton, infoButton, nextButton]
+            let fromRow = row.contains { $0 === context.previouslyFocusedItem }
+            noteArrival(gesture: MenuPressInterceptor.remoteGestures.count, fromRow: fromRow)
         }
+    }
+
+    /// The gesture that walked focus along the row onto Play or Next (not one that came up from the shelves).
+    private var rowArrivalGesture: Int?
+
+    func noteArrival(gesture: Int, fromRow: Bool) {
+        arrivalGesture = gesture
+        rowArrivalGesture = fromRow ? gesture : nil
     }
 
     /// Left from Play while earlier items exist, or in the gesture that arrived or paged, never
     /// reaches the sidebar. At the first item a fresh gesture falls through and opens it.
+    /// A swipe that keeps travelling after it lands on Play passes it and pages back.
     override func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool {
-        if context.previouslyFocusedItem === playButton, context.focusHeading == .left,
-           canRetreat || arrivedThisGesture || previousPageGesture == MenuPressInterceptor.remoteGestures.count {
+        if context.previouslyFocusedItem === playButton, context.focusHeading == .left {
+            let gesture = MenuPressInterceptor.remoteGestures.count
+            if passesPlay(gesture: gesture) {
+                // Not from inside the engine's query: paging rebuilds the row.
+                DispatchQueue.main.async { [weak self] in self?.onPrevious?() }
+                return false
+            }
+            if canRetreat || arrivedThisGesture || previousPageGesture == gesture { return false }
+        }
+        if context.nextFocusedItem === pastNextCatcher {
+            if context.previouslyFocusedItem === nextButton, context.focusHeading == .right,
+               passesNext(gesture: MenuPressInterceptor.remoteGestures.count) {
+                DispatchQueue.main.async { [weak self] in self?.onNext?() }
+            }
             return false
         }
         return super.shouldUpdateFocus(in: context)
+    }
+
+    /// `passesPlay`'s mirror: the swipe that walked onto Next and keeps going pages forward, once.
+    func passesNext(gesture: Int) -> Bool {
+        guard canAdvance, rowArrivalGesture == gesture, nextPageGesture != gesture else { return false }
+        nextPageGesture = gesture
+        return true
+    }
+
+    /// The TV app's long swipe: the gesture that landed on Play asks the engine for another Left,
+    /// so it carries past Play to the previous item. A short swipe that stops on Play never asks.
+    /// Still one page per gesture.
+    func passesPlay(gesture: Int) -> Bool {
+        guard canRetreat, rowArrivalGesture == gesture, previousPageGesture != gesture else { return false }
+        previousPageGesture = gesture
+        return true
     }
 
     /// Pages back once per gesture; the rest of that gesture is consumed, even at the first item.
@@ -261,10 +325,24 @@ final class HeroPillButton: UIControl {
     static let iconGap: CGFloat = 14
     static let rowGap: CGFloat = 24
     static let titleFont = UIFont.systemFont(ofSize: 29, weight: .semibold)
+    /// The TV app's play glyph, about 23 x 26 at rest (measured on device).
+    static let iconSize: CGFloat = 30
     /// Apple grows a focused button by 10 pt of width; on the pill that is 1.045.
     static let focusScale: CGFloat = (pillWidth + 10) / pillWidth
     /// Circles grow 66 -> 76 on focus (measured on device, tvOS 27).
     static let circleFocusScale: CGFloat = 76.0 / 66.0
+    /// Resting edge for every hero button: 1 pt at 0.12 white on the circles (measured on device).
+    static let restingStroke = UIColor.white.withAlphaComponent(0.12)
+    /// Resting glass for every hero button: the clear (more see-through) glass with a dark
+    /// tint, so the buttons stay as dark as the regular glass while showing more of the art.
+    static func restingGlass() -> UIGlassEffect {
+        let glass = UIGlassEffect(style: .clear)
+        glass.tintColor = UIColor.black.withAlphaComponent(0.3)
+        return glass
+    }
+    /// The glass is faded to show less blur; a plain dark fill under it keeps the buttons dark.
+    static let restingGlassAlpha: CGFloat = 0.5
+    static let restingFill = UIColor.black.withAlphaComponent(0.3)
 
     var title: String = "" {
         didSet { titleLabel.text = title }
@@ -272,14 +350,14 @@ final class HeroPillButton: UIControl {
 
     var iconImage: UIImage? {
         didSet {
-            iconView.image = iconImage?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 22, weight: .semibold))
+            iconView.image = iconImage?.withConfiguration(UIImage.SymbolConfiguration(pointSize: Self.iconSize, weight: .semibold))
         }
     }
 
     private let background = UIView()
     /// Real Liquid Glass material, the second background under the solid
     /// fill (it shows through when unfocused, fades out on focus).
-    private let materialBackground = UIVisualEffectView(effect: UIGlassEffect(style: .regular))
+    private let materialBackground = UIVisualEffectView(effect: HeroPillButton.restingGlass())
     private let strokeLayer = CAShapeLayer()
     private let contentStack = UIStackView()
     private let iconView = UIImageView()
@@ -295,7 +373,8 @@ final class HeroPillButton: UIControl {
         background.translatesAutoresizingMaskIntoConstraints = false
         background.layer.cornerRadius = cornerRadius
         background.layer.cornerCurve = .continuous
-        background.backgroundColor = UIColor.white.withAlphaComponent(0.2)
+        // Dark fill under faded glass, as on the circles.
+        background.backgroundColor = Self.restingFill
         background.isUserInteractionEnabled = false
         addSubview(background)
 
@@ -305,9 +384,10 @@ final class HeroPillButton: UIControl {
         materialBackground.clipsToBounds = true
         materialBackground.isUserInteractionEnabled = false
         addSubview(materialBackground)
+        materialBackground.alpha = Self.restingGlassAlpha
 
         strokeLayer.fillColor = UIColor.clear.cgColor
-        strokeLayer.strokeColor = UIColor.white.withAlphaComponent(0.2).cgColor
+        strokeLayer.strokeColor = Self.restingStroke.cgColor
         strokeLayer.lineWidth = 0.5
         layer.addSublayer(strokeLayer)
 
@@ -351,8 +431,8 @@ final class HeroPillButton: UIControl {
             contentStack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -Self.sidePadding),
             contentStack.centerXAnchor.constraint(equalTo: centerXAnchor),
 
-            iconView.widthAnchor.constraint(equalToConstant: 24),
-            iconView.heightAnchor.constraint(equalToConstant: 24)
+            iconView.widthAnchor.constraint(equalToConstant: Self.iconSize),
+            iconView.heightAnchor.constraint(equalToConstant: Self.iconSize)
         ])
     }
 
@@ -388,8 +468,8 @@ final class HeroPillButton: UIControl {
                        initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
             self.transform = focused
                 ? CGAffineTransform(scaleX: HeroPillButton.focusScale, y: HeroPillButton.focusScale) : .identity
-            self.background.backgroundColor = focused ? .white : UIColor.white.withAlphaComponent(0.2)
-            self.materialBackground.alpha = focused ? 0 : 1
+            self.background.backgroundColor = focused ? .white : HeroPillButton.restingFill
+            self.materialBackground.alpha = focused ? 0 : HeroPillButton.restingGlassAlpha
             self.strokeLayer.opacity = focused ? 0 : 1
             self.titleLabel.textColor = focused ? .black : .white
             self.iconView.tintColor = focused ? .black : .white
@@ -433,21 +513,26 @@ final class HeroPillButton: UIControl {
 final class HeroCircleButton: UIControl {
 
     private let background = UIView()
-    private let materialBackground = UIVisualEffectView(effect: UIGlassEffect(style: .regular))
+    private let materialBackground = UIVisualEffectView(effect: HeroPillButton.restingGlass())
     private let strokeLayer = CAShapeLayer()
     private let iconView = UIImageView()
+    private lazy var iconWidth = iconView.widthAnchor.constraint(equalToConstant: 24)
+    private lazy var iconHeight = iconView.heightAnchor.constraint(equalToConstant: 24)
 
     private let cornerRadius: CGFloat = 33
+    /// False draws only the symbol at rest (the hero's Next chevron).
+    private let restingPlatter: Bool
 
-    override init(frame: CGRect) {
-        super.init(frame: frame)
+    init(restingPlatter: Bool = true) {
+        self.restingPlatter = restingPlatter
+        super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         clipsToBounds = false
 
         background.translatesAutoresizingMaskIntoConstraints = false
         background.layer.cornerRadius = cornerRadius
         background.layer.cornerCurve = .continuous
-        background.backgroundColor = .clear
+        background.backgroundColor = restingPlatter ? HeroPillButton.restingFill : .clear
         background.isUserInteractionEnabled = false
         addSubview(background)
 
@@ -459,9 +544,11 @@ final class HeroCircleButton: UIControl {
         addSubview(materialBackground)
 
         strokeLayer.fillColor = UIColor.clear.cgColor
-        strokeLayer.strokeColor = UIColor.white.withAlphaComponent(0.12).cgColor
+        strokeLayer.strokeColor = HeroPillButton.restingStroke.cgColor
         strokeLayer.lineWidth = 1
         layer.addSublayer(strokeLayer)
+        materialBackground.alpha = restingPlatter ? HeroPillButton.restingGlassAlpha : 0
+        strokeLayer.opacity = restingPlatter ? 1 : 0
 
         iconView.tintColor = .white
         iconView.contentMode = .scaleAspectFit
@@ -482,8 +569,8 @@ final class HeroCircleButton: UIControl {
             materialBackground.trailingAnchor.constraint(equalTo: trailingAnchor),
             iconView.centerXAnchor.constraint(equalTo: centerXAnchor),
             iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            iconView.widthAnchor.constraint(equalToConstant: 24),
-            iconView.heightAnchor.constraint(equalToConstant: 24)
+            iconWidth,
+            iconHeight
         ])
     }
 
@@ -496,8 +583,11 @@ final class HeroCircleButton: UIControl {
         strokeLayer.frame = bounds
     }
 
-    func setImage(_ image: UIImage?, for state: UIControl.State) {
-        iconView.image = image?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 24, weight: .semibold))
+    func setImage(_ image: UIImage?, for state: UIControl.State,
+                  pointSize: CGFloat = 24, weight: UIImage.SymbolWeight = .semibold) {
+        iconWidth.constant = pointSize
+        iconHeight.constant = pointSize
+        iconView.image = image?.withConfiguration(UIImage.SymbolConfiguration(pointSize: pointSize, weight: weight))
     }
 
     // MARK: - Focus
@@ -523,9 +613,9 @@ final class HeroCircleButton: UIControl {
                        initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
             let grow = HeroPillButton.circleFocusScale
             self.transform = focused ? CGAffineTransform(scaleX: grow, y: grow) : .identity
-            self.background.backgroundColor = focused ? .white : .clear
-            self.materialBackground.alpha = focused ? 0 : 1
-            self.strokeLayer.opacity = focused ? 0 : 1
+            self.background.backgroundColor = focused ? .white : (self.restingPlatter ? HeroPillButton.restingFill : .clear)
+            self.materialBackground.alpha = focused || !self.restingPlatter ? 0 : HeroPillButton.restingGlassAlpha
+            self.strokeLayer.opacity = focused || !self.restingPlatter ? 0 : 1
             self.iconView.tintColor = focused ? .black : .white
         }
     }

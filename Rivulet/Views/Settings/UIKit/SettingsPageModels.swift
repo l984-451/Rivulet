@@ -13,6 +13,7 @@
 
 import Combine
 import Foundation
+import StoreKit
 import UIKit
 
 /// Small UserDefaults helpers that honor the SwiftUI `@AppStorage` default
@@ -241,6 +242,10 @@ enum SettingsContent {
         case .homeHeroPicker:         return homeHeroPicker
         case .detailRatingPicker:     return detailRatingPicker
         case .autoplayCountdownPicker: return autoplayCountdownPicker
+        case .profilePickerPicker:    return profilePickerPicker
+        case .skipModePicker:         return skipModePicker
+        case .creditsPicker:          return creditsPicker
+        case .cinemaTrailersPicker:   return cinemaTrailersPicker
         case .skipIntervalPicker:     return skipIntervalPicker
         case .skipBackIntervalPicker: return skipBackIntervalPicker
         case .heightSpeakersPicker:   return heightSpeakersPicker
@@ -349,6 +354,23 @@ enum SettingsContent {
         }
     }
 
+    private static var profilePickerPicker: [SettingsRowItem] {
+        PlexUserProfileManager.profilePickerChoices.map { after in
+            SettingsRowItem(id: "pp_\(after.map { Int($0) } ?? -1)", verbatim: profilePickerTitle(after), kind: .option(
+                isSelected: { PlexUserProfileManager.shared.profilePickerAfter == after },
+                select: { PlexUserProfileManager.shared.profilePickerAfter = after }))
+        }
+    }
+
+    private static func profilePickerTitle(_ after: TimeInterval?) -> String {
+        switch after {
+        case nil: String(localized: "Off")
+        case 0: String(localized: "Instant")
+        case let seconds? where seconds < 60: String(localized: "\(Int(seconds)) Seconds")
+        case let seconds?: String(localized: "\(Int(seconds / 60)) Minutes")
+        }
+    }
+
     private static var skipIntervalPicker: [SettingsRowItem] {
         SkipInterval.allCases.map { opt in
             SettingsRowItem(id: "si_\(opt.rawValue)", verbatim: opt.description, kind: .option(
@@ -434,14 +456,11 @@ enum SettingsContent {
         [
             SettingsRowItem(id: "cat_appearance", title: "Appearance", kind: .navigation(.appearance)),
             SettingsRowItem(id: "cat_playback",   title: "Playback",   kind: .navigation(.playback)),
-            SettingsRowItem(id: "cat_music",      title: "Music",      kind: .navigation(.music)),
-            SettingsRowItem(id: "cat_liveTV",     title: "Live TV",    kind: .navigation(.liveTV)),
-            SettingsRowItem(id: "cat_photos",     title: "Photos",     kind: .navigation(.photos)),
             SettingsRowItem(id: "cat_servers",    title: "Servers",    kind: .navigation(.servers)),
+            SettingsRowItem(id: "cat_liveTV",     title: "Live TV",    kind: .navigation(.liveTV)),
+            SettingsRowItem(id: "cat_music",      title: "Music",      kind: .navigation(.music)),
+            SettingsRowItem(id: "cat_photos",     title: "Photos",     kind: .navigation(.photos)),
             SettingsRowItem(id: "cache",          title: "Cache & Storage", kind: .navigation(.cache)),
-            SettingsRowItem(id: "iCloudSync",     title: "iCloud Sync",
-                            kind: .cycle(value: { iCloudSyncValue },
-                                         next: { CloudSync.shared.setEnabled(!CloudSync.shared.isEnabled) })),
             SettingsRowItem(id: "cat_about",      title: "About",      kind: .navigation(.about))
         ]
     }
@@ -489,14 +508,18 @@ enum SettingsContent {
             // App Icon row withheld on tvOS: App Store Connect rejects the alternate icons (ITMS-90471).
             // Profiles themselves are switched from the sidebar now, so this is
             // all that is left of the retired User Profiles page.
-            SettingsRowItem(id: "profilePickerOnLaunch", title: "Profile Picker on Launch",
-                            kind: .toggle(
-                                get: { PlexUserProfileManager.shared.showProfilePickerOnLaunch },
-                                set: { PlexUserProfileManager.shared.showProfilePickerOnLaunch = $0 })),
+            SettingsRowItem(id: "profilePickerOnLaunch", title: "Profile Picker",
+                            kind: .navigationValue(.profilePickerPicker, value: {
+                                profilePickerTitle(PlexUserProfileManager.shared.profilePickerAfter)
+                            })),
             SettingsRowItem(id: "topShelfStyle", title: "Top Shelf",
                             kind: .cycle(value: { TopShelfCache.shared.fullScreen ? String(localized: "Full Screen") : String(localized: "Posters") },
                                          next: { TopShelfCache.shared.fullScreen.toggle() })),
-            toggle("skipPreview", "Skip Preview", key: "skipPreviewCarousel", default: false),
+            // Stored inverted: the key is from when this row was Skip Preview.
+            SettingsRowItem(id: "previewCard", title: "Preview Card", kind: .toggle(
+                get: { !SettingsStore.bool("skipPreviewCarousel", default: false) },
+                set: { SettingsStore.setBool("skipPreviewCarousel", !$0) })),
+            toggle("posterTitles", "Titles Under Posters", key: MediaRowMetrics.posterTitlesKey, default: MediaRowMetrics.posterTitlesDefault),
 
             // Titles drop whatever their caption already says ("Home Hero" under
             // HOME reads as "Home Home Hero"), the way Apple TV Settings puts a
@@ -604,22 +627,13 @@ enum SettingsContent {
                             })),
             SettingsRowItem(id: "autoplayLimit", title: "Limit",
                             kind: .navigationValue(.autoplayLimitPicker, value: { AutoplayLimit.current.description })),
-            SettingsRowItem(id: "atTheCredits", title: "Credits", kind: .cycle(
-                value: { CreditsBehavior.current().label },
-                next: {
-                    let all = CreditsBehavior.allCases
-                    let i = all.firstIndex(of: CreditsBehavior.current()) ?? 0
-                    CreditsBehavior.set(all[(i + 1) % all.count])
-                })),
+            SettingsRowItem(id: "atTheCredits", title: "Credits",
+                            kind: .navigationValue(.creditsPicker, value: { CreditsBehavior.current().label })),
             SettingsRowItem(id: "cinemaTrailers", title: "Trailers Before Movies",
-                            kind: .cycle(value: { CinemaExtras.count == 0 ? String(localized: "Off") : "\(CinemaExtras.count)" },
-                                         next: {
-                                             SettingsStore.setInt(CinemaExtras.countKey,
-                                                                  CinemaExtras.count == CinemaExtras.countOptions.upperBound
-                                                                      ? 0 : CinemaExtras.count + 1)
-                                         })),
+                            kind: .navigationValue(.cinemaTrailersPicker, value: { cinemaTrailersTitle(CinemaExtras.count) })),
             .header("Home Theater"),
             toggle("upscaleLowResolution", "Upscale SD and 720p", key: AetherPlayer.upscaleKey, default: false),
+            toggle("stereoWithSubwoofer", "Stereo with Subwoofer", key: StereoWithSubwoofer.key, default: false),
         ] + selfBuiltHomeTheaterRows + [
             .header("Filtering"),
             SettingsRowItem(id: "cat_contentFilter", title: "Content Filtering",
@@ -775,20 +789,7 @@ enum SettingsContent {
             SettingsRowItem(id: "liveTVSources", title: "Live TV Sources", kind: .navigation(.iptv)),
             SettingsRowItem(id: "liveTVFavorites", title: "Favorites", kind: .navigation(.liveTVFavorites)),
         ] + liveTVLookRows + [
-            toggle("combineSources", "Combine Sources", key: "combineLiveTVSources", default: true),
-            toggle("keepPlayingInGuide", "Keep Playing in Guide", key: "liveTVKeepPlayingInGuide", default: true),
-            SettingsRowItem(id: "liveTVSuggestions", title: "Suggestions", kind: .toggle(
-                get: { SettingsStore.bool(LiveTVDataStore.suggestionsKey, default: true) },
-                set: { SettingsStore.setBool(LiveTVDataStore.suggestionsKey, $0) },
-                didChange: { isOn, vc in
-                    guard !isOn else { return }
-                    vc.present(ConfirmationPopupViewController(
-                        title: String(localized: "Erase What For You Learned?"),
-                        message: String(localized: "Suggestions are off. Erase what Rivulet learned from what you watch, or keep it for if you turn them back on."),
-                        confirmTitle: String(localized: "Erase"), cancelTitle: String(localized: "Keep"), destructive: true,
-                        onConfirm: { LiveTVDataStore.shared.forgetViewings() }), animated: true)
-                })),
-            toggle("confirmExitMultiview", "Confirm Exit Multiview", key: "confirmExitMultiview", default: true)
+            toggle("combineSources", "Combine Sources", key: "combineLiveTVSources", default: true)
         ]
     }
 
@@ -854,6 +855,17 @@ enum SettingsContent {
                 kind: .navigationAction(.emby,
                                         value: { EmbySession.account?.serverName ?? "" },
                                         prepare: { addSourceDraft = AddSourceDraft() }))
+        ] + iCloudRows
+    }
+
+    /// A build signed without iCloud (a free Apple ID) cannot sync, so it shows no iCloud rows.
+    private static var iCloudRows: [SettingsRowItem] {
+        guard SyncCatalog.cloudAvailable else { return [] }
+        return [
+            .header("iCloud"),
+            SettingsRowItem(id: "iCloudSync", title: "iCloud Sync",
+                            kind: .cycle(value: { iCloudSyncValue },
+                                         next: { CloudSync.shared.setEnabled(!CloudSync.shared.isEnabled) })),
         ]
     }
 
@@ -1344,6 +1356,7 @@ enum SettingsContent {
             combineLiveTV: SettingsStore.bool("combineLiveTVSources", default: true),
             showDiscover: PlexAuthManager.shared.hasCredentials, showWatchlist: PlexAuthManager.shared.hasCredentials,
             showFavorites: PersonalHomeRows.offersFavorites,
+            showWatchTogether: PlexAuthManager.shared.hasCredentials || ServerDataStore.shared.isSignedIn,
             playlistServers: PlaylistServer.current(PlaylistAvailability.shared.providerIDs))
         let byKey = Dictionary(rows.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
         return SidebarArrangement.arrange(rows.map(\.key), order: LibrarySettingsManager.shared.libraryOrder)
@@ -1365,6 +1378,7 @@ enum SettingsContent {
                     SettingsStore.setBool("showDiscoverTab", true)
                     SettingsStore.setBool("showWatchlistTab", true)
                     SettingsStore.setBool("showFavoritesTab", false)
+                    SettingsStore.setBool("showWatchTogetherTab", true)
                     (vc as? SettingsPageViewController)?.reloadRows()
                 }
             }))
@@ -1381,6 +1395,8 @@ enum SettingsContent {
                 (vc as? SettingsPageViewController)?.reloadRows()
             }))
         ]
+        // An empty caption: a group gap between the buttons above and the rows.
+        if !rows.isEmpty, !entries.isEmpty { rows.append(.header(verbatim: "")) }
         // With several servers each title names its server, since no header
         // could stay true once they mix.
         let namesServer = Set(entries.compactMap(\.serverName)).count > 1
@@ -1400,6 +1416,9 @@ enum SettingsContent {
             case SidebarArrangement.favorites:
                 kind = .toggle(get: { SettingsStore.bool("showFavoritesTab", default: false) },
                                set: { SettingsStore.setBool("showFavoritesTab", $0) })
+            case SidebarArrangement.watchTogether:
+                kind = .toggle(get: { SettingsStore.bool("showWatchTogetherTab", default: true) },
+                               set: { SettingsStore.setBool("showWatchTogetherTab", $0) })
             case _ where SidebarArrangement.isLiveTV(key):
                 // Live TV leaves the sidebar only with its sources: no toggle, nothing
                 // to open, but focusable so it can be held and moved.
@@ -1427,8 +1446,31 @@ enum SettingsContent {
 
     // MARK: Cache & Storage
 
+    /// Measured when Cache & Storage opens and after each clear; nil while measuring.
+    private static var storageUsage: (artwork: Int64, total: Int64)?
+
+    private static func measureStorage(reload: @escaping () -> Void) {
+        storageUsage = nil
+        reload()
+        Task.detached(priority: .utility) {
+            let caches = StorageUsage.directory(.cachesDirectory)
+            let usage = (artwork: StorageUsage.bytes(in: caches?.appendingPathComponent("PlexImageCache")),
+                         total: StorageUsage.totalBytes())
+            await MainActor.run {
+                storageUsage = usage
+                reload()
+            }
+        }
+    }
+
+    private static func storageValue(_ bytes: (Int64, Int64) -> Int64) -> String {
+        storageUsage.map { StorageUsage.formatted(bytes($0.artwork, $0.total)) } ?? String(localized: "Calculating…")
+    }
+
     private static var cache: [SettingsRowItem] {
         [
+            SettingsRowItem(id: "storageArtwork", title: "Artwork", kind: .info(value: { storageValue { a, _ in a } })),
+            SettingsRowItem(id: "storageTotal", title: "Total Storage", kind: .info(value: { storageValue { _, t in t } })),
             SettingsRowItem(id: "forceRefresh", title: "Force Refresh Libraries",
                             kind: .action(destructive: false, handler: { vc in
                 presentConfirm(on: vc, title: "Force Refresh Libraries?",
@@ -1437,6 +1479,7 @@ enum SettingsContent {
                     Task {
                         await CacheManager.shared.clearAllCache()
                         await reloadFromServer()
+                        measureStorage { (vc as? SettingsPageViewController)?.reloadRows() }
                     }
                 }
             })),
@@ -1451,6 +1494,7 @@ enum SettingsContent {
                         ArtworkTitleCheck.clearDisk()
                         await CacheManager.shared.clearAllCache()
                         await reloadFromServer()
+                        measureStorage { (vc as? SettingsPageViewController)?.reloadRows() }
                     }
                 }
             }))
@@ -1601,6 +1645,8 @@ enum SettingsContent {
             // failure text must not survive leaving the flow.
             resetAddSourceFlow()
             reload()
+        case .cache:
+            measureStorage(reload: reload)
         case .plex where PlexAuthManager.shared.isAuthenticated:
             loadPlexServers(reload: reload)
         case .liveTVFavorites where LiveTVDataStore.shared.channels.isEmpty:
@@ -1622,6 +1668,9 @@ enum SettingsContent {
         let version = "\(short) (\(build))"
         return [
             SettingsRowItem(id: "about_version", title: "Version", kind: .info(value: { version })),
+            SettingsRowItem(id: "leaveTip", title: "Leave a Tip", kind: .action(destructive: false, handler: { vc in
+                presentTipJar(on: vc)
+            })),
             SettingsRowItem(id: "changelog", title: "Changelog", kind: .action(destructive: false, handler: { vc in
                 presentChangelog(on: vc)
             })),
@@ -1684,6 +1733,34 @@ enum SettingsContent {
         return InfoPopupViewController(content: InfoPopupContent.changelog(entries), width: 1000, scrollable: true)
     }
 
+    /// Leave a Tip: the three tips in the tile menu's glass panel, then a thank-you once one goes through.
+    private static func presentTipJar(on vc: UIViewController) {
+        Task { @MainActor in
+            let products = await TipJar.products()
+            guard !products.isEmpty else {
+                vc.present(ConfirmationPopupViewController(
+                    title: String(localized: "Tips Unavailable"),
+                    message: String(localized: "The App Store couldn't be reached. Try again later."),
+                    confirmTitle: String(localized: "OK"), cancelTitle: nil, onConfirm: {}), animated: true)
+                return
+            }
+            let tips = products.map { product in
+                TileMenuAction(verbatim: "\(product.displayName) · \(product.displayPrice)", systemImage: "heart") {
+                    Task { @MainActor in
+                        guard await TipJar.purchase(product) else { return }
+                        vc.present(ConfirmationPopupViewController(
+                            title: String(localized: "Thank You"),
+                            message: String(localized: "Your tip helps keep Rivulet going."),
+                            confirmTitle: String(localized: "OK"), cancelTitle: nil, onConfirm: {}), animated: true)
+                    }
+                }
+            }
+            let header = TileMenuHeader(title: String(localized: "Leave a Tip"),
+                                        summary: String(localized: "Rivulet is free and open source. A tip helps keep it going."))
+            vc.present(TileMenuPopupViewController(sections: [tips], header: header), animated: false)
+        }
+    }
+
     /// Licenses & Legal renders into the app's contained glass popup (not a
     /// full-screen modal) — Up/Down pages the long license text, Menu dismisses.
     private static func presentAcknowledgements(on vc: UIViewController) {
@@ -1697,14 +1774,43 @@ enum SettingsContent {
     /// `enabledWhen` marks the row as depending on another setting: while it
     /// returns false the row renders dimmed and cannot be focused or toggled.
     /// Cycles one marker kind through Button, Automatic and Off (#381).
+    /// The skip row whose picker is open: its marker and the page title.
+    static var skipModeTarget = (marker: "intro", title: "")
+
     private static func skipModeRow(_ id: String, _ title: String.LocalizationValue, marker: String) -> SettingsRowItem {
-        SettingsRowItem(id: id, title: title, kind: .cycle(
+        SettingsRowItem(id: id, title: title, kind: .navigationAction(
+            .skipModePicker,
             value: { MarkerSkipMode.current(for: marker).label },
-            next: {
-                let all = MarkerSkipMode.allCases
-                let i = all.firstIndex(of: MarkerSkipMode.current(for: marker)) ?? 0
-                MarkerSkipMode.set(all[(i + 1) % all.count], for: marker)
-            }))
+            prepare: { skipModeTarget = (marker, String(localized: title)) }))
+    }
+
+    private static var skipModePicker: [SettingsRowItem] {
+        let marker = skipModeTarget.marker
+        return MarkerSkipMode.allCases.map { mode in
+            SettingsRowItem(id: "sm_\(mode.rawValue)", verbatim: mode.label, kind: .option(
+                isSelected: { MarkerSkipMode.current(for: marker) == mode },
+                select: { MarkerSkipMode.set(mode, for: marker) }))
+        }
+    }
+
+    private static var creditsPicker: [SettingsRowItem] {
+        CreditsBehavior.allCases.map { behavior in
+            SettingsRowItem(id: "cr_\(behavior.rawValue)", verbatim: behavior.label, kind: .option(
+                isSelected: { CreditsBehavior.current() == behavior },
+                select: { CreditsBehavior.set(behavior) }))
+        }
+    }
+
+    private static var cinemaTrailersPicker: [SettingsRowItem] {
+        CinemaExtras.countOptions.map { count in
+            SettingsRowItem(id: "ct_\(count)", verbatim: cinemaTrailersTitle(count), kind: .option(
+                isSelected: { CinemaExtras.count == count },
+                select: { SettingsStore.setInt(CinemaExtras.countKey, count) }))
+        }
+    }
+
+    private static func cinemaTrailersTitle(_ count: Int) -> String {
+        count == 0 ? String(localized: "Off") : "\(count)"
     }
 
     private static func toggle(_ id: String, _ title: String.LocalizationValue, key: String, default def: Bool,

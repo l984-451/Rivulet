@@ -31,6 +31,8 @@ class PlayerContainerViewController: UIViewController {
     private var pausedDimView: UIView?
     private var chromeScrim = ChromeScrimView()
     private var captionOverlay: CaptionOverlayView?
+    /// Passing notes, top right (subtitle downloads, a server converting the file).
+    private var noticeCard: PlayerNoticeCardView?
     /// The pause screen (10 s and 2 min paused). Written only by `applyPauseScreen`.
     private var pauseScreen: PauseScreenView?
     /// Insights raised over the pause screen from its hint.
@@ -786,13 +788,19 @@ class PlayerContainerViewController: UIViewController {
     /// Up/Down: while scrubbing, Up snaps to the next chapter in the direction
     /// of travel and Down cancels. Otherwise they surface the controls as AVKit
     /// does: Up lands on the first tool button, Down opens the Info pane
-    /// (Insights over the pause screen, from its hint).
+    /// (Insights over the pause screen, from its hint). With the controls
+    /// already up, Down lands on the first tab instead, as Down from the bar does.
     private func handleContentVertical(up: Bool) {
         guard let vm = viewModel else { return }
         if !up, pauseScreen?.showsInsightsHint == true, !vm.isScrubbing {
             openPauseInsights()
             return
         }
+        // Whether the rail, tabs included (they hide while loading), was on screen
+        // before this press: a touch tap, Play/Pause, a scrub commit or the player
+        // opening show it while focus stays here. Read before anything below
+        // brings the chrome up.
+        let railWasUp = (rail?.alpha ?? 0) > 0.5 && rail?.pillRowView.isHidden == false
         vm.hidePausedPoster()
         if vm.isScrubbing {
             if up {
@@ -814,7 +822,7 @@ class PlayerContainerViewController: UIViewController {
         } else {
             if let info = rail?.infoButton { rail?.setFocusLanding(info) }
             vm.enterControlsFocus()
-            presentPane(.info)
+            if !railWasUp { presentPane(.info) }
         }
         setNeedsFocusUpdate()
         updateFocusIfNeeded()
@@ -904,6 +912,12 @@ class PlayerContainerViewController: UIViewController {
         if descriptionOverlay != nil {
             dismissDescription()
             blockDismissTemporarily()
+            return
+        }
+
+        // The error overlay is all that is up: Menu closes it, as its Dismiss button does.
+        if vm.playbackState.isFailed {
+            dismissPlayer()
             return
         }
 
@@ -1240,6 +1254,11 @@ class PlayerContainerViewController: UIViewController {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.applyChromeVisibility() }
             .store(in: &cancellables)
+        vm.$compatibilityNotice
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notice in self?.showNotice(notice) }
+            .store(in: &cancellables)
 
         // Caption inputs. The overlay measures against the picture, so a new
         // aspect ratio has to reach it; the height stepper is per-title and can
@@ -1457,7 +1476,7 @@ class PlayerContainerViewController: UIViewController {
             guard let self, let vm = self.viewModel else { return }
             let list = CardTrackListView.subtitleMenu(
                     tracks: vm.subtitleMenuTracks,
-                    selectedTrackId: vm.currentSubtitleTrackId, onTrackId: vm.subtitleOnTrackId,
+                    selectedTrackId: vm.chosenSubtitleTrackId, onTrackId: vm.subtitleOnTrackId,
                     actions: vm.subtitleSearchAvailable ? [
                         CardActionConfig(title: String(localized: "Search for Subtitles")) { [weak self] row in
                             self?.searchSubtitles(from: row)
@@ -1498,7 +1517,7 @@ class PlayerContainerViewController: UIViewController {
         }
         rail.onSubtitlesHold = { [weak self] in
             guard let self, let vm = self.viewModel else { return }
-            if vm.currentSubtitleTrackId != nil {
+            if vm.chosenSubtitleTrackId != nil {
                 vm.selectSubtitleTrack(id: nil)
                 self.rail?.showNote(String(localized: "Subtitles off"))
             } else if let id = vm.subtitleOnTrackId,
@@ -2031,6 +2050,24 @@ class PlayerContainerViewController: UIViewController {
             .compactMap { $0 }.joined(separator: ", ")
         let eyebrow = [number, meta.title ?? ""].filter { !$0.isEmpty }.joined(separator: " • ")
         rail?.setTitle(show, eyebrow: eyebrow.isEmpty ? nil : eyebrow)
+    }
+
+    // MARK: - Notices
+
+    /// Mounted on the first notice, always above whatever is on screen then.
+    private func showNotice(_ notice: PlaybackNotice?) {
+        if noticeCard == nil, notice != nil {
+            let card = PlayerNoticeCardView()
+            view.addSubview(card)
+            card.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                card.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -PlayerRailView.sideInset),
+                card.topAnchor.constraint(equalTo: view.topAnchor, constant: 60),
+            ])
+            noticeCard = card
+        }
+        if let card = noticeCard, notice != nil { view.bringSubviewToFront(card) }
+        noticeCard?.show(notice)
     }
 
     // MARK: - Post-video (Up Next)

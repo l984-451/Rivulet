@@ -271,6 +271,7 @@ struct IOSPlexInformationSection: View {
             (String(localized: "Rated"), detail?.contentRating ?? item.contentRating),
             (String(localized: "Released"), item.releaseDate.flatMap(Self.formattedDate)),
             (String(localized: "Runtime"), item.runtimeText),
+            (String(localized: "Aspect Ratio"), source?.aspectRatioLabel),
             (String(localized: "Audio"), languages(source?.audioTracks.map(\.language) ?? [])),
             (String(localized: "Subtitles"), languages(source?.subtitleTracks.map(\.language) ?? []))
         ].compactMap { label, value in

@@ -111,7 +111,7 @@ final class ServerDataStore: ObservableObject {
 
     /// `trending` for the sidebar's visible libraries, in sidebar order.
     var visibleTrending: [[MediaItem]] {
-        visibleLibraries.compactMap { trending[$0.settingsKey] }
+        visibleLibraries.filter(\.isPinnedToHome).compactMap { trending[$0.settingsKey] }
     }
 
     /// More than one source is signed in, so rows and tiles name their server.
@@ -190,7 +190,7 @@ final class ServerDataStore: ObservableObject {
         var browsable = fetched.filter { Self.browsableKinds.contains($0.kind) }
         // Music plays through the selected server only (MusicProviderRegistry).
         if provider.kind == .plex { browsable.removeAll { $0.kind == .music } }
-        let recentLibraries = browsable.filter { Self.recentlyAddedKinds.contains($0.kind) }
+        let recentLibraries = browsable.filter { $0.isPinnedToHome && Self.recentlyAddedKinds.contains($0.kind) }
         // Four at a time; results arrive in completion order, so each carries its index.
         let fetchedRecent = await BoundedFanOut.map(Array(recentLibraries.enumerated())) { index, library in
             do {
@@ -254,7 +254,8 @@ final class ServerDataStore: ObservableObject {
         guard !titles.isEmpty else { return }
         for provider in due {
             guard var slice = slices[provider.id] else { continue }
-            let libraries = slice.libraries.filter { Self.homeRowKinds.contains($0.kind) }.map { ($0.settingsKey, $0) }
+            let libraries = slice.libraries.filter { $0.isPinnedToHome && Self.homeRowKinds.contains($0.kind) }
+                .map { ($0.settingsKey, $0) }
             let found = await BoundedFanOut.map(libraries) { key, library in
                 do {
                     return (key, Result<[MediaItem], Error>.success(try await provider.trending(in: library, from: titles, limit: 10)))

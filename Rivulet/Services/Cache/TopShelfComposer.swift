@@ -76,6 +76,8 @@ enum TopShelfComposer {
                 ratingKey: item.ratingKey,
                 title: item.title,
                 subtitle: item.subtitle,
+                seasonNumber: item.seasonNumber,
+                episodeNumber: item.episodeNumber,
                 imageURL: item.imageURL,
                 wideImageURL: item.wideImageURL,
                 logoImageURL: logoURLString,

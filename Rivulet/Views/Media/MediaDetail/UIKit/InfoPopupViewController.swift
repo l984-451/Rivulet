@@ -375,6 +375,10 @@ enum InfoPopupContent {
         if let rt = detail.item.runtime, rt > 0 { info.append((String(localized: "Run Time"), runtimeString(rt))) }
         if let r = detail.contentRating, !r.isEmpty { info.append((String(localized: "Rated"), r)) }
         if let region = detail.regionOfOrigin, !region.isEmpty { info.append((String(localized: "Region of Origin"), region)) }
+        let video = [source?.resolutionBadge, source?.videoTracks.first.flatMap { VersionPicker.codecName($0.codec) }]
+            .compactMap { $0 }
+        if !video.isEmpty { info.append((String(localized: "Video"), video.joined(separator: " · "))) }
+        if let ratio = source?.aspectRatioLabel { info.append((String(localized: "Aspect Ratio"), ratio)) }
         addSection(title: String(localized: "Information"), rows: info, to: stack)
 
         // Languages
@@ -427,13 +431,9 @@ enum InfoPopupContent {
         if !parts.isEmpty {
             row.addArrangedSubview(label(parts.joined(separator: "  ·  "), size: 20, weight: .semibold, color: .white.withAlphaComponent(0.7), lines: 1))
         }
-        let source = detail.primarySource
-        var badges = source?.qualityBadges() ?? []
-        if source?.subtitleTracks.contains(where: { $0.isHearingImpaired }) ?? false { badges.append("SDH") }
-        if source?.audioTracks.contains(where: { ($0.title ?? $0.extendedTitle ?? "").localizedCaseInsensitiveContains("descri") }) ?? false { badges.append("AD") }
-        for raw in badges {
-            let text = raw.replacingOccurrences(of: "\\([^)]*\\)", with: "", options: .regularExpression).trimmingCharacters(in: .whitespaces)
-            if !text.isEmpty { row.addArrangedSubview(badgeLabel(text, filled: text == "4K")) }
+        // The detail page's badges, so the two rows match.
+        for text in detail.primarySource?.detailBadges ?? [] {
+            row.addArrangedSubview(badgeLabel(text, filled: MediaSource.filledBadges.contains(text)))
         }
         let spacer = UIView()
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)

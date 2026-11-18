@@ -39,6 +39,19 @@ final class HomeHeroTests: XCTestCase {
         XCTAssertEqual(HomeHero.libraryItems(rows).map(\.ref.itemID), ["r1", "r2"])
     }
 
+    /// The rows fallback (no list chosen) shows a title once when two libraries add the same one (#649).
+    func test_rowItems_sameTitleInTwoLibrariesIsOneSlide() {
+        func tmdb1(_ base: MediaItem) -> MediaItem {
+            MediaItem(ref: base.ref, kind: base.kind, title: base.title, sortTitle: nil, overview: nil, year: nil,
+                      runtime: nil, parentRef: nil, grandparentRef: nil, episodeNumber: nil, seasonNumber: nil,
+                      childProgress: nil, userState: base.userState, artwork: base.artwork, parentArtwork: nil,
+                      grandparentArtwork: nil, externalIDs: ["tmdb": "1"])
+        }
+        let rows = [shelf("plex:a|movie.recentlyadded.1", [tmdb1(item("a1")), item("a2")]),
+                    shelf("jellyfin:s|m.recentlyAdded", [tmdb1(item("b1", provider: "jellyfin:s"))])]
+        XCTAssertEqual(HomeHero.rowItems(rows).map(\.ref.itemID), ["a1", "a2"])
+    }
+
     func test_trendingFillsWhenNothingElseIsChosen() {
         let result = items([.trending], continueWatching: [item("c")], shelves: [shelf("recentlyadded", [item("r")])],
                            trending: [item("t1"), item("t2")])

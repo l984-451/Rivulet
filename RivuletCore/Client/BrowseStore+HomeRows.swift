@@ -54,10 +54,10 @@ extension BrowseStore {
         let (selected, secondary) = providersInPlay
         let providers = (selected.map { [$0] } ?? []) + secondary
         let shown = Set(providers.map(\.id))
-        // The selected server's pinned libraries, and every library of the others, less the hidden ones.
+        // Libraries pinned to Home, less the ones hidden from the sidebar.
         let candidates = libraries.compactMap { library -> (provider: any MediaProvider, library: MediaLibrary, key: String)? in
             guard let provider = providers.first(where: { $0.id == library.providerID }),
-                  provider.id != selected?.id || library.isPinnedToHome,
+                  library.isPinnedToHome,
                   isSidebarLibraryShown(library) else { return nil }
             return (provider, library, library.id)
         }

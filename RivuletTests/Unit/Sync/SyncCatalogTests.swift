@@ -94,4 +94,32 @@ final class SyncCatalogTests: XCTestCase {
         })
         XCTAssertEqual(flagged, SyncCatalog.reviewedSecretWordKeys)
     }
+
+    // MARK: iCloud availability from the embedded profile
+
+    private func profile(entitlements: String) -> Data {
+        // The real file wraps the plist in a CMS signature: binary bytes on both sides.
+        let plist = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0"><dict><key>Name</key><string>Test</string>
+        <key>Entitlements</key><dict>\(entitlements)</dict></dict></plist>
+        """
+        return Data([0x30, 0x82, 0x00, 0xFF]) + Data(plist.utf8) + Data([0xA0, 0x00, 0x31])
+    }
+
+    func test_cloudAvailable_profileWithoutICloud_isFalse() {
+        let free = profile(entitlements: "<key>application-identifier</key><string>T.app</string>")
+        XCTAssertFalse(SyncCatalog.cloudAvailable(profile: free))
+    }
+
+    func test_cloudAvailable_profileWithICloud_isTrue() {
+        let paid = profile(entitlements: "<key>com.apple.developer.icloud-services</key><array><string>CloudKit</string></array>")
+        XCTAssertTrue(SyncCatalog.cloudAvailable(profile: paid))
+    }
+
+    func test_cloudAvailable_noOrUnreadableProfile_isTrue() {
+        XCTAssertTrue(SyncCatalog.cloudAvailable(profile: nil))
+        XCTAssertTrue(SyncCatalog.cloudAvailable(profile: Data([0x00, 0x01, 0x02])))
+    }
 }

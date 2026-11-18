@@ -56,6 +56,9 @@ nonisolated enum SensitiveDataRedactor {
             ("\"(Pw)\"\\s*:\\s*\"[^\"]*\"", "\"$1\":\"\(redactedValue)\""),
             // Emby sign-in password as a query key (not a word that ends in pw).
             ("(?<![A-Za-z0-9_-])(Pw)=[^&\\s\"'<>]+", "$1=\(redactedValue)"),
+            // Plex Home profile PIN (/home/users/<uuid>/switch?pin=…) as a whole key, so
+            // `spin=` is left alone and the profile log's `pin=true` flag stays readable.
+            ("(?<![A-Za-z0-9_-])(pin)=(?!(?:true|false)\\b)[^&\\s\"'<>]+", "$1=\(redactedValue)"),
             // Query string: X-Plex-Token=…
             ("(\(keys))=[^&\\s\"'<>]+", "$1=\(redactedValue)"),
             // Xtream path credentials: /live/<user>/<pass>/<id>.ts

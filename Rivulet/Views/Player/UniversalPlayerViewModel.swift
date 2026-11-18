@@ -176,7 +176,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     private var titleLogoResolveTask: Task<Void, Never>?
 
     @Published var shouldDismiss = false  // Used to request player dismissal on tvOS
-    @Published var compatibilityNotice: String?
+    @Published var compatibilityNotice: PlaybackNotice?
 
     // MARK: - Seek Indicator State
     /// Shows a brief indicator when user taps left/right to skip 10 seconds
@@ -304,6 +304,12 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     private var replayWindow: ReplayWindowLogic?
     /// When the open window began and how many skips back it has seen, for its closing log line.
     private var replayWindowOpened: (at: Date, skips: Int)?
+    /// True while a skip back shows subtitles that were off. They are temporary, so the menus keep showing Off.
+    @Published private(set) var skipBackShowsSubtitles = false
+    /// The subtitle the user chose, which the menus and system remotes show.
+    var chosenSubtitleTrackId: Int? { skipBackShowsSubtitles ? nil : currentSubtitleTrackId }
+    /// Skips back of up to this much in total show subtitles; a longer rewind is a rewind, not a missed line.
+    static let skipBackSubtitleLimit: TimeInterval = 120
     /// Subtitles turned on by tvOS's Show When Muted (aether route only).
     private var captionsOnMute = CaptionsOnMuteLogic()
     private lazy var systemCaptionsOnMute = SystemCaptionsOnMute { [weak self] in self?.updateCaptionsOnMute() }
@@ -599,6 +605,9 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     private var streamPreparationTask: Task<Void, Never>?
     /// Plex transcode session ID, extracted from HLS stream URL for cleanup on stop
     private var plexSessionId: String?
+    private var transcodeStartWatch: Task<Void, Never>?
+    /// The current AVPlayer item has played since it loaded.
+    private var avItemHasPlayed = false
     /// The Plex stream whose transcode subtitle feeds the caption overlay (hls route).
     private var transcodeSubtitleTrackId: Int?
     private var transcodeSubtitleTask: Task<Void, Never>?
@@ -614,9 +623,15 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     private var rivuletFallbackHeaders: [String: String] = [:]
     /// One-shot direct-play -> HLS fallback guards (prevents loops).
     private var hasAttemptedRivuletHLSFallback = false
+    /// Why the server will not stream this item, from its decision or its answers to the HLS start.
+    private var serverRefusal: ServerRefusal?
+    /// HTTP status the direct-play URL gave when Aether could not open it; 404 means the file is gone.
+    private var directPlayProbeStatus: Int?
     /// One-shot: the enriched HLS asset failed and we rebuilt on the plain URL.
     private var hasRetriedWithoutEnrichment = false
     private var isAttemptingRivuletHLSFallback = false
+    /// The play session's decision refused the file: the Aether load gives way to the transcode.
+    private var directPlayRefused = false
 
     // MARK: - Streaming Quality State
 
@@ -690,8 +705,6 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     /// The clips still to play ahead of `cinemaFeature`.
     private var cinemaQueue: [PlexMetadata] = []
     private var cinemaFeatureVersion: VersionChoice?
-    /// The pre-play picks, held for the movie: a clip's first track pass would consume them.
-    private var cinemaFeaturePicks: (audio: Int?, subtitle: InitialSubtitleSelection)?
     private var cinemaStopped = false
     private var hasCheckedCinemaExtras = false
     /// The item that already moved on, so a skip racing the clip's end advances once.
@@ -720,9 +733,6 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         // Server order, or the version's index into the file list is lost on the way back.
         cinemaFeature?.Media = serverOrderedMedia
         cinemaFeatureVersion = baseVersionChoice
-        cinemaFeaturePicks = (initialAudioTrackId, initialSubtitleSelection)
-        initialAudioTrackId = nil
-        initialSubtitleSelection = .auto
         cinemaQueue = Array(clips.dropFirst())
         metadata = first
         playingMediaID = nil
@@ -773,13 +783,11 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
 
     // MARK: - Initialization
 
-    /// Pre-play subtitle choice from the item-detail picker. Distinguishes
-    /// "user hasn't picked yet" from "user explicitly turned subs off"
-    /// from "user picked this specific subtitle track".
-    enum InitialSubtitleSelection {
-        case auto              // No preselection — fall through to the stored SubtitleIntent.
-        case off               // User explicitly chose Off in the pre-play picker.
-        case track(id: Int)    // User picked a specific subtitle track.
+    /// The subtitle a reload of the same title carries: none (the saved intent decides), off, or a Plex stream id.
+    enum CarriedSubtitleSelection {
+        case auto
+        case off
+        case track(id: Int)
     }
 
     init(
@@ -790,8 +798,6 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         playQueue: PlayQueue<PlaylistEntry>? = nil,
         loadingArtImage: UIImage? = nil,
         loadingThumbImage: UIImage? = nil,
-        initialAudioTrackId: Int? = nil,
-        initialSubtitleSelection: InitialSubtitleSelection = .auto,
         preferredMediaID: String? = nil,
         plexProgressReporter: PlexProgressReporter = .shared
     ) {
@@ -812,8 +818,6 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         self.playQueue = playQueue
         self.loadingArtImage = loadingArtImage
         self.loadingThumbImage = loadingThumbImage
-        self.initialAudioTrackId = initialAudioTrackId
-        self.initialSubtitleSelection = initialSubtitleSelection
         // The server's duration until the engine reports its own, so the bar's
         // fill shows with the first times instead of a second after them.
         self.duration = Self.metadataDuration(metadata)
@@ -1252,7 +1256,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
               offersGeneratedSubtitles, currentSubtitleTrackId == nil, !subtitlesPickedOff,
               case .track(_, false, _, _) = TrackIntentStore.effectiveSubtitleIntent,
               playingAudioLanguage.map({ TrackLanguage.normalize($0) == "eng" }) ?? true else { return }
-        if case .off = initialSubtitleSelection { return }
+        if case .off = carriedSubtitleSelection { return }
         selectSubtitleTrackWithoutSaving(id: Self.generatedSubtitleId)
     }
 
@@ -1434,7 +1438,8 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         AppHangContext.setContent(
             resolution: (metadata.Media?.first?.videoResolution ?? "unknown").lowercased(),
             hdr: hdrLabel,
-            videoCodec: (metadata.primaryVideoStream?.codec ?? "unknown").lowercased()
+            videoCodec: (metadata.primaryVideoStream?.codec ?? "unknown").lowercased(),
+            bitrate: PlaybackSessionRecord.bitrateClass(kbps: metadata.primaryVideoStream?.bitrate)
         )
         // Seed the media fingerprint (codec / DV profile / audio / resume offset)
         // so EVERY playback error from here on is self-describing. Without this,
@@ -1658,6 +1663,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                     self.updatePlaybackState(.buffering)
                 case .playing:
                     print("[Player] AVPlayer: playing (rate=\(player.rate))")
+                    self.avItemHasPlayed = true
                     self.updatePlaybackState(.playing)
                 case .paused:
                     print("[Player] AVPlayer: paused (rate=\(player.rate))")
@@ -1695,19 +1701,28 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                             print("[Player] AVPlayerItem failed with cancellation — ignoring")
                             break
                         }
+                        // A transcode quality chose is the server's to fail: the file plays instead (logged, not captured).
+                        var playsOriginal = false
+                        if case .hls = self.activeRoute { playsOriginal = self.canPlayOriginalAfterTranscodeFailure }
                         // Recorded even when the HLS fallback rescues it.
                         let itemError = item.error ?? PlayerError.loadFailed(message)
-                        self.diagnostics.recordPrimaryFailure(
-                            itemError,
-                            kind: self.classifyDirectPlayFailure(PlayerError.loadFailed(message)),
-                            route: self.activeRoute?.description.lowercased() ?? "unknown"
-                        )
+                        if !playsOriginal {
+                            self.diagnostics.recordPrimaryFailure(
+                                itemError,
+                                kind: self.classifyDirectPlayFailure(PlayerError.loadFailed(message)),
+                                route: self.activeRoute?.description.lowercased() ?? "unknown"
+                            )
+                        }
                         // The enriched asset is a custom scheme nothing else
                         // can load, so its failure is total. The plain URL
                         // behind it already passed preflight, so rebuild on it
                         // and keep the session instead of spending the one-shot
                         // HLS fallback (or ending playback) over track labels.
                         if self.retryWithoutEnrichment() { break }
+                        if playsOriginal {
+                            self.recoverFromTranscodeItemFailure(message)
+                            break
+                        }
                         if self.shouldAttemptRivuletFallbackOnItemFailure() {
                             let failureKind = self.classifyDirectPlayFailure(PlayerError.loadFailed(message))
                             let resumeTime = self.currentTime
@@ -1781,6 +1796,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
 
     /// Tear down AVPlayer observers.
     private func teardownAVPlayerObservers() {
+        transcodeStartWatch?.cancel()
         stopTranscodeSubtitleReader()
         rateObservation?.invalidate()
         rateObservation = nil
@@ -1927,6 +1943,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         errorMessage = nil
         playbackState = .loading
         hasAttemptedRivuletHLSFallback = false
+        directPlayProbeStatus = nil
         hasRetriedWithoutEnrichment = false
         isAttemptingRivuletHLSFallback = false
 
@@ -1999,6 +2016,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
             return
         }
         hasAttemptedRivuletHLSFallback = false
+        directPlayProbeStatus = nil
         hasRetriedWithoutEnrichment = false
         isAttemptingRivuletHLSFallback = false
 
@@ -2060,12 +2078,12 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
             guard stops == stopCount, generation == itemGeneration,
                   !isCancellationError(error), !Task.isCancelled else { return }
             let technicalError = error.localizedDescription
-            if let playerError = error as? PlayerError {
-                errorMessage = playerError.userFacingDescription
-            } else {
-                errorMessage = String(localized: "Something went wrong during playback. Please try again.")
-            }
-            playbackState = .failed(.loadFailed(technicalError))
+            // The same error the overlay shows, so a server's reason reaches the user as written.
+            let playerError: PlayerError = (error as? PlayerError)
+                ?? ServerRefusal(error: error).map { .serverRefused($0.message) }
+                ?? .loadFailed(technicalError)
+            errorMessage = playerError.userFacingDescription
+            playbackState = .failed(playerError)
 
             // Route through PlaybackDiagnostics so this carries the media
             // fingerprint, the startup timeline, and any earlier primary-route
@@ -2114,7 +2132,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
             useDolbyVision: metadata.hasDolbyVision,
             forceVideoTranscode: forceVideoTranscode,
             allowAudioDirectStream: allowAudioDirectStreamDecision(reason: "rivulet_hls_fallback_build"),
-            step: activeStreamPlan.step,
+            step: activeStreamPlan.step ?? fallbackStep,
             clientRendersTextSubtitles: true,
             sessionIdentifier: plexPlaybackSessionIdentifier
         ) else {
@@ -2146,7 +2164,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                 return .runtimeFatal
             case .invalidURL:
                 return .demuxInit
-            case .unknown, .serverTerminated:
+            case .unknown, .serverTerminated, .serverRefused:
                 return .unknown
             case .engineFailure(let kind, _):
                 // The engine already classified this. Everything below is the
@@ -2287,12 +2305,10 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
             let chapterImages = Task { await loadChapterThumbnailsForHLS() }
             let transcodeReady = await waitForHLSTranscodeReady(url: hlsURL, headers: streamHeaders)
             guard stops == stopCount, generation == itemGeneration, !Task.isCancelled else { throw CancellationError() }
-            if !transcodeReady, activeStreamPlan.step != nil, !PlexRelay.isRelayURL(serverURL) {
-                // Quality chose this transcode, so the file is still there when the server refuses it (RIVULET-B).
-                diagnostics.step("transcode_refused_playing_original")
+            if !transcodeReady, canPlayOriginalAfterTranscodeFailure {
                 chapterImages.cancel()
-                activeStreamPlan = .original
-                try await reloadOriginal(at: startTime ?? 0, tracks: transcodeTrackIDs ?? startingTrackSelection)
+                try await playOriginalAfterTranscodeFailure(
+                    reason: "start", at: startTime ?? 0, tracks: transcodeTrackIDs ?? startingTrackSelection)
                 return
             }
             if !transcodeReady {
@@ -2300,7 +2316,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                 // fallback. Tagged separately from `fallback_preflight_failed`
                 // so the two don't grind together in one Sentry issue: this one
                 // means the server is slow, that one means Aether ALSO broke.
-                let error = PlayerError.loadFailed("HLS transcode session failed to start")
+                let error = hlsStartFailure()
                 diagnostics.step("hls_primary_preflight_failed")
                 diagnostics.capture(error, event: "primary_preflight_failed", extraTags: [
                     "player_type": "avplayer"
@@ -2340,7 +2356,8 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                     ap,
                     url: aetherURL,
                     headers: aetherHeaders,
-                    startTime: startTime
+                    startTime: startTime,
+                    yieldsToRefusal: planHasHLSFallback(plan) && !isStacked
                 )
                 guard stops == stopCount, generation == itemGeneration, !Task.isCancelled else {
                     // Leave a reused player running only when a newer item owns it and playback has not stopped.
@@ -2361,6 +2378,12 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                 // second failure event. The deadline error is not a cancellation
                 // and must get past this guard to reach the fallback.
                 if stops != stopCount || generation != itemGeneration || isCancellationError(error) || Task.isCancelled { return }
+                // The server's own rule, not a fault: no failure to record or probe.
+                if error is DirectPlayRefusedError {
+                    try await attemptRivuletHLSFallback(
+                        resumeTime: startTime ?? 0, reason: "direct_play_refused", failureKind: .network)
+                    return
+                }
                 let kind = classifyDirectPlayFailure(error)
                 // Record the original Aether failure first, so a failed fallback
                 // cannot hide it (RIVULET-19).
@@ -2410,11 +2433,16 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         _ ap: AetherPlayer,
         url: URL,
         headers: [String: String],
-        startTime: TimeInterval?
+        startTime: TimeInterval?,
+        yieldsToRefusal: Bool
     ) async throws {
         let deadline = AetherLoadTimeoutPolicy.startupLoadDeadline
         let hints = aetherSubtitleLanguageHintsByStreamIndex()
         let audioLanguages = aetherPreferredAudioLanguages()
+        // The track `applyAudioPreference` will pick, so the engine opens on it instead of
+        // switching to it mid-load (see AetherPlayer.loadFile).
+        let audioStreamIndex = TrackIntentResolver.audioStreamIndex(
+            ofPlexStream: startingTrackSelection.audio, in: metadata.Media?.first?.Part?.first?.Stream ?? [])
         let subtitleLanguages = aetherPreferredSubtitleLanguages()
         let externalSubtitles = aetherExternalSubtitles()
         let stackedParts = stackedParts()
@@ -2427,6 +2455,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                     startTime: startTime,
                     subtitleLanguageHintsByStreamIndex: hints,
                     preferredAudioLanguages: audioLanguages,
+                    audioStreamIndex: audioStreamIndex,
                     preferredSubtitleLanguages: subtitleLanguages,
                     externalSubtitles: externalSubtitles,
                     stackedParts: stackedParts
@@ -2437,6 +2466,15 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                 // Reached only when the load is still in flight.
                 DiagLog.error(.playback, "Aether load exceeded \(Int(deadline))s deadline, falling back to HLS")
                 throw AetherLoadTimeoutPolicy.TimedOut(seconds: deadline)
+            }
+            if yieldsToRefusal {
+                // ponytail: polls the flag; a continuation would need its own cancellation handling.
+                group.addTask { @MainActor [weak self] in
+                    while self?.directPlayRefused == false {
+                        try await Task.sleep(for: .milliseconds(100))
+                    }
+                    throw DirectPlayRefusedError()
+                }
             }
 
             do {
@@ -2526,7 +2564,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     private func aetherPreferredAudioLanguages() -> [String] {
         var languages: [String] = []
 
-        if let id = initialAudioTrackId,
+        if let id = carriedAudioTrackId,
            let track = plexAudioTracksFromMetadata().first(where: { $0.id == id }) {
             languages.append(contentsOf: languageCandidates(for: track))
         }
@@ -2553,7 +2591,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     private func aetherPreferredSubtitleLanguages() -> [String] {
         var languages: [String] = []
 
-        switch initialSubtitleSelection {
+        switch carriedSubtitleSelection {
         case .track(let id):
             if let track = plexSubtitleTracksFromMetadata().first(where: { $0.id == id }) {
                 languages.append(contentsOf: languageCandidates(for: track))
@@ -2621,6 +2659,10 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 guard let self else { return }
+                if case .failed = state, self.canFallBackToTranscodeAfterOriginalFailure {
+                    self.recoverFromOriginalFailure(reason: "aether_runtime_failure")
+                    return
+                }
                 if (state == .playing || state == .loading), player.isBuffering {
                     self.updatePlaybackState(.buffering)
                 } else {
@@ -2858,6 +2900,26 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
 
         setupAVPlayerObservers()
         updatePlaybackState(.loading)
+        watchTranscodeStart(of: item)
+    }
+
+    /// A Plex transcode that has not played by the deadline: log why and say so (#677).
+    private func watchTranscodeStart(of item: AVPlayerItem) {
+        transcodeStartWatch?.cancel()
+        avItemHasPlayed = false
+        guard case .plex = source, let sessionId = plexSessionId else { return }
+        let serverURL = serverURL, authToken = authToken
+        transcodeStartWatch = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: TranscodeStartWatch.deadline)
+            guard let self, !Task.isCancelled, let player = self.player, player.currentItem === item,
+                  !self.avItemHasPlayed, item.status != .failed, player.timeControlStatus != .paused else { return }
+            let loaded = item.loadedTimeRanges.first.map { String(format: "%.1f", $0.timeRangeValue.duration.seconds) } ?? "0"
+            let state = "status=\(item.status.rawValue) waiting=\(player.reasonForWaitingToPlay?.rawValue ?? "none") loaded=\(loaded)s"
+            let notice = await TranscodeStartWatch.report(
+                serverURL: serverURL, authToken: authToken, sessionId: sessionId, playerState: state)
+            guard !Task.isCancelled, self.player?.currentItem === item else { return }
+            self.showCompatibilityNotice(notice, for: 10)
+        }
     }
 
     // MARK: - AVPlayerItem Metadata
@@ -3219,7 +3281,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
             // that sent us here, plus what the server said on all 8 preflight
             // polls. Reported as `fallback_preflight_failed` — the user got
             // NOTHING, both routes died.
-            let error = PlayerError.loadFailed("HLS transcode session failed to start")
+            let error = hlsStartFailure()
             diagnostics.step("hls_fallback_preflight_failed")
             diagnostics.capture(error, event: "fallback_preflight_failed", extraTags: [
                 "fallback_reason": reason,
@@ -3230,6 +3292,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         diagnostics.step("hls_fallback_preflight_ready")
 
         try await finishHLSSwitch(to: fallback, resumeTime: resumeTime)
+        if directPlayRefused { showDirectPlayRefusedNotice() }
     }
 
     /// First half of moving onto an HLS URL: stops the outgoing Plex transcode and any
@@ -3564,14 +3627,103 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
             diagnostics.step("quality_reload_unsupported", detail: "reason=\(reason)")
         } catch {
             if isCancellationError(error) || Task.isCancelled { return }
-            errorMessage = (error as? PlayerError)?.userFacingDescription
-                ?? PlayerError.loadFailed(error.localizedDescription).userFacingDescription
-            updatePlaybackState(.failed(.loadFailed(error.localizedDescription)))
-            diagnostics.capture(error, event: "quality_reload_failed", extraTags: [
-                "quality_reload_reason": reason,
-                "player_type": toOriginal ? "aether" : "avplayer"
-            ])
+            if !toOriginal, canPlayOriginalAfterTranscodeFailure {
+                do {
+                    try await playOriginalAfterTranscodeFailure(reason: reason, at: resumeTime, tracks: tracks)
+                    guard !Task.isCancelled else { return }
+                    if resume {
+                        activePlayer_play()
+                    } else {
+                        activePlayer_pause()
+                        updatePlaybackState(.paused)
+                    }
+                    return
+                } catch {
+                    if isCancellationError(error) || Task.isCancelled { return }
+                    failPlayback(error, event: "quality_reload_failed", reason: reason, player: "aether")
+                    return
+                }
+            }
+            failPlayback(error, event: "quality_reload_failed", reason: reason, player: toOriginal ? "aether" : "avplayer")
         }
+    }
+
+    /// A quality-chosen transcode (Auto's step, the menu) that fails, at start or mid-play, gives way to the
+    /// file at the playhead and Auto stops stepping down for this item. A relay has no file route.
+    private var canPlayOriginalAfterTranscodeFailure: Bool {
+        RouteFallback.playsOriginalAfterTranscodeFailure(
+            plan: activeStreamPlan, hasSwitched: hasSwitchedRoute, isRelay: PlexRelay.isRelayURL(serverURL))
+    }
+
+    /// The one route switch per item, spent by the first fallback in either direction.
+    private var hasSwitchedRoute: Bool { hasAttemptedRivuletHLSFallback || isAttemptingRivuletHLSFallback }
+
+    /// The file failed after it loaded (engine failure, the stall watchdog giving up): the server transcode
+    /// takes over at the playhead, once. Not for a stacked title or a trailer.
+    private var canFallBackToTranscodeAfterOriginalFailure: Bool {
+        aetherPlayer != nil && aetherLoadReturned && !isPlayingCinemaExtra && planHasHLSFallback(playbackPlan)
+            && RouteFallback.transcodesAfterOriginalFailure(
+                plan: activeStreamPlan, hasSwitched: hasSwitchedRoute, isLocal: false, isStacked: isStacked)
+    }
+
+    private func recoverFromOriginalFailure(reason: String) {
+        hasAttemptedRivuletHLSFallback = true
+        let time = playheadForReload
+        let tracks = currentPlexTrackIDs()
+        diagnostics.step("original_failed_playing_transcode", detail: reason)
+        SentryBridge.log(.warn, "Original failed mid-play, playing the transcode", attributes: [
+            "component": "playback", "reason": reason,
+        ])
+        cancelAetherStallWatchdog()
+        updatePlaybackState(.loading)
+        enqueueStreamWork { vm in
+            do {
+                try await vm.reloadTranscode(at: time, tracks: tracks)
+                vm.activePlayer_play()
+            } catch {
+                if isCancellationError(error) || Task.isCancelled { return }
+                vm.failPlayback(error, event: "midplay_fallback_failed", reason: reason, player: "avplayer")
+            }
+        }
+    }
+
+    private func playOriginalAfterTranscodeFailure(reason: String, at time: TimeInterval, tracks: TrackPicks) async throws {
+        diagnostics.step("transcode_failed_playing_original", detail: reason)
+        SentryBridge.log(.warn, "Quality transcode failed, playing the original", attributes: [
+            "component": "playback", "reason": reason,
+        ])
+        stallTracker.stopStepping()
+        activeStreamPlan = .original
+        try await reloadOriginal(at: time, tracks: tracks, allowsHLSFallback: false)
+    }
+
+    /// The HLS item failed while playing; the file takes over at the playhead.
+    private func recoverFromTranscodeItemFailure(_ message: String) {
+        let time = playheadForReload
+        let tracks = currentPlexTrackIDs()
+        updatePlaybackState(.loading)
+        enqueueStreamWork { vm in
+            do {
+                try await vm.playOriginalAfterTranscodeFailure(reason: "item_failed", at: time, tracks: tracks)
+                vm.activePlayer_play()
+            } catch {
+                if isCancellationError(error) || Task.isCancelled { return }
+                vm.failPlayback(PlayerError.loadFailed(message), event: "quality_reload_failed",
+                                reason: "item_failed", player: "aether")
+            }
+        }
+    }
+
+    private func failPlayback(_ error: Error, event: String, reason: String, player: String) {
+        let playerError: PlayerError = (error as? PlayerError)
+            ?? ServerRefusal(error: error).map { .serverRefused($0.message) }
+            ?? .loadFailed(error.localizedDescription)
+        errorMessage = playerError.userFacingDescription
+        updatePlaybackState(.failed(playerError))
+        diagnostics.capture(error, event: event, extraTags: [
+            "quality_reload_reason": reason,
+            "player_type": player
+        ])
     }
 
     /// The AVPlayer item's own clock; the periodic observer behind `currentTime` lags a fresh seek.
@@ -3603,7 +3755,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         guard stops == stopCount, generation == itemGeneration, !Task.isCancelled else { throw CancellationError() }
         beginHLSSwitch(to: hls)
         guard await waitForHLSTranscodeReady(url: hls.url, headers: hls.headers) else {
-            throw PlayerError.loadFailed("HLS transcode session failed to start")
+            throw hlsStartFailure()
         }
         guard stops == stopCount, generation == itemGeneration, !Task.isCancelled else { throw CancellationError() }
         try await finishHLSSwitch(to: hls, resumeTime: time)
@@ -3616,7 +3768,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     }
 
     /// Back to the untouched file at `time`, through the same start a fresh play uses.
-    private func reloadOriginal(at time: TimeInterval, tracks: TrackPicks) async throws {
+    private func reloadOriginal(at time: TimeInterval, tracks: TrackPicks, allowsHLSFallback: Bool = true) async throws {
         let plan: PlaybackPlan?
         if case .provider = source {
             plan = try await resolveProviderOriginal(at: time)
@@ -3640,13 +3792,15 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         streamHeaders = headers ?? rivuletDirectPlayHeaders()
         rivuletFallbackURL = nil
         rivuletFallbackHeaders = [:]
-        hasAttemptedRivuletHLSFallback = false
+        // A transcode that just failed is not tried again as the file's fallback.
+        hasAttemptedRivuletHLSFallback = !allowsHLSFallback
+        directPlayProbeStatus = nil
         // Engine ids differ from Plex ids, so the picks re-apply once the engine lists its tracks.
-        initialAudioTrackId = tracks.audio
+        carriedAudioTrackId = tracks.audio
         switch tracks.subtitle {
-        case .off: initialSubtitleSelection = .off
-        case .track(let id): initialSubtitleSelection = .track(id: id)
-        case nil: initialSubtitleSelection = .auto
+        case .off: carriedSubtitleSelection = .off
+        case .track(let id): carriedSubtitleSelection = .track(id: id)
+        case nil: carriedSubtitleSelection = .auto
         }
         hasAppliedAudioPreference = false
         hasAppliedSubtitlePreference = false
@@ -3677,10 +3831,10 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     /// What `applyAudioPreference` and `applySubtitlePreference` will pick on the Plex list, so a
     /// transcode starts on those tracks instead of restarting once they load. nil leaves the server's choice.
     private var startingTrackSelection: TrackPicks {
-        let override = initialAudioTrackId.flatMap { id in plexAudioTracksFromMetadata().contains { $0.id == id } ? id : nil }
+        let override = carriedAudioTrackId.flatMap { id in plexAudioTracksFromMetadata().contains { $0.id == id } ? id : nil }
         let start = TrackIntentResolver.startingPlexSelection(streams: metadata.Media?.first?.Part?.first?.Stream ?? [],
                                                               audioOverride: override)
-        switch initialSubtitleSelection {
+        switch carriedSubtitleSelection {
         case .off:
             return TrackPicks(audio: start.audio, subtitle: .off)
         case .track(let id) where plexSubtitleTracksFromMetadata().contains(where: { $0.id == id }):
@@ -3772,6 +3926,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                 return
             }
 
+            self.directPlayProbeStatus = http.statusCode
             let classification = StreamBodyClassifier.classify(data)
             let summary = StreamBodyClassifier.describe(
                 status: http.statusCode,
@@ -3813,9 +3968,16 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     private func waitForHLSTranscodeReady(url: URL, headers: [String: String]) async -> Bool {
         await prepareHLSRelay(for: url)
         let url = avPlayerURL(url)
-        if let verdict = await PlexNetworkManager.shared.startTranscodeDecision(hlsURL: url, headers: headers) {
-            diagnostics.step("transcode_decision", detail: verdict)
+        serverRefusal = nil
+        if let decision = await PlexNetworkManager.shared.startTranscodeDecision(hlsURL: url, headers: headers) {
+            diagnostics.step("transcode_decision", detail: decision.verdict)
+            if let refusal = decision.refusal {
+                serverRefusal = refusal
+                // The server says no, so polling for a transcode only waits.
+                if refusal.blocksTranscode { return false }
+            }
         }
+        var lastStatus: Int?
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = 10
@@ -3827,11 +3989,13 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
 
         // Try up to 8 times with delays to give Plex time to start the transcode
         for attempt in 1...8 {
+            lastStatus = nil
             do {
 
                 let (data, response) = try await URLSession.shared.data(for: request)
 
                 if let httpResponse = response as? HTTPURLResponse {
+                    lastStatus = httpResponse.statusCode
 
                     if httpResponse.statusCode == 200 && data.count > 0 {
                         if let content = String(data: data, encoding: .utf8) {
@@ -3893,7 +4057,22 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         }
 
         DiagLog.error(.playback, "HLS transcode failed to start after 8 attempts")
+        // The server answered with an error each time: it refused, which is not the same as slow.
+        if serverRefusal == nil, let lastStatus, lastStatus >= 400 {
+            serverRefusal = ServerRefusal(reason: .transcodeRefused)
+        }
         return false
+    }
+
+    /// Why an HLS start failed: the server's reason when it gave one, else the generic wait failure.
+    private func hlsStartFailure() -> PlayerError {
+        var refusal = serverRefusal
+        // A 404 on the file, or checkFiles marking it gone: both only explain a failure that already happened.
+        let fileGone = directPlayProbeStatus == 404 || metadata.Media?.first?.isMissing == true
+        if refusal == nil || refusal?.reason == .transcodeRefused, fileGone {
+            refusal = ServerRefusal(reason: .fileMissing)
+        }
+        return refusal.map { .serverRefused($0.message) } ?? .loadFailed("HLS transcode session failed to start")
     }
 
     /// The first variant playlist a master names, resolved against `baseURL`.
@@ -4131,7 +4310,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     #endif
 
     func showWatchTogetherNotice(_ notice: String) {
-        showCompatibilityNotice(notice)
+        showCompatibilityNotice(PlaybackNotice(title: notice, symbol: "person.2.fill"))
     }
 
     /// Runs the normal ending for a guest that stopped waiting on a host.
@@ -4222,6 +4401,10 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                   player.isBuffering,
                   self.currentTime <= recoveryTime + 0.5 else { return }
 
+            if self.canFallBackToTranscodeAfterOriginalFailure {
+                self.recoverFromOriginalFailure(reason: "aether_stalled")
+                return
+            }
             let error = PlayerError.networkError("Aether playback stalled while waiting for buffered media")
             self.errorMessage = error.userFacingDescription
             self.updatePlaybackState(.failed(error))
@@ -4266,11 +4449,12 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         let targetTime = max(0, min(base + seconds, duration))
         invalidatePlexCompletion(at: targetTime)
         reopenPlexTimeline(at: targetTime)
-        // tvOS Show on Skip Back covers skips back of up to 30s in total.
+        // Show on Skip Back covers skips back of up to `skipBackSubtitleLimit` in total; going past it ends the window.
         // A skip back at 0 moves nowhere: no tick could arm the window, so it would never close.
         if seconds < 0 { replayWindowOpened?.skips += 1 }
-        if seconds < 0, targetTime < base, (replayWindow?.invokedAt ?? base) - targetTime <= 30,
-           Self.systemShowsSubtitlesOnSkipBack() {
+        if seconds < 0, targetTime < base, (replayWindow?.invokedAt ?? base) - targetTime > Self.skipBackSubtitleLimit {
+            endReplayWindow(reason: "skipped back past the limit")
+        } else if seconds < 0, targetTime < base, Self.systemShowsSubtitlesOnSkipBack() {
             openCaptionWindow(until: base, landing: targetTime)
         } else if seconds > 0, let window = replayWindow, targetTime >= window.invokedAt {
             // Skipped forward past the point: done, even if no tick ever armed the window.
@@ -4311,6 +4495,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                 + "\(describeSubtitle(currentSubtitleTrackId)), "
                 + (shows.map { "showing \(describeSubtitle($0.id))" } ?? (currentSubtitleTrackId == nil ? "no track to show" : "left as they are")))
             if let shows {
+                skipBackShowsSubtitles = true
                 selectSubtitleTrackWithoutSaving(id: shows.id, reloadsTranscode: false)
             }
         }
@@ -4350,6 +4535,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     func endReplayWindow(reason: String = "seek left it") {
         guard let window = replayWindow else { return }
         replayWindow = nil
+        skipBackShowsSubtitles = false
         noteReplayWindowEnded(window, reason: reason, reverts: window.priorSubtitleTrackId == nil)
         if window.priorSubtitleTrackId == nil {
             selectSubtitleTrackWithoutSaving(id: nil, reloadsTranscode: false)
@@ -4413,6 +4599,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     private func clearReplayWindow(reason: String) {
         if let window = replayWindow { noteReplayWindowEnded(window, reason: reason, reverts: false) }
         replayWindow = nil
+        skipBackShowsSubtitles = false
     }
 
     /// Publishes the skip for the bar's glyph; with the controls hidden the bar shows alone (AVKit, 3.3s).
@@ -4847,7 +5034,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         let generation = itemGeneration
         var tracks = currentPlexTrackIDs()
         let known = Set(plexSubtitleTracksFromMetadata().map(\.id))
-        showCompatibilityNotice(String(localized: "Downloading Subtitles…"))
+        showCompatibilityNotice(PlaybackNotice(title: String(localized: "Downloading Subtitles…"), symbol: "captions.bubble"))
         do {
             try await searcher.download(result)
             let arrived: MediaTrack?
@@ -4859,7 +5046,9 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                 arrived = nil
             }
             guard generation == itemGeneration else { return }
-            guard let arrived else { return showCompatibilityNotice(String(localized: "Subtitles Didn't Arrive")) }
+            guard let arrived else {
+                return showCompatibilityNotice(PlaybackNotice(title: String(localized: "Subtitles Didn't Arrive"), symbol: "captions.bubble"))
+            }
             TrackIntentStore.subtitleIntent = .afterPick(
                 arrived, replacing: TrackIntentStore.effectiveSubtitleIntent, audioLanguage: playingAudioLanguage)
             tracks.subtitle = .track(arrived.id)
@@ -4870,7 +5059,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
             }
         } catch {
             if isCancellationError(error) || generation != itemGeneration { return }
-            showCompatibilityNotice(String(localized: "Couldn't Download Subtitles"))
+            showCompatibilityNotice(PlaybackNotice(title: String(localized: "Couldn't Download Subtitles"), symbol: "captions.bubble"))
         }
     }
 
@@ -4921,13 +5110,10 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     private var subtitlesPickedOff = false
     private var hasAppliedAudioPreference = false
 
-    /// Pre-play track selections passed in from the item-detail picker.
-    /// Override the saved-preference auto-apply on first track population
-    /// — explicit user choice wins over remembered language preferences.
-    /// Cleared after consumption so subsequent re-applications fall back
-    /// to the preference managers.
-    private var initialAudioTrackId: Int?
-    private var initialSubtitleSelection: InitialSubtitleSelection = .auto
+    /// The playing tracks, carried through a reload of the same title as Plex stream ids.
+    /// Cleared once applied, so the next item resolves from the saved intents.
+    private var carriedAudioTrackId: Int?
+    private var carriedSubtitleSelection: CarriedSubtitleSelection = .auto
 
     /// Rebuild `audioTracks` / `subtitleTracks`.
     ///
@@ -4999,68 +5185,41 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         updateCaptionsOnMute()
     }
 
-    /// Plex's `selected` audio stream when it outranks the global intent: a
-    /// per-item pick (selected but not the file default), or, with no audio
-    /// language set in Rivulet, the server's pick from the account's language (#382).
+    /// The server's audio pick from the account's language, while no audio language is saved (#382).
     private var plexChosenAudioStreamId: Int? {
         TrackIntentResolver.plexChosenAudioStreamID(in: metadata.Media?.first?.Part?.first?.Stream ?? [],
                                                     hasAudioIntent: TrackIntentStore.audioIntent != nil)
     }
 
-    /// Apply saved audio preference, in the numbered priority below. Every tier
-    /// selects explicitly, even when the id already matches: neither direct play
-    /// nor Plex's HLS session reliably starts on the persisted selection.
+    /// Select the audio the load opened on (`startingTrackSelection`), mapped onto the merged list
+    /// and not ranked again (#627). Selects explicitly even when the id already matches: Plex's HLS
+    /// session doesn't reliably start on the persisted selection.
     private func applyAudioPreference() {
-        // 1. Pre-play picker (this session). Its id is a Plex stream id.
-        if let id = initialAudioTrackId {
-            initialAudioTrackId = nil
-            if let track = audioTrackMatchingPlexStreamId(id) {
-                selectAudioTrackWithoutSaving(id: track.id)
-                return
-            }
-        }
-
-        // 2. Plex's choice (see `plexChosenAudioStreamId`).
-        if let selectedId = plexChosenAudioStreamId,
-           let track = audioTrackMatchingPlexStreamId(selectedId) {
+        let carried = carriedAudioTrackId != nil
+        let opened = startingTrackSelection.audio.flatMap(audioTrackMatchingPlexStreamId)
+        carriedAudioTrackId = nil
+        if let track = TrackIntentResolver.engineAudio(opened: opened, in: audioTracks, carried: carried) {
             selectAudioTrackWithoutSaving(id: track.id)
-            return
-        }
-
-        // 3. Global audio intent (defaults to English when nothing stored).
-        //    Excludes commentary / audio-description tracks from every
-        //    automatic tier — see TrackIntentResolver.resolveAudio.
-        if let match = TrackIntentResolver.resolveAudio(
-            intent: TrackIntentStore.effectiveAudioIntent,
-            in: audioTracks
-        ) {
-            selectAudioTrackWithoutSaving(id: match.id)
-            return
-        }
-
-        // 4. Plex default fallback.
-        if let id = currentAudioTrackId,
-           audioTracks.contains(where: { $0.id == id }) {
+        } else if let id = currentAudioTrackId, audioTracks.contains(where: { $0.id == id }) {
             selectAudioTrackWithoutSaving(id: id)
         }
     }
 
     /// Apply saved subtitle preference
     private func applySubtitlePreference() {
-        // 1. Pre-play picker selection (this session); `.auto` falls through.
-        switch initialSubtitleSelection {
+        // 1. The selection a reload carried; `.auto` falls through.
+        switch carriedSubtitleSelection {
         case .off:
-            initialSubtitleSelection = .auto
+            carriedSubtitleSelection = .auto
             subtitlesPickedOff = true
-            noteCaptions("at start: off was picked before playing")
+            noteCaptions("at start: off carried through the reload")
             selectSubtitleTrackWithoutSaving(id: nil)
             return
         case .track(let id):
-            // Pre-play picker id is a PLEX stream id (it runs before any engine
-            // exists) — resolve it positionally onto the merged list.
-            initialSubtitleSelection = .auto
+            // A Plex stream id: resolve it onto the merged list.
+            carriedSubtitleSelection = .auto
             if let track = subtitleTrackMatchingPlexStreamId(id) {
-                noteCaptions("at start: a track was picked before playing")
+                noteCaptions("at start: a track carried through the reload")
                 selectSubtitleTrackWithoutSaving(id: track.id)
                 return
             }
@@ -5135,7 +5294,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
 
     // MARK: - Plex stream id -> merged track
     //
-    // The pre-play picker and Plex's `selected` flag speak Plex stream ids. On
+    // Carried picks and Plex's `selected` flag speak Plex stream ids. On
     // aether, join on the container stream index; sidecars pair by order.
 
     private func audioTrackMatchingPlexStreamId(_ id: Int) -> MediaTrack? {
@@ -5203,10 +5362,10 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
 
     // MARK: - Compatibility Notice
 
-    private func showCompatibilityNotice(_ message: String) {
-        compatibilityNotice = message
+    private func showCompatibilityNotice(_ notice: PlaybackNotice, for seconds: TimeInterval = 5) {
+        compatibilityNotice = notice
         compatibilityNoticeTimer?.invalidate()
-        compatibilityNoticeTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { [weak self] _ in
+        compatibilityNoticeTimer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) { [weak self] _ in
             self?.compatibilityNotice = nil
         }
     }
@@ -6083,6 +6242,15 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                 titleTmdbId: tmdbId, titleIsMovie: isMovie)
         }
 
+        // Jellyfin and Emby fallback: the server's own cast, from the detail playback already holds,
+        // then (episodes) the show's, from the series detail the TMDB id lookup fetched.
+        if people.isEmpty, case .provider(let playback) = source {
+            people = playback.detail.cast
+            if people.isEmpty, metadata.type == "episode" {
+                people = await providerShowDetail(playback)?.cast ?? []
+            }
+        }
+
         guard generation == itemGeneration else { return }
         insightsCast = people
     }
@@ -6187,22 +6355,24 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         return playback
     }
 
-    /// `.provider` only: the series detail's ids, fetched once per show.
-    private var providerShowIDs: (show: MediaItemRef, task: Task<[String: String], Never>)?
+    /// `.provider` only: the series detail (ids and cast), fetched once per show.
+    private var providerShow: (show: MediaItemRef, task: Task<MediaItemDetail?, Never>)?
+
+    /// A provider episode's series detail; nil when the episode has no show or the fetch fails.
+    private func providerShowDetail(_ playback: ProviderPlayback) async -> MediaItemDetail? {
+        guard let show = playback.item.grandparentRef else { return nil }
+        if let cached = providerShow, cached.show == show { return await cached.task.value }
+        let provider = playback.provider
+        let task = Task { try? await provider.fullDetail(for: show) }
+        providerShow = (show, task)
+        return await task.value
+    }
 
     /// A provider episode's show TMDB id: the series' own, else resolved from
     /// its tvdb or imdb id. nil when the episode has no show.
     func providerShowTmdbID(_ playback: ProviderPlayback) async -> Int? {
-        guard let show = playback.item.grandparentRef else { return nil }
-        let task: Task<[String: String], Never>
-        if let cached = providerShowIDs, cached.show == show {
-            task = cached.task
-        } else {
-            let provider = playback.provider
-            task = Task { (try? await provider.fullDetail(for: show))?.externalIDs ?? [:] }
-            providerShowIDs = (show, task)
-        }
-        let ids = await task.value
+        guard playback.item.grandparentRef != nil else { return nil }
+        let ids = await providerShowDetail(playback)?.externalIDs ?? [:]
         return await InsightsShowIDResolver.shared.resolve(ShowExternalIDs(
             tmdb: ids["tmdb"].flatMap { Int($0) },
             tvdb: ids["tvdb"].flatMap { Int($0) },
@@ -6591,7 +6761,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         let message = playQueue == nil ? String(localized: "Couldn't load the next episode.") : String(localized: "Couldn't load the next item.")
         nextEpisodeError = message
         cancelCountdown()
-        if postVideoState == .hidden { showCompatibilityNotice(message) }
+        if postVideoState == .hidden { showCompatibilityNotice(PlaybackNotice(title: message, symbol: "exclamationmark.circle")) }
     }
 
     /// Cancel countdown but stay on summary
@@ -6635,7 +6805,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     func playNextEpisode(autoplayed: Bool = false, queueIndex: Int? = nil) async {
         guard let next = nextEpisode else { return }
         if WatchTogetherCoordinator.shared.blocksLocalAdvance(self) {
-            showCompatibilityNotice(String(localized: "Only the host can change what's playing."))
+            showCompatibilityNotice(PlaybackNotice(title: String(localized: "Only the host can change what's playing."), symbol: "person.2.fill"))
             return
         }
         // A provider swap awaits its provider first, so a second call (the
@@ -6731,11 +6901,6 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
             if metadata.ratingKey == cinemaFeature?.ratingKey {
                 cinemaFeature = nil
                 cinemaFeatureVersion = nil
-                if let picks = cinemaFeaturePicks {
-                    initialAudioTrackId = picks.audio
-                    initialSubtitleSelection = picks.subtitle
-                    cinemaFeaturePicks = nil
-                }
             }
             playingMediaID = nil
             playingMediaServerIndex = 0
@@ -7065,10 +7230,32 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     private func beginPlexPlaybackSession(ratingKey: String, mediaIndex: Int?, resetReporting: Bool = false) {
         let sessionIdentifier = plexPlaybackSessionIdentifier
         let reporter = plexProgressReporter, server = plexServer
-        playbackReports.enqueue {
-            await reporter.beginPlaybackSession(ratingKey: ratingKey, mediaIndex: mediaIndex,
-                                                 sessionIdentifier: sessionIdentifier, resetReporting: resetReporting, server: server)
+        let generation = itemGeneration
+        directPlayRefused = false
+        playbackReports.enqueue { [weak self] in
+            let refused = await reporter.beginPlaybackSession(
+                ratingKey: ratingKey, mediaIndex: mediaIndex,
+                sessionIdentifier: sessionIdentifier, resetReporting: resetReporting, server: server)
+            if refused { self?.serverRefusedDirectPlay(generation: generation) }
         }
+    }
+
+    /// The decision arrived saying no. A load still racing it gives way (`runAetherLoadWithDeadline`);
+    /// a fallback that already finished gets its notice now.
+    private func serverRefusedDirectPlay(generation: Int) {
+        guard generation == itemGeneration else { return }
+        directPlayRefused = true
+        diagnostics.step("direct_play_refused")
+        if hasAttemptedRivuletHLSFallback, !isAttemptingRivuletHLSFallback { showDirectPlayRefusedNotice() }
+    }
+
+    private func showDirectPlayRefusedNotice() {
+        showCompatibilityNotice(ServerRefusal.directPlayRefusedNotice(convertingTo: fallbackStep), for: 7)
+    }
+
+    /// What the transcode asks for when it stands in for the file, from the user's quality setting.
+    private var fallbackStep: QualityStep? {
+        QualityDecision.fallbackStep(setting: qualityChoice, measuredKbps: lastThroughput?.kbps)
     }
 
     /// The server stopped this stream (dashboard Stop, paused too long): stop and show its reason (#403).
@@ -7262,3 +7449,6 @@ extension Notification.Name {
     /// Posted when video playback stops (resumes hub polling)
     static let plexPlaybackStopped = Notification.Name("plexPlaybackStopped")
 }
+
+/// The server's decision refused the file while Aether was still opening it.
+private struct DirectPlayRefusedError: Error {}

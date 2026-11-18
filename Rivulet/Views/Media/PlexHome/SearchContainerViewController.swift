@@ -161,6 +161,12 @@ final class SearchContainerViewController: UIViewController {
         // Read-and-clear on EVERY arrow, so the flag never carries over from an
         // earlier press and makes the next one think a move happened.
         let engineMoved = results.consumeEngineMovedFocus()
+        // The grid keyboard (non-touch remotes) is one focus item that moves its own highlight, so
+        // "focus unchanged" below would read every key move as a declined press. Results sit beside it.
+        if focusIsInGridKeyboard {
+            super.pressesBegan(presses, with: event)
+            return
+        }
         if types.contains(.downArrow), !focusIsInResults {
             rescue(to: .results)
         } else if types.contains(.upArrow),
@@ -245,6 +251,15 @@ final class SearchContainerViewController: UIViewController {
         // it from the focus system and void the request.
         setNeedsFocusUpdate()
         updateFocusIfNeeded()
+    }
+
+    /// The linear keyboard is one short row; a grid is several rows tall.
+    static func isGridKeyboard(_ size: CGSize) -> Bool { size.height * 4 > size.width }
+
+    private var focusIsInGridKeyboard: Bool {
+        guard presentedViewController == nil, !focusIsInResults,
+              let item = UIFocusSystem.focusSystem(for: view)?.focusedItem as? UIView else { return false }
+        return Self.isGridKeyboard(item.bounds.size)
     }
 
     private var focusIsInResults: Bool {

@@ -63,10 +63,10 @@ nonisolated enum HomeHero {
     /// Up to six featured items, two per row, one per show.
     static func rowItems(_ shelves: [MediaHub]) -> [MediaItem] {
         var seen = Set<MediaItemRef>()
-        return Array(shelves
+        return Array(deduplicated(shelves
             .flatMap { $0.items.prefix(HomeFeed.railLimit).prefix(2) }
             .filter(hasBackdrop)
-            .filter { seen.insert($0.grandparentRef ?? $0.ref).inserted }
+            .filter { seen.insert($0.grandparentRef ?? $0.ref).inserted })
             .prefix(6))
     }
 

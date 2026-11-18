@@ -762,4 +762,21 @@ final class XMLTVParserTests: XCTestCase {
         let programs = try await parser.parse(data: Data(xml.utf8)).programs["ch1"] ?? []
         XCTAssertEqual(programs.map(\.year), [2019, nil, nil])
     }
+
+    func testKeepsProgrammesWhenTheFeedHasJunkAfterTheRoot() async throws {
+        let xml = """
+        <tv><programme start="20240115120000 +0000" stop="20240115130000 +0000" channel="ch1"><title>A</title></programme></tv>
+        <tv></tv>
+        """
+        let programs = try await parser.parse(data: Data(xml.utf8)).programs["ch1"] ?? []
+        XCTAssertEqual(programs.map(\.title), ["A"])
+    }
+
+    func testStillFailsWhenTheFeedBreaksInsideATag() async {
+        let xml = "<tv><programme start=\"20240115120000 +0000\" channel=\"ch1\""
+        do {
+            _ = try await parser.parse(data: Data(xml.utf8))
+            XCTFail("Expected a parse error")
+        } catch {}
+    }
 }

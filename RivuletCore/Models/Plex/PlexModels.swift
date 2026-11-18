@@ -356,6 +356,8 @@ nonisolated struct PlexMedia: Codable, Sendable {
     let container: String?
     let videoFrameRate: String?
     let Part: [PlexPart]?
+    /// A version the server still lists but whose file is gone (known only after `checkFiles=1`).
+    var isMissing: Bool { Part?.contains { $0.exists == false || $0.accessible == false } == true }
     // Photo EXIF, on item requests: "f/1.6", "1/5", and ISO as a string. Lenient, as every video shares this type.
     var make: PlexLenientText? = nil
     var model: PlexLenientText? = nil
@@ -400,6 +402,9 @@ nonisolated struct PlexPart: Codable, Sendable {
     let size: Int?
     let container: String?
     let Stream: [PlexStream]?
+    // Sent only with `checkFiles=1`.
+    var exists: Bool? = nil
+    var accessible: Bool? = nil
 }
 
 nonisolated struct PlexChapter: Codable, Sendable {

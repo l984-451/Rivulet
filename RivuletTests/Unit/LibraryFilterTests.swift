@@ -50,8 +50,9 @@ final class LibraryFilterTests: XCTestCase {
     // MARK: - Plex
 
     func test_plex_filterQuery() {
-        XCTAssertEqual(dict(PlexProvider.filterQuery(filter)), ["unwatched": "1", "genre": "g1", "decade": "1990"])
-        XCTAssertEqual(PlexProvider.filterQuery(.none), [])
+        XCTAssertEqual(dict(PlexProvider.filterQuery(filter, showLibrary: false)), ["unwatched": "1", "genre": "g1", "decade": "1990"])
+        XCTAssertEqual(dict(PlexProvider.filterQuery(filter, showLibrary: true)), ["unwatchedLeaves": "1", "genre": "g1", "decade": "1990"])
+        XCTAssertEqual(PlexProvider.filterQuery(.none, showLibrary: true), [])
     }
 
     func test_plex_filterValuesDecodeStringOrNumericKeys() throws {
@@ -97,7 +98,7 @@ final class LibraryFilterTests: XCTestCase {
 
     func test_plex_pageURLCarriesGenreAndDecade() {
         let url = PlexNetworkManager.libraryItemsURL(
-            serverURL: "http://plex.test", sectionId: "1", start: 0, size: 90, filters: PlexProvider.filterQuery(filter))
+            serverURL: "http://plex.test", sectionId: "1", start: 0, size: 90, filters: PlexProvider.filterQuery(filter, showLibrary: false))
         let q = queryDict(url)
         XCTAssertEqual(url?.path, "/library/sections/1/all")
         XCTAssertEqual(q["genre"], "g1")

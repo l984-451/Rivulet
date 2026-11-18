@@ -95,8 +95,14 @@ class ContentProvider: TVTopShelfContentProvider {
         else { return nil }
         let tile = TVTopShelfSectionedItem(identifier: item.ratingKey)
         tile.imageShape = .poster
-        // Episodes show the show's poster, so they carry its name.
-        tile.title = item.subtitle ?? item.title
+        // One line under the poster, which already shows the show: the episode, or the show and season.
+        if let s = item.seasonNumber, let e = item.episodeNumber {
+            tile.title = String(localized: "S\(s), E\(e) · \(item.title)")
+        } else if let show = item.subtitle {
+            tile.title = "\(show) · \(item.title)"
+        } else {
+            tile.title = item.title
+        }
         if showsProgress, item.progress > 0 { tile.playbackProgress = item.progress }
         if let url = URL(string: item.imageURL.isEmpty ? item.wideImageURL : item.imageURL) {
             tile.setImageURL(url, for: .screenScale1x)

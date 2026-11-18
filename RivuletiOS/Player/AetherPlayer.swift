@@ -324,6 +324,7 @@ final class AetherPlayer: ObservableObject {
             .sink { [weak self] cues in
                 guard let self else { return }
                 // The engine's cue type cannot be named here (module and class share a name).
+                let isDVB = self.activeSubtitleIsDVB
                 self.subtitleCues = cues.map { cue in
                     let body: SubtitleCue.Body
                     switch cue.body {
@@ -346,6 +347,9 @@ final class AetherPlayer: ObservableObject {
                             )
                         })
                     case .image(let image):
+                        if isDVB {
+                            ReleaseFixChecks.dvbSubtitle(position: image.position, canvas: image.canvasSize, video: self.videoSize)
+                        }
                         body = .image(UIImage(cgImage: image.cgImage), image.position)
                     }
                     return SubtitleCue(
@@ -358,6 +362,8 @@ final class AetherPlayer: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+
+        observeReleaseFixChecks()
 
         engine.$currentAVPlayer
             .receive(on: DispatchQueue.main)
@@ -451,6 +457,11 @@ final class AetherPlayer: ObservableObject {
     /// Same key as the tvOS Upscale SD and 720p setting; absent = off.
     static let upscaleKey = "upscaleLowResolution"
 
+    /// Stereo with Subwoofer (#614): a stereo fold that keeps the LFE.
+    static func audioShaping() -> AudioShaping {
+        StereoWithSubwoofer.isOn() ? AudioShaping(maxChannels: 2, lfeMixDB: StereoWithSubwoofer.lfeMixDB) : AudioShaping()
+    }
+
     func loadLive(url: URL, headers: [String: String]? = nil, forceEngineDemux: Bool = false) async throws {
         lastLoad = .live(url: url, headers: headers ?? [:], forceEngineDemux: forceEngineDemux)
         try await performLiveLoad(url: url, headers: headers ?? [:], forceEngineDemux: forceEngineDemux)
@@ -490,6 +501,7 @@ final class AetherPlayer: ObservableObject {
             // depth on short-GOP channels: the playlist caps at 900 segments.
             options.liveJoinProfile = .fastZap
             options.audioDelaySeconds = AudioSync.seconds()
+            options.audioShaping = Self.audioShaping()
             if joinsWirelessAudio {
                 options.liveJoinStartsImmediately = false
                 options.autoplay = false
@@ -532,6 +544,7 @@ final class AetherPlayer: ObservableObject {
         headers: [String: String]? = nil,
         startTime: TimeInterval? = nil,
         externalSubtitles: [SidecarSubtitle] = [],
+        audioStreamIndex: Int? = nil,
         keepingTransport: Bool = false,
         stackedParts: StackedParts<StackedPartFile>? = nil
     ) async throws {
@@ -542,7 +555,7 @@ final class AetherPlayer: ObservableObject {
             lastLoad = .vod(url: url, headers: headers ?? [:], subtitles: externalSubtitles)
             try await performVODLoad(
                 url: url, headers: headers ?? [:], startTime: startTime, subtitles: externalSubtitles,
-                keepingTransport: keepingTransport
+                keepingTransport: keepingTransport, audioStreamIndex: audioStreamIndex
             )
             return
         }
@@ -551,9 +564,10 @@ final class AetherPlayer: ObservableObject {
         partIndex = index
         let file = stackedParts.files[index]
         lastLoad = .vod(url: file.url, headers: headers ?? [:], subtitles: file.sidecars)
+        // Stream indexes match across the files of one release.
         try await performVODLoad(
             url: file.url, headers: headers ?? [:], startTime: startTime == nil ? nil : offset,
-            subtitles: file.sidecars, keepingTransport: keepingTransport
+            subtitles: file.sidecars, keepingTransport: keepingTransport, audioStreamIndex: audioStreamIndex
         )
     }
 
@@ -579,8 +593,9 @@ final class AetherPlayer: ObservableObject {
         let file = stack.files[index]
         lastLoad = .vod(url: file.url, headers: headers, subtitles: file.sidecars)
         do {
+            // Stream indexes match across the files of one release, so the part opens on the playing audio.
             try await performVODLoad(url: file.url, headers: headers, startTime: offset > 0 ? offset : nil,
-                                     subtitles: file.sidecars, keepingTransport: true)
+                                     subtitles: file.sidecars, keepingTransport: true, audioStreamIndex: audio)
         } catch {
             return
         }
@@ -598,7 +613,8 @@ final class AetherPlayer: ObservableObject {
         headers: [String: String],
         startTime: TimeInterval?,
         subtitles: [SidecarSubtitle],
-        keepingTransport: Bool = false
+        keepingTransport: Bool = false,
+        audioStreamIndex: Int? = nil
     ) async throws {
         beginLoad(keepingTransport: keepingTransport)
         pendingSeekTarget = startTime.map { $0 + partStart }
@@ -633,13 +649,18 @@ final class AetherPlayer: ObservableObject {
         )
         options.autoplay = userIntendsToPlay
         options.audioDelaySeconds = AudioSync.seconds()
+        options.audioShaping = Self.audioShaping()
         // Read ahead as far as the engine's disk budget allows.
         options.forwardBufferSegments = .max
         // Engine takes it only for SDR below the screen's size and switches it off if it can't keep up.
         options.upscalesLowResolutionVideo = UserDefaults.standard.bool(forKey: Self.upscaleKey)
 
         do {
-            try await engine.load(url: url, startPosition: startTime, options: options)
+            // Opens on the host's audio pick. Switching once the engine lists its tracks rebuilds
+            // the load before its display handshake ends, and the rebuild serves Dolby Vision as
+            // its HDR10 base (#627).
+            try await engine.load(url: url, startPosition: startTime, options: options,
+                                  audioSourceStreamIndex: audioStreamIndex.flatMap { Int32(exactly: $0) })
             if userIntendsToPlay, rate != 1 { engine.setRate(rate) }
             seedVideoSize()
         } catch {
@@ -1495,5 +1516,27 @@ private extension PlaybackPhase {
         case .rebuffering: .rebuffering
         default: .loading
         }
+    }
+}
+
+// MARK: - Release fix checks (temporary: delete with ReleaseFixChecks)
+
+extension AetherPlayer {
+    var activeSubtitleIsDVB: Bool {
+        engine.subtitleTracks.first { $0.id == engine.activeSubtitleTrackIndex }?.codec == "dvb_subtitle"
+    }
+
+    func observeReleaseFixChecks() {
+        EngineLog.structuredHandler = { @Sendable line, _, _ in ReleaseFixChecks.engineLine(line) }
+        engine.$audioShapingState
+            .removeDuplicates()
+            .filter { $0 != .off }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] state in
+                guard let self else { return }
+                let track = self.engine.audioTracks.first { $0.id == self.engine.activeAudioTrackIndex }
+                ReleaseFixChecks.audioShaping(state: state.rawValue, codec: track?.codec, channels: track?.channels)
+            }
+            .store(in: &cancellables)
     }
 }

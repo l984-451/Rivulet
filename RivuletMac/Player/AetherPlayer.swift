@@ -431,6 +431,11 @@ final class AetherPlayer: ObservableObject {
     /// Same key as the tvOS Upscale SD and 720p setting; absent = off.
     static let upscaleKey = "upscaleLowResolution"
 
+    /// Stereo with Subwoofer (#614): a stereo fold that keeps the LFE.
+    static func audioShaping() -> AudioShaping {
+        StereoWithSubwoofer.isOn() ? AudioShaping(maxChannels: 2, lfeMixDB: StereoWithSubwoofer.lfeMixDB) : AudioShaping()
+    }
+
     func loadLive(url: URL, headers: [String: String]? = nil, forceEngineDemux: Bool = false) async throws {
         lastLoad = .live(url: url, headers: headers ?? [:], forceEngineDemux: forceEngineDemux)
         try await performLiveLoad(url: url, headers: headers ?? [:], forceEngineDemux: forceEngineDemux)
@@ -467,6 +472,7 @@ final class AetherPlayer: ObservableObject {
             // depth on short-GOP channels: the playlist caps at 900 segments.
             options.liveJoinProfile = .fastZap
             options.audioDelaySeconds = AudioSync.seconds()
+            options.audioShaping = Self.audioShaping()
             return options
         }
 
@@ -600,6 +606,7 @@ final class AetherPlayer: ObservableObject {
         )
         options.autoplay = userIntendsToPlay
         options.audioDelaySeconds = AudioSync.seconds()
+        options.audioShaping = Self.audioShaping()
         // Read ahead as far as the engine's disk budget allows.
         options.forwardBufferSegments = .max
         // Engine takes it only for SDR below the screen's size and switches it off if it can't keep up.

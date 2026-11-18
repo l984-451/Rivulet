@@ -624,6 +624,7 @@ enum SettingsContent {
                                          })),
             .header("Home Theater"),
             toggle("upscaleLowResolution", "Upscale SD and 720p", key: AetherPlayer.upscaleKey, default: false),
+            toggle("stereoWithSubwoofer", "Stereo with Subwoofer", key: StereoWithSubwoofer.key, default: false),
         ] + selfBuiltHomeTheaterRows + [
             .header("Filtering"),
             SettingsRowItem(id: "cat_contentFilter", title: "Content Filtering",

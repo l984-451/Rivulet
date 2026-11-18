@@ -264,6 +264,10 @@ enum SettingsDescriptorStore {
             icon: "sparkles.tv",
             description: "Sharpens SD and 720p video with Apple's machine learning upscaler. Uses more power, and stops if the Apple TV can't keep up. HDR, Dolby Vision and Live TV are not changed."
         ),
+        "stereoWithSubwoofer": SettingDescriptor(
+            icon: "hifispeaker.2",
+            description: "Plays surround soundtracks as stereo with the subwoofer channel mixed into left and right, for 2.1 speakers on a stereo connection."
+        ),
         "dolbyVisionFEL": SettingDescriptor(
             icon: "4k.tv",
             description: "Composes both layers of Dolby Vision Profile 7 FEL on a Dolby Vision TV. Plays without AirPlay or Picture in Picture, and E-AC3 Atmos loses its objects."

@@ -4723,6 +4723,7 @@
       }
     },
     "Plays every track at the same loudness, using the levels your Plex or Jellyfin server measured. Jellyfin measures them once its music library's LUFS scan is on. Emby measures none." : {},
+    "Plays surround soundtracks as stereo with the subwoofer channel mixed into left and right, for 2.1 speakers on a stereo connection." : {},
     "Server Can't Play This" : {
       "localizations" : {
         "de" : {
@@ -4767,6 +4768,7 @@
         }
       }
     },
+    "Stereo with Subwoofer" : {},
     "Still Waiting on the Server" : {
       "localizations" : {
         "de" : {

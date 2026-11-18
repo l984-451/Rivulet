@@ -895,6 +895,7 @@ final class AetherPlayer: PlayerProtocol {
             // Costs rewind depth on short-GOP channels: the playlist caps at 900 segments.
             options.liveJoinProfile = .fastZap
             options.audioDelaySeconds = AudioSync.seconds()
+            options.audioShaping = Self.audioShaping()
             if role == .multiviewSlot {
                 // Field-rate deinterlacing on a quarter-screen tile only
                 // doubles decoder output for nothing.
@@ -1025,6 +1026,11 @@ final class AetherPlayer: PlayerProtocol {
 
     /// ML upscaling of SDR below 1080p (#846); absent = off.
     static let upscaleKey = "upscaleLowResolution"
+
+    /// Stereo with Subwoofer (#614): a stereo fold that keeps the LFE.
+    static func audioShaping() -> AudioShaping {
+        StereoWithSubwoofer.isOn() ? AudioShaping(maxChannels: 2, lfeMixDB: StereoWithSubwoofer.lfeMixDB) : AudioShaping()
+    }
 
     /// Profile 7 FEL composition; absent = on.
     static let dolbyVisionFELKey = "dolbyVisionFEL"
@@ -1191,6 +1197,7 @@ final class AetherPlayer: PlayerProtocol {
         // The engine takes it only for SDR below 1080p and switches it off if it can't keep up.
         options.upscalesLowResolutionVideo = UserDefaults.standard.bool(forKey: Self.upscaleKey)
         options.audioDelaySeconds = AudioSync.seconds()
+        options.audioShaping = Self.audioShaping()
         // Read ahead as far as the engine's disk budget allows; live sizes its own window.
         if !isLive { options.forwardBufferSegments = .max }
         // New content, so the previous item's aspect ratio describes nothing.

@@ -17,7 +17,7 @@ enum SettingsUsageTelemetry {
     /// The synced preferences plus the device-local ones worth counting.
     static var keys: Set<String> {
         SyncCatalog.exactKeys.union([
-            "showPosterTitles", "upscaleLowResolution", "dolbyVisionFEL", SyncCatalog.enabledKey,
+            "showPosterTitles", "upscaleLowResolution", StereoWithSubwoofer.key, "dolbyVisionFEL", SyncCatalog.enabledKey,
         ]).union(contentFilterCategories.map { "contentFilter.\($0).enabled" })
     }
 

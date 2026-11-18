@@ -93,6 +93,7 @@
         }
       }
     },
+    "Plays surround soundtracks as stereo with the subwoofer channel mixed into left and right, for 2.1 speakers on a stereo connection." : {},
     "Server Can't Play This" : {
       "localizations" : {
         "de" : {
@@ -169,6 +170,7 @@
         }
       }
     },
+    "Stereo with Subwoofer" : {},
     "Still Waiting on the Server" : {
       "localizations" : {
         "de" : {

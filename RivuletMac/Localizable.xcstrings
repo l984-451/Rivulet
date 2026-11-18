@@ -44,6 +44,28 @@
         }
       }
     },
+    "Calculating…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird berechnet …"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Υπολογισμός…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Calcul…"
+          }
+        }
+      }
+    },
     "Leave a Tip" : {
       "localizations" : {
         "de" : {
@@ -249,6 +271,28 @@
     "Starting…" : {},
     "Stay" : {},
     "Stereo with Subwoofer" : {},
+    "Space Used" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belegter Speicher"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Χώρος σε χρήση"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Espace utilisé"
+          }
+        }
+      }
+    },
     "Still Waiting on the Server" : {
       "localizations" : {
         "de" : {

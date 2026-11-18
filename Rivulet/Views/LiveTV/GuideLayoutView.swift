@@ -126,7 +126,6 @@ struct GuideLayoutView: View {
     /// (issue #318). Owned here until it is handed back full screen, replaced,
     /// or the guide goes away.
     @State private var miniSession: LiveTVSessionHandoff?
-    @AppStorage("liveTVKeepPlayingInGuide") private var keepPlayingInGuide = true
 
     // Backdrop transition state. Each image is one layer (wash plus crisp
     // artwork), and the incoming layer fades in over the outgoing one.
@@ -430,10 +429,8 @@ struct GuideLayoutView: View {
     private func presentPlayer(_ vc: LiveTVAetherPlayerViewController, from top: UIViewController,
                                animated: Bool = true) {
         vc.modalPresentationStyle = .fullScreen
-        if keepPlayingInGuide {
-            vc.onMinimize = { session in
-                miniSession = session
-            }
+        vc.onMinimize = { session in
+            miniSession = session
         }
         vc.onOpenMultiview = { session in
             presentMultiview(adopting: session, adding: nil, fromPlayer: true)

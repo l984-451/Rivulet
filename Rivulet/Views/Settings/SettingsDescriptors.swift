@@ -318,18 +318,6 @@ enum SettingsDescriptorStore {
             icon: "star",
             description: "Hold Select on a channel in What's On or the guide and choose Add to Favorites. Favorites from every source share one list."
         ),
-        "liveTVSuggestions": SettingDescriptor(
-            icon: "sparkles",
-            description: "Adds a For You row to What's On, with channels picked from what you watch. It learns on this Apple TV only."
-        ),
-        "keepPlayingInGuide": SettingDescriptor(
-            icon: "pip",
-            description: "When you go back from a live channel, it keeps playing with its sound in the corner of the Guide or What's On. Select it again to return to full screen."
-        ),
-        "confirmExitMultiview": SettingDescriptor(
-            icon: "rectangle.split.2x2",
-            description: "Asks before closing multiview, so one press can't end every stream."
-        ),
 
         // MARK: Storage
         "cache": SettingDescriptor(
@@ -468,7 +456,7 @@ enum SettingsDescriptorStore {
         ),
         "profilePickerOnLaunch": SettingDescriptor(
             icon: "person.2.circle",
-            description: "Shows the profile picker each time Rivulet opens, and when you come back after more than 30 seconds away: on the Home Screen, in another app or on the screensaver."
+            description: "Asks who is watching when you open Rivulet after being away: on the Home Screen, in another app or on the screensaver. Instant asks every time."
         ),
         "liveTVSources": SettingDescriptor(
             icon: "tv.and.mediabox",
@@ -707,6 +695,10 @@ enum SettingsDescriptorStore {
         case .homeHeroPicker: return ("sparkles.rectangle.stack", .systemPurple)
         case .detailRatingPicker: return ("star.leadinghalf.filled", .systemYellow)
         case .autoplayCountdownPicker: return ("forward.end.alt", .systemPurple)
+        case .profilePickerPicker: return ("person.2.circle", .systemBlue)
+        case .skipModePicker: return ("forward.end", .systemBlue)
+        case .creditsPicker: return ("list.and.film", .systemPurple)
+        case .cinemaTrailersPicker: return ("film.stack", .systemPurple)
         case .skipIntervalPicker: return ("forward.fill", .systemBlue)
         case .skipBackIntervalPicker: return ("backward.fill", .systemBlue)
         case .heightSpeakersPicker: return ("hifispeaker.2", .systemCyan)

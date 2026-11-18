@@ -337,8 +337,7 @@ final class LiveMultiviewViewController: UIViewController {
             completion?()
             return
         }
-        let confirm = UserDefaults.standard.object(forKey: "confirmExitMultiview") as? Bool ?? true
-        if confirm && viewModel.streamCount > 1 {
+        if viewModel.streamCount > 1 {
             confirmExit()
             armDismissEchoBlock()
             completion?()

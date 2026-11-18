@@ -114,7 +114,6 @@ extension LiveTVDataStore {
         LiveShelves.Input(
             channels: channels, epg: epg, recentChannelIds: recentChannelIds, favoriteIds: favoriteIds,
             unfavoritedIds: unfavoritedIds, eventSlotIds: eventSlotIds, viewings: viewings,
-            suggestionsEnabled: suggestionsEnabled,
             scheduledRecordings: scheduledRecordings,
             sourceNames: Dictionary(sources.map { ($0.id, $0.displayName) }, uniquingKeysWith: { first, _ in first }))
     }

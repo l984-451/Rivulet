@@ -65,10 +65,6 @@ class LiveTVDataStore: ObservableObject {
     /// What For You learns from, oldest first. See `LiveSuggestions`.
     private(set) var viewings: [LiveViewing] = []
 
-    /// The Live TV setting that turns For You and its learning on and off.
-    static let suggestionsKey = "liveTVSuggestions"
-    var suggestionsEnabled: Bool { userDefaults.object(forKey: Self.suggestionsKey) as? Bool ?? true }
-
     /// Channels favorited in Rivulet, from any source, in the viewer's order.
     @Published private(set) var favoriteIds: [String] = [] {
         didSet {
@@ -1667,12 +1663,6 @@ class LiveTVDataStore: ObservableObject {
         }
     }
 
-    /// Erases what For You has learned. Recently Watched is untouched.
-    func forgetViewings() {
-        viewings = []
-        userDefaults.removeObject(forKey: viewingsKey)
-    }
-
     private func noteWatched(_ channel: UnifiedChannel) {
         var ids = recentChannelIds.filter { $0 != channel.id }
         ids.insert(channel.id, at: 0)
@@ -1680,9 +1670,8 @@ class LiveTVDataStore: ObservableObject {
         userDefaults.set(recentChannelIds, forKey: recentsKey)
     }
 
-    /// Learns from `channel`'s programme right now, when suggestions are on.
+    /// Learns from `channel`'s programme right now.
     private func recordViewing(_ channel: UnifiedChannel) {
-        guard suggestionsEnabled else { return }
         let program = getCurrentProgram(for: channel).flatMap { $0.id.contains(":placeholder:") ? nil : $0 }
         viewings.append(LiveViewing(
             channelId: channel.id, at: Date(), title: program?.title,

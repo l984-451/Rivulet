@@ -18,6 +18,7 @@ enum SettingsUsageTelemetry {
     static var keys: Set<String> {
         SyncCatalog.exactKeys.union([
             "showPosterTitles", "upscaleLowResolution", StereoWithSubwoofer.key, "dolbyVisionFEL", SyncCatalog.enabledKey,
+            "profilePickerAfter",
         ]).union(contentFilterCategories.map { "contentFilter.\($0).enabled" })
     }
 

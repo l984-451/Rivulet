@@ -1120,6 +1120,7 @@ final class ShellSidebarViewController: UIViewController {
             showDiscover: flag("showDiscoverTab", default: true) && PlexAuthManager.shared.hasCredentials,
             showWatchlist: flag("showWatchlistTab", default: true) && PlexAuthManager.shared.hasCredentials,
             showFavorites: flag("showFavoritesTab", default: false) && PersonalHomeRows.offersFavorites,
+            showWatchTogether: flag("showWatchTogetherTab", default: true),
             order: LibrarySettingsManager.shared.libraryOrder,
             hiddenKeys: LibrarySettingsManager.shared.hiddenLibraryKeys,
             profileName: profileName)

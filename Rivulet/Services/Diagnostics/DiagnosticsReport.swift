@@ -190,7 +190,7 @@ enum DiagnosticsReport {
         var result: [String: Any] = [
             "home_users": profiles.homeUsers.count,
             "profiles_loaded": profiles.hasLoadedProfiles,
-            "picker_on_launch": profiles.showProfilePickerOnLaunch,
+            "picker_after": profiles.profilePickerAfter ?? -1,
             "relocks_on_launch": auth.relocksOnLaunch,
             "content_withheld": auth.isContentWithheld,
             "content_owner_is_account": auth.contentOwnerID == 0,

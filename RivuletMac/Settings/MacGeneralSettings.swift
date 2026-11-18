@@ -15,6 +15,7 @@ struct MacGeneralSettingsView: View {
     @State private var showingChangelog = false
     @State private var showingLicenses = false
     @State private var tips: [Product] = []
+    @State private var spaceUsed: Int64?
     @State private var thanked = false
 
     var body: some View {
@@ -39,6 +40,7 @@ struct MacGeneralSettingsView: View {
             }
 
             Section {
+                LabeledContent("Space Used", value: spaceUsed.map(StorageUsage.formatted) ?? String(localized: "Calculating…"))
                 Button("Clear Cache and Reload…", role: .destructive) { confirmingClear = true }
                     .disabled(isClearing)
             } header: {
@@ -81,6 +83,7 @@ struct MacGeneralSettingsView: View {
                     ArtworkTitleCheck.clearDisk()
                     await browse.watchStateDidChange()
                     isClearing = false
+                    await measureSpace()
                 }
             }
         } message: {
@@ -89,11 +92,17 @@ struct MacGeneralSettingsView: View {
         .sheet(isPresented: $showingChangelog) { MacChangelogSheet() }
         .sheet(isPresented: $showingLicenses) { MacLicensesSheet() }
         .task { tips = await TipJar.products() }
+        .task { await measureSpace() }
         .alert("Thank You", isPresented: $thanked) {
             Button("OK") {}
         } message: {
             Text("Your tip helps keep Rivulet going.")
         }
+    }
+
+    private func measureSpace() async {
+        spaceUsed = nil
+        spaceUsed = await Task.detached(priority: .utility) { StorageUsage.totalBytes() }.value
     }
 }
 

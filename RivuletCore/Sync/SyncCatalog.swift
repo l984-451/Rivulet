@@ -34,7 +34,7 @@ nonisolated enum SyncCatalog {
     static let exactKeys: Set<String> = [
         // Home and Library
         "showHomeHero", "homeHeroContent", "showLibraryHero", "showLibraryRecentRows",
-        "showLibraryRecommendations", "enablePersonalizedRecommendations", "showDiscoverTab", "showWatchlistTab", "showFavoritesTab",
+        "showLibraryRecommendations", "enablePersonalizedRecommendations", "showDiscoverTab", "showWatchlistTab", "showFavoritesTab", "showWatchTogetherTab",
         // Playback
         "autoplayLimit", "autoplayCountdown", "atTheCredits", "promptResumeOrRestart",
         "continueWatchingInstantResume", "skipPreviewCarousel", "showPosterTitles", "useIntroDB", "cinemaTrailersCount",
@@ -45,8 +45,7 @@ nonisolated enum SyncCatalog {
         // Content filter (not its list source URL, which can embed access)
         "contentFilter.enabled", "contentFilter.profanityStrength", "contentFilter.customWords",
         // Live TV (not recents, viewings or event slots: device habit)
-        "liveTVLayout", "liveTVKeepPlayingInGuide", "combineLiveTVSources", "confirmExitMultiview",
-        "liveTVSuggestions", "liveTVFavoriteChannelIds", "liveTVUnfavoritedChannelIds",
+        "liveTVLayout", "combineLiveTVSources", "liveTVFavoriteChannelIds", "liveTVUnfavoritedChannelIds",
         "liveTVHiddenPlexServers", "liveTVHideJellyfin", "liveTVHideEmby",
         // Servers the user turned off, by machine id
         "plexDisabledServers",

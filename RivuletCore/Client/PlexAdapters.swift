@@ -133,6 +133,13 @@ extension MediaItem {
         return fraction
     }
 
+    /// A show's unwatched episodes, for the poster's count pill as on tvOS. Nil when all are
+    /// watched or the server sent no count.
+    var unwatchedEpisodeCount: Int? {
+        guard kind == .show, let progress = childProgress, progress.total > progress.played else { return nil }
+        return progress.total - progress.played
+    }
+
     /// "12 min left" / "1 hr 5 min left" while a resume point exists.
     var timeLeftText: String? {
         guard isInProgress, let runtime, runtime > userState.viewOffset else { return nil }
@@ -151,6 +158,7 @@ extension MediaItem {
     var watchStateDescription: String {
         if let left = timeLeftText { return left }
         if let fraction = progressBarFraction { return String(localized: "\(Int(fraction * 100)) percent watched") }
+        if let count = unwatchedEpisodeCount { return String(localized: "\(count) unwatched episodes") }
         return countsAsWatched ? String(localized: "Watched") : ""
     }
 }

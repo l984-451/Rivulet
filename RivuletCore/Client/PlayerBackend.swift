@@ -30,8 +30,10 @@ protocol PlayerBackend: AnyObject {
     func nextEpisode(after episode: PlexMetadata, in request: PlexPlaybackRequest) async -> PlexMetadata?
     /// Frees the server's transcoder; a reload or exit leaves it running otherwise.
     func stopTranscode(_ request: PlexPlaybackRequest) async
-    /// Opens the server's play session before the player asks for media.
-    func openPlaySession(_ request: PlexPlaybackRequest) async
+    /// Opens the server's play session before the player asks for media. Returns the server's refusal
+    /// when its decision says no.
+    @discardableResult
+    func openPlaySession(_ request: PlexPlaybackRequest) async -> ServerRefusal?
     /// Sets the audio or subtitle stream a new transcode session reads.
     func selectStream(_ picks: TrackPicks, in request: PlexPlaybackRequest) async
     func artworkURL(for item: PlexMetadata, kind: PlexSession.ArtworkKind, width: Int, height: Int) -> URL?

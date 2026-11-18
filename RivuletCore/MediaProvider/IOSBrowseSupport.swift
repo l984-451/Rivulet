@@ -165,6 +165,17 @@ extension Array where Element == MediaItem {
         func number(_ item: MediaItem) -> Int { item.episodeNumber ?? item.seasonNumber ?? 0 }
         return enumerated().sorted { (number($0.element), $0.offset) < (number($1.element), $1.offset) }.map(\.element)
     }
+
+    /// A show's episodes split where the season changes, in the order given. No group is empty.
+    nonisolated func groupedBySeason() -> [[MediaItem]] {
+        reduce(into: []) { seasons, episode in
+            if let current = seasons.last, current[0].seasonNumber == episode.seasonNumber {
+                seasons[seasons.count - 1].append(episode)
+            } else {
+                seasons.append([episode])
+            }
+        }
+    }
 }
 
 extension LibrarySortOption {
@@ -182,6 +193,9 @@ extension LibrarySortOption {
         case .resolutionDesc, .resolutionAsc: .addedAtDesc
         }
     }
+
+    /// Where the iOS Browse grid keeps a library's sort.
+    nonisolated static func iosKey(_ libraryKey: String) -> String { "iosLibrarySort.\(libraryKey)" }
 }
 
 /// Whether a title is on the Plex watchlist, answered without a request from the ids a list

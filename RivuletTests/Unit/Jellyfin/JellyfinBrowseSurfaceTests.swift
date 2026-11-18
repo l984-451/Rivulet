@@ -197,6 +197,30 @@ final class JellyfinBrowseSurfaceTests: XCTestCase {
         XCTAssertEqual(few.map(\.ref.itemID), ["new"], "two matches are too few for a hero, as on Plex")
     }
 
+    private func heroTitle(_ id: String, tmdb: String, provider: String = "jellyfin:srv") -> MediaItem {
+        let base = JellyfinFixtures.mediaItem(id, kind: .movie, providerID: provider)
+        return MediaItem(ref: base.ref, kind: .movie, title: id, sortTitle: nil, overview: nil, year: nil,
+                         runtime: nil, parentRef: nil, grandparentRef: nil, episodeNumber: nil,
+                         seasonNumber: nil, childProgress: nil, userState: base.userState,
+                         artwork: MediaArtwork(poster: nil, backdrop: URL(string: "http://x/\(id)"), thumbnail: nil, logo: nil),
+                         parentArtwork: nil, grandparentArtwork: nil, externalIDs: ["tmdb": tmdb])
+    }
+
+    /// The same title in two libraries is one slide, and the twin does not use up the cap (#649).
+    func test_heroItems_trending_sameTitleInTwoLibrariesIsOneSlide() {
+        let movies = (1...8).map { heroTitle("a\($0)", tmdb: "\($0)") }
+        let alt = (1...8).map { heroTitle("b\($0)", tmdb: "\($0)") }
+        let hero = PlexHomeViewController.heroItems(trending: [movies, alt], rows: [])
+        XCTAssertEqual(hero.map(\.ref.itemID), movies.map(\.ref.itemID))
+    }
+
+    func test_mixedHeroItems_sameTitleOnBothServersIsOneSlide() {
+        let plex = [heroTitle("p1", tmdb: "1", provider: "plex:a"), heroTitle("p2", tmdb: "2", provider: "plex:a")]
+        let jellyfin = [heroTitle("j1", tmdb: "1"), heroTitle("j3", tmdb: "3")]
+        let mixed = PlexHomeViewController.mixedHeroItems(plex: plex, otherServers: jellyfin, cap: 10)
+        XCTAssertEqual(mixed.map(\.ref.itemID), ["p1", "p2", "j3"])
+    }
+
     // MARK: - Home
 
     private func row(_ id: String, cw: Bool = false, pin: Bool = false) -> CachedHomeHub {

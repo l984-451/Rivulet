@@ -17,6 +17,7 @@ enum SidebarArrangement {
     static let watchlist = "#watchlist"
     /// Favorite movies and shows from every server.
     static let favorites = "#favorites"
+    static let watchTogether = "#watchtogether"
     /// Live TV with its sources combined.
     static let liveTV = "#livetv"
     /// Where libraries go while the order holds none (a fresh install). Never shown.
@@ -47,7 +48,7 @@ enum SidebarArrangement {
         (discoverAbove ? [discover] : []) + [watchlist, favorites]
             + (liveTVAbove ? [liveTV] : []) + [librariesAnchor]
             + libraryOrder.filter { !isAppRow($0) }
-            + (liveTVAbove ? [] : [liveTV]) + (discoverAbove ? [] : [discover])
+            + (liveTVAbove ? [] : [liveTV]) + (discoverAbove ? [] : [discover]) + [watchTogether]
     }
 
     /// Whether `order` was seeded already.

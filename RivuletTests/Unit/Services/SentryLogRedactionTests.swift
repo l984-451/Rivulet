@@ -62,6 +62,19 @@ final class SentryLogRedactionTests: XCTestCase {
         XCTAssertEqual(SensitiveDataRedactor.redact("http://h/x?bypw=keep"), "http://h/x?bypw=keep")
     }
 
+    func test_redact_scrubsHomeProfilePin_asAWholeKey() {
+        XCTAssertEqual(SensitiveDataRedactor.redact("https://plex.tv/api/v2/home/users/abc/switch?pin=1234"),
+                       "https://plex.tv/api/v2/home/users/abc/switch?pin=[redacted]")
+        // An HTTP span's `http.query` carries the bare query.
+        XCTAssertEqual(SensitiveDataRedactor.redact("pin=1234"), "pin=[redacted]")
+        XCTAssertEqual(SensitiveDataRedactor.redact("http://h/x?a=1&PIN=0000"), "http://h/x?a=1&PIN=[redacted]")
+        // Other keys and the profile log's boolean flag are left alone.
+        XCTAssertEqual(SensitiveDataRedactor.redact("http://h/x?pinned=1&spin=2"), "http://h/x?pinned=1&spin=2")
+        XCTAssertEqual(SensitiveDataRedactor.redact("Profile entered: admin=true pin=true owner_changed=false"),
+                       "Profile entered: admin=true pin=true owner_changed=false")
+        XCTAssertEqual(SensitiveDataRedactor.redact("x?pin=truest"), "x?pin=[redacted]")
+    }
+
     func test_isSecretName_coversAnyAuthorizationHeader() {
         XCTAssertTrue(SensitiveDataRedactor.isSecretName("X-Emby-Authorization"))
         XCTAssertTrue(SensitiveDataRedactor.isSecretName("Authorization"))

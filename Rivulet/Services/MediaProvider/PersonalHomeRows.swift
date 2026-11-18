@@ -84,7 +84,7 @@ final class PersonalHomeRows: ObservableObject {
                 (plex, PlexMediaMapper.library(section, providerID: plex.id), section.key)
             }
         }
-        for library in ServerDataStore.shared.visibleLibraries {
+        for library in ServerDataStore.shared.visibleLibraries where library.isPinnedToHome {
             guard let provider = registry.provider(for: library.providerID) else { continue }
             candidates.append((provider, library, library.settingsKey))
         }

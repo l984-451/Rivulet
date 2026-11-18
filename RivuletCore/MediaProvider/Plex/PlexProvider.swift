@@ -82,7 +82,7 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
     func items(in library: MediaLibrary, sort: SortOption, filter: LibraryFilter, page: Page) async throws -> PagedResult<MediaItem> {
         try await plexCall {
             let result = try await libraryMetadataPage(
-                sectionID: library.id, sort: plexSortString(for: sort), filter: filter,
+                sectionID: library.id, kind: library.kind, sort: plexSortString(for: sort), filter: filter,
                 start: page.offset, size: page.limit, followCollections: includesCollections
             )
             let mapped = result.items.map {
@@ -98,18 +98,21 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
     /// One page of a section's raw items; `sort` is a Plex sort key. iOS's library grid reads these too.
     /// `followCollections` applies the library's Collections setting, which only a title sort honors.
     func libraryMetadataPage(
-        sectionID: String, sort: String?, filter: LibraryFilter, start: Int, size: Int, followCollections: Bool
+        sectionID: String, kind: MediaLibrary.LibraryKind, sort: String?, filter: LibraryFilter, start: Int, size: Int, followCollections: Bool
     ) async throws -> (items: [PlexMetadata], totalSize: Int?) {
         try await networkManager.getLibraryItemsWithTotal(
             serverURL: serverURL, authToken: authToken, sectionId: sectionID, start: start, size: size, sort: sort,
-            followCollectionMode: followCollections, filters: Self.filterQuery(filter)
+            followCollectionMode: followCollections, filters: Self.filterQuery(filter, showLibrary: kind == .shows)
         )
     }
 
-    /// `/all`'s `unwatched`, `genre` (tag id) and `decade` (first year) parameters.
-    nonisolated static func filterQuery(_ filter: LibraryFilter) -> [URLQueryItem] {
+    /// `/all`'s unwatched, `genre` (tag id) and `decade` (first year) parameters. A show's `unwatched`
+    /// reads the show's own view count, so a show marked watched elsewhere passes; `unwatchedLeaves` counts episodes (#673).
+    nonisolated static func filterQuery(_ filter: LibraryFilter, showLibrary: Bool) -> [URLQueryItem] {
         var query: [URLQueryItem] = []
-        if filter.unwatchedOnly { query.append(URLQueryItem(name: "unwatched", value: "1")) }
+        if filter.unwatchedOnly {
+            query.append(URLQueryItem(name: showLibrary ? "unwatchedLeaves" : "unwatched", value: "1"))
+        }
         if let genre = filter.genre { query.append(URLQueryItem(name: "genre", value: genre.id)) }
         if let decade = filter.decade { query.append(URLQueryItem(name: "decade", value: "\(decade)")) }
         return query

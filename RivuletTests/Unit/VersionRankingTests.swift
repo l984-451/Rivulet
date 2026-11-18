@@ -85,6 +85,18 @@ final class VersionRankingTests: XCTestCase {
         XCTAssertEqual(selection.serverIndex, 0)
     }
 
+    func test_select_skipsAVersionWhoseFileIsGone() throws {
+        // The better file was deleted; Plex lists it until the trash is emptied (#645).
+        let media = try plexMedia("""
+        [{"id":1,"videoResolution":"1080","bitrate":9000,"Part":[{"id":1,"key":"/a","exists":false,"accessible":false}]},
+         {"id":2,"videoResolution":"1080","bitrate":2000,"Part":[{"id":2,"key":"/b","exists":true,"accessible":true}]}]
+        """)
+        let selection = VersionRanking.select(.best, in: media)
+        XCTAssertEqual(selection.media.first?.id, 2)
+        XCTAssertEqual(selection.serverIndex, 1)
+        XCTAssertEqual(VersionRanking.select(.source("1"), in: media).media.first?.id, 2)
+    }
+
     func test_select_emptyMedia_isANoOp() {
         let selection = VersionRanking.select(.best, in: [])
         XCTAssertTrue(selection.media.isEmpty)

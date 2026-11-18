@@ -143,6 +143,7 @@ enum ShellSidebarModel {
         showDiscover: Bool,
         showWatchlist: Bool,
         showFavorites: Bool = false,
+        showWatchTogether: Bool = true,
         order: [String] = defaultOrder,
         hiddenKeys: Set<String> = [],
         profileName: String,
@@ -181,6 +182,7 @@ enum ShellSidebarModel {
                                    showDiscover: showDiscover && hasMediaServer,
                                    showWatchlist: showWatchlist && hasMediaServer,
                                    showFavorites: showFavorites && hasMediaServer,
+                                   showWatchTogether: showWatchTogether && hasMediaServer,
                                    hiddenKeys: hiddenKeys, playlistServers: playlistServers)
         let byKey = Dictionary(rows.map { ($0.key, $0) }, uniquingKeysWith: { first, _ in first })
         let (arranged, grouped) = SidebarArrangement.sections(
@@ -194,6 +196,15 @@ enum ShellSidebarModel {
                 byKey[key].map { row in var item = row.item; item.arrangeKey = key; return item }
             }
             middle[0] = SidebarArrangement.Section(server: nil, keys: Array(first.keys.dropFirst(lead.count)))
+        }
+        // Watch Together left last, where it starts, keeps its place beside Settings, below a gap.
+        var bottom: [ShellSidebarItem] = []
+        if let last = middle.indices.last(where: { !middle[$0].keys.isEmpty }),
+           middle[last].keys.last == SidebarArrangement.watchTogether, let row = byKey[SidebarArrangement.watchTogether] {
+            var item = row.item
+            item.arrangeKey = SidebarArrangement.watchTogether
+            bottom.append(item)
+            middle[last] = SidebarArrangement.Section(server: middle[last].server, keys: middle[last].keys.dropLast())
         }
         if !top.isEmpty {
             sections.append(ShellSidebarSection(title: nil, items: top))
@@ -209,10 +220,6 @@ enum ShellSidebarModel {
             }
             let title = section.server == nil ? nil : section.keys.first.flatMap { byKey[$0]?.serverName }
             sections.append(ShellSidebarSection(title: title, items: items))
-        }
-        var bottom: [ShellSidebarItem] = []
-        if hasMediaServer {
-            bottom.append(ShellSidebarItem(tab: .watchTogether, title: String(localized: "Watch Together"), icon: "person.2.fill"))
         }
         bottom.append(ShellSidebarItem(tab: .settings, title: String(localized: "Settings"), icon: "gearshape.fill"))
         sections.append(ShellSidebarSection(title: nil, items: bottom))
@@ -237,6 +244,7 @@ enum ShellSidebarModel {
         showDiscover: Bool,
         showWatchlist: Bool,
         showFavorites: Bool = false,
+        showWatchTogether: Bool = false,
         hiddenKeys: Set<String> = [],
         playlistServers: [PlaylistServer] = []
     ) -> [Row] {
@@ -274,6 +282,11 @@ enum ShellSidebarModel {
                                            icon: icon(forSource: source), badge: String(localized: "Live TV")),
                     serverName: nil)
             }
+        }
+        if showWatchTogether {
+            rows.append(Row(key: SidebarArrangement.watchTogether,
+                            item: ShellSidebarItem(tab: .watchTogether, title: String(localized: "Watch Together"), icon: "person.2.fill"),
+                            serverName: nil))
         }
         return rows
     }

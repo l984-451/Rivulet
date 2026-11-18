@@ -61,11 +61,26 @@ class PlexUserProfileManager: ObservableObject {
     /// Error message if user fetch fails
     @Published var usersError: String?
 
-    /// Whether to show profile picker on app launch
-    @Published var showProfilePickerOnLaunch: Bool {
+    /// How long Rivulet may be away before opening it asks who is watching; nil never asks, 0 always does.
+    @Published var profilePickerAfter: TimeInterval? {
         didSet {
-            userDefaults.set(showProfilePickerOnLaunch, forKey: showProfilePickerOnLaunchKey)
+            userDefaults.set(profilePickerAfter ?? -1, forKey: profilePickerAfterKey)
         }
+    }
+
+    /// The Profile Picker choices, in Settings order.
+    static let profilePickerChoices: [TimeInterval?] = [nil, 0, 30, 300, 600, 1800]
+
+    /// Call when Rivulet leaves the screen; kept across launches, so a cold launch is timed too.
+    func noteLeftApp(at date: Date = Date()) {
+        userDefaults.set(date.timeIntervalSince1970, forKey: leftAppAtKey)
+    }
+
+    /// True when the profile picker is on and Rivulet has been away at least `profilePickerAfter`.
+    func shouldAskWhoIsWatching(now: Date = Date()) -> Bool {
+        guard let after = profilePickerAfter else { return false }
+        let left = userDefaults.double(forKey: leftAppAtKey)
+        return left == 0 || now.timeIntervalSince1970 - left >= after
     }
 
     /// Set of user UUIDs that have remembered PINs (for UI updates)
@@ -88,6 +103,8 @@ class PlexUserProfileManager: ObservableObject {
     private let selectedUserUUIDKey = "selectedPlexUserUUID"
     private let selectedUserNameKey = "selectedPlexUserName"
     private let showProfilePickerOnLaunchKey = "showPlexProfilePickerOnLaunch"
+    private let profilePickerAfterKey = "profilePickerAfter"
+    private let leftAppAtKey = "profilePickerLeftAppAt"
     private let restrictedKey = "selectedPlexUserRestricted"
     private let contentLimitedKey = "selectedPlexUserContentLimited"
 
@@ -120,8 +137,12 @@ class PlexUserProfileManager: ObservableObject {
     // MARK: - Initialization
 
     private init() {
-        // Load saved preference for profile picker
-        showProfilePickerOnLaunch = userDefaults.bool(forKey: showProfilePickerOnLaunchKey)
+        // -1 is Off. Before the timed choices this was a switch: On asked at launch and after 30 s away.
+        if let stored = userDefaults.object(forKey: profilePickerAfterKey) as? Double {
+            profilePickerAfter = stored < 0 ? nil : stored
+        } else {
+            profilePickerAfter = userDefaults.bool(forKey: showProfilePickerOnLaunchKey) ? 30 : nil
+        }
 
         // Load saved user info (will be validated when fetchHomeUsers is called)
     }

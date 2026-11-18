@@ -158,6 +158,14 @@ final class IOSBrowseSupportTests: XCTestCase {
         XCTAssertEqual(unnumbered.sortedByNumber().map(\.ref.itemID), ["x", "y"])
     }
 
+    func test_groupedBySeason_splitsWhereTheSeasonChanges_keepingTheOrder() {
+        // Plex's order: Specials after the last season.
+        let episodes = [episode("a", season: 1), episode("b", season: 1), episode("c", season: 2), episode("sp", season: 0)]
+        XCTAssertEqual(episodes.groupedBySeason().map { $0.map(\.ref.itemID) }, [["a", "b"], ["c"], ["sp"]])
+        XCTAssertEqual([episode("x"), episode("y")].groupedBySeason().map(\.count), [2])
+        XCTAssertTrue([MediaItem]().groupedBySeason().isEmpty)
+    }
+
     func test_nextUp_resumePointFirst_thenFirstUnwatched_thenFirst() {
         func ep(_ id: String, played: Bool = false, offset: TimeInterval = 0) -> MediaItem {
             var item = episode(id)

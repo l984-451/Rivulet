@@ -15,6 +15,7 @@ import SwiftUI
 struct MacImage: View {
     let url: URL?
     @State private var image: NSImage?
+    @Environment(\.onArtworkShown) private var onArtworkShown
 
     init(url: URL?) {
         self.url = url
@@ -35,12 +36,19 @@ struct MacImage: View {
                 guard let url else { return }
                 if let cached = MacArtworkCache.shared.cachedImage(for: url) {
                     image = cached
+                    onArtworkShown?()
                     return
                 }
                 guard let loaded = await MacArtworkCache.shared.image(for: url), !Task.isCancelled else { return }
-                withAnimation(.easeOut(duration: 0.2)) { image = loaded }
+                // Shown once its fade-in has finished, not when it starts.
+                withAnimation(.easeOut(duration: 0.2)) { image = loaded } completion: { onArtworkShown?() }
             }
     }
+}
+
+extension EnvironmentValues {
+    /// Called when a `MacImage` below has its artwork on screen (the launch splash waits on the hero's).
+    @Entry var onArtworkShown: (() -> Void)?
 }
 
 /// A MediaItem's artwork, resized by its server to the pixel size the tile draws at.
@@ -169,7 +177,8 @@ struct MacProgressBar: View {
 }
 
 extension View {
-    /// Progress bar along the bottom, or the watched check when there is no bar.
+    /// Progress bar along the bottom, or the watched check when there is no bar. A show with
+    /// episodes left wears their count instead (#658).
     func macWatchState(_ item: MediaItem) -> some View {
         overlay(alignment: .bottom) {
             if let fraction = item.progressBarFraction {
@@ -177,7 +186,9 @@ extension View {
             }
         }
         .overlay(alignment: .topTrailing) {
-            if item.progressBarFraction == nil, item.isWatched {
+            if let count = item.unwatchedEpisodeCount {
+                MacUnwatchedCountPill(count: count)
+            } else if item.progressBarFraction == nil, item.isWatched {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.subheadline)
                     .symbolRenderingMode(.palette)
@@ -196,6 +207,22 @@ extension View {
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.secondary, lineWidth: 1))
+    }
+}
+
+/// A show's unwatched episodes, in the edition badge's dark capsule.
+private struct MacUnwatchedCountPill: View {
+    let count: Int
+
+    var body: some View {
+        Text(count, format: .number)
+            .font(.caption2.weight(.semibold))
+            .monospacedDigit()
+            .foregroundStyle(.white)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(.black.opacity(0.55), in: Capsule())
+            .padding(6)
     }
 }
 

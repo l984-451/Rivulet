@@ -3,17 +3,15 @@
 
 import SwiftUI
 
-/// Settings > Live TV: sources, favorites, suggestions and the default layout.
+/// Settings > Live TV: sources, favorites and the default layout.
 /// Parity source: IOSLiveTVSettingsView.
 struct MacLiveTVSettingsView: View {
     @ObservedObject private var store = LiveTVDataStore.shared
     @ObservedObject private var profiles = PlexUserProfileManager.shared
     @AppStorage(LiveLayout.storageKey) private var layoutRaw = LiveLayout.browse.rawValue
-    @AppStorage(LiveTVDataStore.suggestionsKey) private var suggestions = true
     @State private var showingAddSource = false
     @State private var showingFavorites = false
     @State private var detailSourceID: String?
-    @State private var askingToErase = false
     /// Bumped after a server's Live TV is shown or hidden, to re-read the hidden sources.
     @State private var hiddenRevision = 0
 
@@ -52,25 +50,12 @@ struct MacLiveTVSettingsView: View {
                     ForEach(LiveLayout.allCases, id: \.self) { Text($0.title).tag($0.rawValue) }
                 }
             }
-
-            Section {
-                Toggle("Suggestions", isOn: $suggestions)
-            } footer: {
-                Text("For You picks channels from what you watch. It learns on this Mac only.")
-            }
         }
         .formStyle(.grouped)
         .sheet(isPresented: $showingAddSource) { MacLiveAddSourceSheet() }
         .sheet(isPresented: $showingFavorites) { MacLiveFavoritesSheet() }
         .sheet(isPresented: Binding(get: { detailSourceID != nil }, set: { if !$0 { detailSourceID = nil } })) {
             if let id = detailSourceID { MacLiveSourceDetailSheet(sourceId: id, onVisibilityChange: { hiddenRevision += 1 }) }
-        }
-        .onChange(of: suggestions) { _, on in
-            if !on { askingToErase = true }
-        }
-        .confirmationDialog("Erase What For You Learned?", isPresented: $askingToErase, titleVisibility: .visible) {
-            Button("Erase", role: .destructive) { store.forgetViewings() }
-            Button("Keep", role: .cancel) {}
         }
     }
 }

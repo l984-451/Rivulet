@@ -256,6 +256,7 @@ final class JellyfinSeamTests: XCTestCase {
     func test_library_isPinnedToHome() throws {
         let view: JFItem = JellyfinFixtures.decode(#"{"Id":"a","Name":"Movies","CollectionType":"movies"}"#)
         XCTAssertEqual(JellyfinMediaMapper.library(view, providerID: "jellyfin:srv")?.isPinnedToHome, true)
+        XCTAssertEqual(JellyfinMediaMapper.library(view, providerID: "jellyfin:srv", homeExcludes: ["a"])?.isPinnedToHome, false)
     }
 
     func test_item_carriesGenresAndExternalIDs() {

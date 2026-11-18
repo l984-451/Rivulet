@@ -11,18 +11,18 @@ struct MacHomeView: View {
     @EnvironmentObject private var browse: BrowseStore
     @State private var trending: [MediaItem] = []
     @State private var watchlist: [MediaItem] = []
+    /// The hero's own lists have been fetched once, so an empty hero means none.
+    @State private var heroFetched = false
+    @Environment(\.macLaunchHeroReady) private var launchHeroReady
 
     private var showHero: Bool { HeroSources.isEnabled }
-
-    private var hasContent: Bool {
-        browse.continueWatchingHub != nil || !browse.shelves.isEmpty || (!browse.failures.isEmpty && !browse.libraries.isEmpty)
-    }
 
     var body: some View {
         let hero = showHero ? heroItems : []
         Group {
-            if hasContent {
-                MacHeroFeed(rows: browse.homeRows, heroItems: hero, banners: browse.failedServers)
+            if browse.hasHomeContent {
+                MacHeroFeed(rows: browse.homeRows, heroItems: hero, banners: browse.failedServers,
+                            onHeroShown: launchHeroReady, heroSettled: heroFetched)
             } else {
                 placeholder
             }
@@ -30,8 +30,13 @@ struct MacHomeView: View {
         .navigationTitle("Home")
         .task(id: heroTaskID) {
             guard showHero else { return }
+            // Trending is matched against Home's rows, so a fetch before they arrive settles nothing.
+            let withRows = browse.hasHomeContent
             trending = await browse.trendingHeroItems()
             if HeroSources.isOn(.watchlist) { watchlist = await browse.watchlistHeroItems() }
+            if withRows, !Task.isCancelled { heroFetched = true }
+            // Home settled with nothing for the hero: the launch splash has no artwork to wait for.
+            if !Task.isCancelled, browse.hasHomeContent, heroItems.isEmpty { launchHeroReady() }
         }
         .onReceive(PlexWatchlistService.shared.$watchlistItems.dropFirst()) { _ in
             guard showHero, HeroSources.isOn(.watchlist) else { return }
@@ -54,7 +59,7 @@ struct MacHomeView: View {
     /// The chosen lists mixed; with nothing in them, trending, and with no trending match, Home's rows.
     /// What the trending and watchlist lookups depend on; a change asks again.
     private var heroTaskID: [String] {
-        var id = [String(showHero)]
+        var id = [String(showHero), String(browse.hasHomeContent)]
         id += HeroSources.sources.map(\.rawValue)
         id += browse.shelves.map(\.id)
         id += browse.hiddenSidebarLibraries.sorted()
@@ -75,10 +80,17 @@ struct MacHeroFeed: View {
     let rows: [MediaHub]
     let heroItems: [MediaItem]
     let banners: [BrowseStore.FailedServer]
+    /// Called once the first page's artwork is on screen (Home tells the launch splash).
+    var onHeroShown: (() -> Void)?
+    /// The hero's own lists (trending, watchlist) have arrived, so its first page will not change.
+    var heroSettled = true
     @EnvironmentObject private var browse: BrowseStore
     @Environment(\.displayScale) private var displayScale
     @State private var selection: MediaItemRef?
     @State private var width: CGFloat = 1200
+    /// Hero pages drawn so far, until the launch splash has been told.
+    @State private var shownHeroPages: Set<MediaItemRef> = []
+    @State private var toldLaunch = false
 
     private var shown: MediaItem? { heroItems.first { $0.ref == selection } ?? heroItems.first }
 
@@ -86,7 +98,8 @@ struct MacHeroFeed: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 28) {
                 if !heroItems.isEmpty {
-                    MacHomeHero(items: heroItems, width: width, selection: $selection)
+                    MacHomeHero(items: heroItems, width: width, selection: $selection,
+                                onPageShown: onHeroShown == nil || toldLaunch ? nil : { _ = shownHeroPages.insert($0) })
                 }
                 ForEach(banners) { MacServerFailureBanner(failure: $0) }
                 ForEach(rows) { hub in
@@ -105,6 +118,12 @@ struct MacHeroFeed: View {
             await browse.prefetchArtwork(heroItems.map {
                 ($0, MacItemArtwork.url(browse, item: $0, kind: .backdrop, width: width, aspectRatio: 16 / 9, scale: displayScale))
             })
+        }
+        // The launch splash leaves once the hero it reveals is drawn, not merely downloaded.
+        .onChange(of: heroSettled && heroItems.first.map { shownHeroPages.contains($0.id) } == true, initial: true) { _, drawn in
+            guard drawn, !toldLaunch, let onHeroShown else { return }
+            toldLaunch = true
+            onHeroShown()
         }
     }
 }

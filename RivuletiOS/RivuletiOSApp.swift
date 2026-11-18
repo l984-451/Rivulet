@@ -9,6 +9,8 @@ import Sentry
 struct RivuletiOSApp: App {
     @UIApplicationDelegateAdaptor(IOSAppDelegate.self) private var appDelegate
     @StateObject private var plex: PlexSession
+    /// One for the app, so a window opened after launch finds it finished and opens on Home.
+    @StateObject private var splashGate: LaunchSplashGate
 
     init() {
         HostPlatform.installUIKit()
@@ -39,7 +41,10 @@ struct RivuletiOSApp: App {
         MediaProviderRegistry.shared.populateFromCurrentAuth()
         let session = PlexSession()
         session.installProfileHooks()
+        IOSPlaybackController.shared.plex = session
+        IOSWatchTogether.install(controller: .shared, plex: session)
         _plex = StateObject(wrappedValue: session)
+        _splashGate = StateObject(wrappedValue: LaunchSplashGate(browse: session.browse))
         // Start the path monitor now; its first reading arrives after a delay.
         _ = NetworkPathMonitor.shared
         // The Live TV store re-keys old URL-named M3U favorites when it starts. That must finish before the
@@ -47,6 +52,7 @@ struct RivuletiOSApp: App {
         _ = LiveTVDataStore.shared
         // The iOS views read their synced keys live (@AppStorage), so no reload hook is needed.
         CloudSync.shared.start()
+        TipJar.start()
         // Recreates the background session and resumes unfinished downloads.
         IOSDownloadCenter.shared.start()
         IOSDownloadActivity.shared.start()
@@ -76,7 +82,7 @@ struct RivuletiOSApp: App {
 
     var body: some Scene {
         WindowGroup {
-            IOSRootView()
+            IOSRootView(splashGate: splashGate)
                 .environmentObject(plex)
                 .environmentObject(plex.browse)
                 .environmentObject(IOSDownloadCenter.shared)

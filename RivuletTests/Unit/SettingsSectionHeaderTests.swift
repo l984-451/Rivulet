@@ -89,6 +89,6 @@ final class SettingsSectionHeaderTests: XCTestCase {
                             "\(id) lost its description panel entry")
         }
         // Playback-side Live TV rows stay put.
-        XCTAssertTrue(liveTVIDs.contains("confirmExitMultiview"))
+        XCTAssertTrue(liveTVIDs.contains("combineSources"))
     }
 }

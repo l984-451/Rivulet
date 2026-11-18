@@ -15,6 +15,8 @@ struct TopShelfItem: Codable, Sendable {
     let ratingKey: String
     let title: String            // movie name, or EPISODE name for episodes
     let subtitle: String?        // nil for movies; SHOW name for episodes
+    var seasonNumber: Int? = nil // episodes only
+    var episodeNumber: Int? = nil
     let imageURL: String         // tall poster (wide-art fallback)
     let wideImageURL: String     // 16:9 backdrop art
     let logoImageURL: String     // clearLogo URL, "" when none

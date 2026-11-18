@@ -57,6 +57,8 @@ nonisolated struct PlexStream: Codable, Identifiable, Sendable {
     let profile: String?
     let refFrames: Int?
     let scanType: String?
+    /// "40:33" on an anamorphic stream; absent when the pixels are square.
+    var pixelAspectRatio: String?
 
     // Audio-specific
     let audioChannelLayout: String?
@@ -98,7 +100,7 @@ nonisolated struct PlexStream: Codable, Identifiable, Sendable {
         case DOVILevel, DOVIPresent, DOVIProfile
         case DOVIRPUPresent, DOVIVersion
         case HDR10PlusPresent
-        case frameRate, height, width, level, profile, refFrames, scanType
+        case frameRate, height, width, level, profile, refFrames, scanType, pixelAspectRatio
         case audioChannelLayout, channels, bitrate, samplingRate, gain
         case format, key, extendedDisplayTitle, hearingImpaired
     }

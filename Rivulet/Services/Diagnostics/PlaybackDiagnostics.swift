@@ -277,6 +277,16 @@ final class PlaybackDiagnostics {
     /// Capture a playback error with the entire causal chain attached.
     func capture(_ error: Error, event: String, extraTags: [String: String] = [:]) {
         noteError("\(event): \(error.localizedDescription)")
+        // The server said no (Plex Pass, file gone, no stream to offer): a log, not an error.
+        if Self.isServerRefusal(error) {
+            step(event, detail: "server refused")
+            SentryBridge.log(.warn, "Playback refused by the server", attributes: [
+                "component": "playback",
+                "playback_event": event,
+                "is_relay": isRelay,
+            ])
+            return
+        }
         SentryBridge.capture(error: error) { scope in
             scope.setTag(value: "playback", key: "component")
             scope.setTag(value: event, key: "playback_event")
@@ -289,6 +299,11 @@ final class PlaybackDiagnostics {
             }
             self.apply(to: scope)
         }
+    }
+
+    nonisolated static func isServerRefusal(_ error: Error) -> Bool {
+        if case PlayerError.serverRefused = error { return true }
+        return ServerRefusal(error: error) != nil
     }
 
     /// Attach the accumulated chain to a scope.

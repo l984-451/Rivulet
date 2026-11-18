@@ -583,10 +583,7 @@ final class LiveBrowseViewController: UIViewController {
 
     private func presentPlayer(_ player: LiveTVAetherPlayerViewController, animated: Bool = true) {
         player.modalPresentationStyle = .fullScreen
-        let keepPlaying = UserDefaults.standard.object(forKey: "liveTVKeepPlayingInGuide") as? Bool ?? true
-        if keepPlaying {
-            player.onMinimize = { [weak self] session in self?.showMini(session) }
-        }
+        player.onMinimize = { [weak self] session in self?.showMini(session) }
         player.onOpenMultiview = { [weak self] session in
             self?.presentMultiview(adopting: session, adding: nil, fromPlayer: true)
         }

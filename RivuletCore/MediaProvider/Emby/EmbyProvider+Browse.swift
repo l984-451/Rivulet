@@ -36,12 +36,15 @@ extension EmbyProvider {
     // MARK: - Libraries
 
     func libraries() async throws -> [MediaLibrary] {
+        async let user: EmbyUser? = try? client.get("Users/\(userID)")
         let result: EmbyQueryResult = try await client.get("Users/\(userID)/Views")
+        // A failed read keeps every library on Home.
+        let excludes = Set((await user?.configuration?.latestItemsExcludes ?? []).map(\.value))
         var libraries: [MediaLibrary] = []
         for view in result.items ?? [] {
             var content = HomeVideosContent.videos
             if view.collectionType == "homevideos" { content = try await homeVideosContent(libraryID: view.id.value) }
-            if let library = EmbyMediaMapper.library(view, providerID: id, homeVideos: content) {
+            if let library = EmbyMediaMapper.library(view, providerID: id, homeVideos: content, homeExcludes: excludes) {
                 libraries.append(library)
             }
         }

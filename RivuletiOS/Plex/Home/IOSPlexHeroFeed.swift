@@ -10,11 +10,17 @@ struct IOSPlexHeroFeed: View {
     let heroItems: [MediaItem]
     var banners: [BrowseStore.FailedServer] = []
     let refresh: () async -> Void
+    /// The hero's own lists (trending, watchlist) have arrived, so its first page will not change.
+    var heroSettled = true
     @EnvironmentObject private var browse: BrowseStore
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.launchHeroReady) private var launchHeroReady
     /// While the hero sits under the bar, the bar's scroll edge blur stays off.
     @State private var heroUnderBar = true
     @State private var heroSelection: MediaItemRef?
+    /// Hero pages drawn so far, until the launch splash has been told.
+    @State private var shownHeroPages: Set<MediaItemRef> = []
+    @State private var toldLaunch = false
 
     var body: some View {
         let hero = !heroItems.isEmpty
@@ -23,7 +29,8 @@ struct IOSPlexHeroFeed: View {
                 LazyVStack(alignment: .leading, spacing: 30) {
                     if hero {
                         IOSPlexHomeHero(items: heroItems, size: fullSize(proxy), bleed: proxy.safeAreaInsets,
-                                        selection: $heroSelection)
+                                        selection: $heroSelection,
+                                        onPageShown: toldLaunch ? nil : { _ = shownHeroPages.insert($0) })
                     }
                     ForEach(banners) { IOSServerFailureBanner(failure: $0) }
                     ForEach(rows) { hub in
@@ -44,6 +51,12 @@ struct IOSPlexHeroFeed: View {
             .refreshable { await refresh() }
             .task(id: hero ? heroItems.map { "\($0.ref.providerID)|\($0.ref.itemID)" } + ["\(heroPageWidth(proxy))"] : []) {
                 if hero { await prefetchHero(width: heroPageWidth(proxy)) }
+            }
+            // The launch splash leaves once the hero it reveals is drawn, not merely downloaded.
+            .onChange(of: heroSettled && heroItems.first.map { shownHeroPages.contains($0.id) } == true, initial: true) { _, drawn in
+                guard drawn, !toldLaunch else { return }
+                toldLaunch = true
+                launchHeroReady()
             }
             .iosPlexAmbient(hero ? heroItems.first { $0.ref == heroSelection } ?? heroItems.first : nil)
         }

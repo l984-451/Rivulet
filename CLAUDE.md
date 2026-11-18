@@ -68,6 +68,11 @@ RivuletCore/            # Shared tvOS + iOS + macOS. Client/ (PlexSession, Brows
 │                       #   Models/Photos (the agnostic item types).
 │                       #   Home/ (Home row visibility and order, playlist pins,
 │                       #   hero sources, favorites and playlist rows).
+│                       #   Launch/ (the launch splash all three apps play: LaunchSplashAnimation,
+│                       #   LaunchSplashStroke, the line that draws the R, and its arrival map
+│                       #   LaunchRiverArrivals.bin, written by tools/launch-splash; Launch.xcassets;
+│                       #   LaunchSplashGate, when iOS and Mac let it go). The tvOS and iOS launch
+│                       #   screens (LaunchScreen.storyboard) show the icon's sky, which it opens on.
 │                       #   NO #if os(...), lint-enforced.
 RivuletiOS/             # iOS/iPadOS app (SwiftUI). Shell/ (tabs, Account sheet,
 │                       #   navigation contract), Plex/ (Home/Library/Detail
@@ -76,7 +81,8 @@ RivuletiOS/             # iOS/iPadOS app (SwiftUI). Shell/ (tabs, Account sheet,
 │                       #   AetherPlayer, IOSPlaybackController: PiP, Now Playing),
 │                       #   Downloads/ (background transfer, download center, list;
 │                       #   records + offline progress live in RivuletCore/Downloads),
-│                       #   Photos/ (photo library grid and viewer over PhotoListingModel).
+│                       #   Photos/ (photo library grid and viewer over PhotoListingModel),
+│                       #   CarPlay/ (the CarPlay video scene: templates over BrowseStore).
 RivuletMac/             # Native macOS app (SwiftUI + AppKit). See "Mac app" and
 │                       #   RivuletMac/README-MAC.md (navigation contract, file map).
 Rivulet/                # The tvOS app — everything below.
@@ -154,6 +160,7 @@ Standing exceptions:
 - The watchlist is Plex only: Jellyfin and Emby have none (`supportsWatchlist`).
 - Delete is offered on an episode in a show or season page's episode list, which animates it out. A detail page never deletes its own title (an episode's page included): it would be left showing what it deleted.
 - The pause screen is tvOS only: iOS and the Mac app keep their controls up while paused, as the system player does.
+- CarPlay and Apple HomeView are iPhone only, and video only: Apple allows one CarPlay category per app, so music is not offered there.
 
 ## Platform Boundary (tvOS / iOS)
 
@@ -416,9 +423,16 @@ focusless AND single-transport, or when a needed hand-off is press-only.
   `HeroButtonRowView` takes the Right the engine declines from Next and the
   Left from Play in `pressesBegan`, plus gated swipes on the same predicates;
   focus stays put. Not an invisible focus stop past the row: paging rebuilt the
-  row under it, focus stranded on the stop and every arrow key went dead. The
-  gesture that lands on Play or Next never pages, and one swipe is one page: a
-  gesture counter (`MenuPressInterceptor.remoteGestures`) holds the rest of it.
+  row under it, focus stranded on the stop and every arrow key went dead. A
+  click or short swipe that lands on Play or Next never pages, and one swipe is
+  one page: a gesture counter (`MenuPressInterceptor.remoteGestures`) holds the
+  rest of it. The exception is the TV app's long swipe: a swipe that walked along
+  the row onto Play and keeps going asks the engine for another Left, and that
+  request pages back (`passesPlay`). Right from Next mirrors it (`passesNext`):
+  a 2 pt focusable view past Next (focusable only while Next is focused) gives
+  the engine a Right to ask for, and every move into it is refused, so focus
+  never lands there. A `UIFocusGuide` there was never asked (measured on
+  device). Next is a bare chevron until focused.
   Left from Play pages back until the first item, where it opens the sidebar;
   Up and Menu reach the sidebar from any page (#500).
 - **A focusless surface that hands some touches to another recognizer passes
@@ -1187,6 +1201,11 @@ copy lives in the **left-side description panel**, which is driven by
 `focusedSettingId` with an icon, color, and a clear description. The panel
 updates as the user moves focus between rows.
 
+**Word settings the way Apple does.** Name a toggle for the feature, never against
+it ("Preview Card", not "Skip Preview"). The description says what the feature does,
+as if it is on, in one short sentence where possible; never "On does X, Off does Y".
+A picker's description says how its options differ.
+
 ### Image Loading
 
 UIKit surfaces load remote images through `ImageCacheManager` (Music: `MusicChrome.loadArtwork`).
@@ -1497,6 +1516,14 @@ there unless `SWIFT_ACTIVE_COMPILATION_CONDITIONS` is overridden on the command 
 | `HTTP 500 on /hubs` | Plex server issue (not client-side) |
 | `NSURLErrorDomain -999 cancelled` | User navigated away, request timeout |
 | Aether/AVPlayer startup fatal → auto HLS fallback | Expected: ContentRouter falls back to `.hls` once at current playback time |
+
+### Settings usage
+
+`SettingsUsageTelemetry` (RivuletCore, scheduled by `SentryStartup` on all three apps)
+sends one "Settings snapshot" log a day: each setting's stored value by its `UserDefaults`
+key, never display text, `default` when never written. Its keys are `SyncCatalog.exactKeys`
+plus a short device-local list; a new setting worth counting that does not sync goes in
+that list. The report is `glitchtip/settings-usage.py` in the private unraid repo.
 
 ### Performance tracing
 

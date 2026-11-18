@@ -83,7 +83,7 @@ enum SettingsDescriptorStore {
         ),
         "photoSlidePlaysClips": SettingDescriptor(
             icon: "video",
-            description: "Plays each video clip in full when a slideshow reaches it, then carries on with the next photo. When off, slideshows skip them."
+            description: "Plays each video clip in full when a slideshow reaches it."
         ),
         "cat_music": SettingDescriptor(
             icon: "music.note",
@@ -176,9 +176,13 @@ enum SettingsDescriptorStore {
             icon: "tv",
             description: "The top row of the Apple TV Home Screen. Posters shows a row of posters. Full Screen fills it with artwork from what you are watching."
         ),
-        "skipPreview": SettingDescriptor(
+        "previewCard": SettingDescriptor(
             icon: "rectangle.expand.vertical",
-            description: "Selecting a movie or show opens its full details at once, skipping the preview card. Off keeps the preview, where you can browse the row."
+            description: "Selecting a movie or show opens a preview card first, where you can browse the row."
+        ),
+        "posterTitles": SettingDescriptor(
+            icon: "textformat",
+            description: "Shows the title under posters."
         ),
         "detailRating": SettingDescriptor(
             icon: "star.leadinghalf.filled",
@@ -223,7 +227,7 @@ enum SettingsDescriptorStore {
         ),
         "instantResume": SettingDescriptor(
             icon: "play.rectangle.on.rectangle",
-            description: "Selecting a Continue Watching tile resumes it at once. Off opens the preview instead and turns off the Resume or Restart Prompt."
+            description: "Selecting a Continue Watching tile resumes it at once."
         ),
         "homeStreamingQuality": SettingDescriptor(
             icon: "house.fill",
@@ -259,15 +263,19 @@ enum SettingsDescriptorStore {
         ),
         "heightSpeakers": SettingDescriptor(
             icon: "hifispeaker.2",
-            description: "Keeps the height channels of object-based soundtracks, lossless over HDMI. Off plays 7.1 without them. Some soundtracks need 7.1.4 or 9.1.6."
+            description: "Keeps the height channels of object-based soundtracks, lossless over HDMI. Some soundtracks need 7.1.4 or 9.1.6."
         ),
         "upscaleLowResolution": SettingDescriptor(
             icon: "sparkles.tv",
             description: "Sharpens SD and 720p video with Apple's machine learning upscaler. Uses more power, and stops if the Apple TV can't keep up. HDR, Dolby Vision and Live TV are not changed."
         ),
+        "stereoWithSubwoofer": SettingDescriptor(
+            icon: "hifispeaker.2",
+            description: "Plays surround soundtracks as stereo with the subwoofer channel mixed into left and right, for 2.1 speakers on a stereo connection."
+        ),
         "dolbyVisionFEL": SettingDescriptor(
             icon: "4k.tv",
-            description: "Composes both layers of Dolby Vision Profile 7 FEL on a Dolby Vision TV. Plays without AirPlay or Picture in Picture, and E-AC3 Atmos loses its objects. Off folds the enhancement layer into 8.1."
+            description: "Composes both layers of Dolby Vision Profile 7 FEL on a Dolby Vision TV. Plays without AirPlay or Picture in Picture, and E-AC3 Atmos loses its objects."
         ),
         "autoplayCountdown": SettingDescriptor(
             icon: "forward.end.alt",
@@ -315,18 +323,6 @@ enum SettingsDescriptorStore {
             icon: "star",
             description: "Hold Select on a channel in What's On or the guide and choose Add to Favorites. Favorites from every source share one list."
         ),
-        "liveTVSuggestions": SettingDescriptor(
-            icon: "sparkles",
-            description: "Adds a For You row to What's On, with channels picked from what you watch. It learns on this Apple TV only."
-        ),
-        "keepPlayingInGuide": SettingDescriptor(
-            icon: "pip",
-            description: "When you go back from a live channel, it keeps playing with its sound in the corner of the Guide or What's On. Select it again to return to full screen."
-        ),
-        "confirmExitMultiview": SettingDescriptor(
-            icon: "rectangle.split.2x2",
-            description: "Asks before closing multiview, so one press can't end every stream."
-        ),
 
         // MARK: Storage
         "cache": SettingDescriptor(
@@ -357,23 +353,23 @@ enum SettingsDescriptorStore {
         ),
         "plexServerEnabled": SettingDescriptor(
             icon: "power",
-            description: "Turn off to remove this server from Rivulet: its libraries, Home rows, Continue Watching and Live TV. Your account stays signed in."
+            description: "Shows this server's libraries, Home rows, Continue Watching and Live TV."
         ),
         "plexServerLiveTV": SettingDescriptor(
             icon: "tv.and.mediabox",
-            description: "Off hides this server's channels from Live TV. Its libraries stay."
+            description: "Shows this server's channels in Live TV."
         ),
         "jellyfinLiveTV": SettingDescriptor(
             icon: "tv.and.mediabox",
-            description: "Off hides this server's channels from Live TV. Its libraries stay."
+            description: "Shows this server's channels in Live TV."
         ),
         "embyLiveTV": SettingDescriptor(
             icon: "tv.and.mediabox",
-            description: "Off hides this server's channels from Live TV. Its libraries stay."
+            description: "Shows this server's channels in Live TV."
         ),
         "src_showInLiveTV": SettingDescriptor(
             icon: "tv.and.mediabox",
-            description: "Off hides this server's channels from Live TV. Its libraries stay."
+            description: "Shows this server's channels in Live TV."
         ),
         "plexServerRefresh": SettingDescriptor(
             icon: "arrow.clockwise",
@@ -465,7 +461,7 @@ enum SettingsDescriptorStore {
         ),
         "profilePickerOnLaunch": SettingDescriptor(
             icon: "person.2.circle",
-            description: "Shows the profile picker each time Rivulet opens, and when you come back after more than 30 seconds away: on the Home Screen, in another app or on the screensaver."
+            description: "Asks who is watching when you open Rivulet after being away: on the Home Screen, in another app or on the screensaver. Instant asks every time."
         ),
         "liveTVSources": SettingDescriptor(
             icon: "tv.and.mediabox",
@@ -585,6 +581,10 @@ enum SettingsDescriptorStore {
             icon: "doc.text.fill",
             description: "Rivulet's license and the open-source software it uses, including FFmpeg (LGPL), libdovi, and Sentry."
         ),
+        "leaveTip": SettingDescriptor(
+            icon: "heart.fill",
+            description: "Rivulet is free and open source. A one-time tip helps keep it going and unlocks nothing."
+        ),
         "inputDiagnostics": SettingDescriptor(
             icon: "dot.radiowaves.left.and.right",
             description: "Shows every remote press on screen, how long it was held and which remote sent it."
@@ -700,6 +700,10 @@ enum SettingsDescriptorStore {
         case .homeHeroPicker: return ("sparkles.rectangle.stack", .systemPurple)
         case .detailRatingPicker: return ("star.leadinghalf.filled", .systemYellow)
         case .autoplayCountdownPicker: return ("forward.end.alt", .systemPurple)
+        case .profilePickerPicker: return ("person.2.circle", .systemBlue)
+        case .skipModePicker: return ("forward.end", .systemBlue)
+        case .creditsPicker: return ("list.and.film", .systemPurple)
+        case .cinemaTrailersPicker: return ("film.stack", .systemPurple)
         case .skipIntervalPicker: return ("forward.fill", .systemBlue)
         case .skipBackIntervalPicker: return ("backward.fill", .systemBlue)
         case .heightSpeakersPicker: return ("hifispeaker.2", .systemCyan)

@@ -22,9 +22,9 @@ final class SidebarArrangementTests: XCTestCase {
 
     func test_seed_keepsTodaysLayout() {
         XCTAssertEqual(A.seed(libraryOrder: ["1", "2"], discoverAbove: true, liveTVAbove: false),
-                       [A.discover, A.watchlist, A.favorites, A.librariesAnchor, "1", "2", A.liveTV])
+                       [A.discover, A.watchlist, A.favorites, A.librariesAnchor, "1", "2", A.liveTV, A.watchTogether])
         XCTAssertEqual(A.seed(libraryOrder: ["1"], discoverAbove: false, liveTVAbove: true),
-                       [A.watchlist, A.favorites, A.liveTV, A.librariesAnchor, "1", A.discover])
+                       [A.watchlist, A.favorites, A.liveTV, A.librariesAnchor, "1", A.discover, A.watchTogether])
     }
 
     func test_favorites_joinAnOrderStoredBeforeThem_besideTheWatchlist() {

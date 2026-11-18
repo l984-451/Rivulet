@@ -48,6 +48,22 @@ final class ShellSidebarModelTests: XCTestCase {
             .flatMap(\.items).map(\.tab)
     }
 
+    func test_watchTogether_lastSitsWithSettings_movedLeavesIt_hiddenIsGone() {
+        func sections(order: [String], show: Bool = true) -> [[SidebarTab]] {
+            ShellSidebarModel.sections(
+                libraries: [SidebarLibrary(plex: movies, serverName: "Angel")], liveTVSources: [], combineLiveTV: true,
+                showDiscover: false, showWatchlist: false, showWatchTogether: show, order: order, profileName: "Bain")
+                .map { $0.items.map(\.tab) }
+        }
+        let seeded = SidebarArrangement.seed(libraryOrder: ["1"], discoverAbove: true, liveTVAbove: false)
+        XCTAssertEqual(sections(order: seeded).last, [.watchTogether, .settings])
+        let moved = SidebarArrangement.move(SidebarArrangement.watchTogether, up: true,
+                                            visible: ["1", SidebarArrangement.watchTogether], order: seeded)
+        XCTAssertEqual(sections(order: moved).last, [.settings])
+        XCTAssertTrue(sections(order: moved).dropLast().joined().contains(.watchTogether))
+        XCTAssertFalse(sections(order: seeded, show: false).joined().contains(.watchTogether))
+    }
+
     func test_profileName_prefersPlexProfileThenPlexAccount() {
         XCTAssertEqual(ShellSidebarModel.profileName(plexProfile: "Kids", plexUser: "bain", otherServerUsers: ["jf"]), "Kids")
         XCTAssertEqual(ShellSidebarModel.profileName(plexProfile: nil, plexUser: "bain", otherServerUsers: ["jf"]), "bain")

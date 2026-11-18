@@ -42,7 +42,12 @@ final class LiveChannelsPaneView: UIView {
         stack.spacing = Metrics.gap
         stack.alignment = .center
         scrollView.addSubview(stack)
-        cards = channels.map { channel in
+        // ponytail: a card per channel hung the main thread on IPTV lineups of
+        // thousands; show the 200 around the playing one. A collection view if
+        // anyone needs the whole lineup here (the guide has it).
+        let playing = channels.firstIndex { $0.id == currentChannelId } ?? 0
+        let first = max(0, min(playing - 100, channels.count - 200))
+        cards = channels[first..<min(channels.count, first + 200)].map { channel in
             let card = LiveChannelCardView(channel: channel, program: programProvider(channel),
                                            isCurrent: channel.id == currentChannelId)
             card.onPress = { onSelect(channel) }

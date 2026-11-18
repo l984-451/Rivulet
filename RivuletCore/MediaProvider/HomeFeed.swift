@@ -87,7 +87,7 @@ nonisolated enum HomeFeed {
             let promoted = (try? await provider.promotedHubs(in: libraries.filter(\.isPinnedToHome))) ?? [:]
             hubs = promoted.mapValues { $0.filter { $0.isPromoted && !$0.isContinueWatchingFamily } }
         case .secondary:
-            let found = await BoundedFanOut.map(libraries) { library in
+            let found = await BoundedFanOut.map(libraries.filter(\.isPinnedToHome)) { library in
                 (library.id, try? await provider.recentlyAddedHub(in: library).map { [$0] } ?? [])
             }
             for case let (id, rows?) in found { hubs[id] = rows }

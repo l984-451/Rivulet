@@ -544,6 +544,7 @@ final class AetherPlayer: ObservableObject {
         headers: [String: String]? = nil,
         startTime: TimeInterval? = nil,
         externalSubtitles: [SidecarSubtitle] = [],
+        audioStreamIndex: Int? = nil,
         keepingTransport: Bool = false,
         stackedParts: StackedParts<StackedPartFile>? = nil
     ) async throws {
@@ -554,7 +555,7 @@ final class AetherPlayer: ObservableObject {
             lastLoad = .vod(url: url, headers: headers ?? [:], subtitles: externalSubtitles)
             try await performVODLoad(
                 url: url, headers: headers ?? [:], startTime: startTime, subtitles: externalSubtitles,
-                keepingTransport: keepingTransport
+                keepingTransport: keepingTransport, audioStreamIndex: audioStreamIndex
             )
             return
         }
@@ -563,9 +564,10 @@ final class AetherPlayer: ObservableObject {
         partIndex = index
         let file = stackedParts.files[index]
         lastLoad = .vod(url: file.url, headers: headers ?? [:], subtitles: file.sidecars)
+        // Stream indexes match across the files of one release.
         try await performVODLoad(
             url: file.url, headers: headers ?? [:], startTime: startTime == nil ? nil : offset,
-            subtitles: file.sidecars, keepingTransport: keepingTransport
+            subtitles: file.sidecars, keepingTransport: keepingTransport, audioStreamIndex: audioStreamIndex
         )
     }
 
@@ -591,8 +593,9 @@ final class AetherPlayer: ObservableObject {
         let file = stack.files[index]
         lastLoad = .vod(url: file.url, headers: headers, subtitles: file.sidecars)
         do {
+            // Stream indexes match across the files of one release, so the part opens on the playing audio.
             try await performVODLoad(url: file.url, headers: headers, startTime: offset > 0 ? offset : nil,
-                                     subtitles: file.sidecars, keepingTransport: true)
+                                     subtitles: file.sidecars, keepingTransport: true, audioStreamIndex: audio)
         } catch {
             return
         }
@@ -610,7 +613,8 @@ final class AetherPlayer: ObservableObject {
         headers: [String: String],
         startTime: TimeInterval?,
         subtitles: [SidecarSubtitle],
-        keepingTransport: Bool = false
+        keepingTransport: Bool = false,
+        audioStreamIndex: Int? = nil
     ) async throws {
         beginLoad(keepingTransport: keepingTransport)
         pendingSeekTarget = startTime.map { $0 + partStart }
@@ -652,7 +656,11 @@ final class AetherPlayer: ObservableObject {
         options.upscalesLowResolutionVideo = UserDefaults.standard.bool(forKey: Self.upscaleKey)
 
         do {
-            try await engine.load(url: url, startPosition: startTime, options: options)
+            // Opens on the host's audio pick. Switching once the engine lists its tracks rebuilds
+            // the load before its display handshake ends, and the rebuild serves Dolby Vision as
+            // its HDR10 base (#627).
+            try await engine.load(url: url, startPosition: startTime, options: options,
+                                  audioSourceStreamIndex: audioStreamIndex.flatMap { Int32(exactly: $0) })
             if userIntendsToPlay, rate != 1 { engine.setRate(rate) }
             seedVideoSize()
         } catch {

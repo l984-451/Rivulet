@@ -232,7 +232,7 @@ actor IPTVProvider: LiveTVProvider {
             // Only capture unexpected errors to Sentry. HTTP errors mean a dead
             // user-configured URL; transport errors are the provider being down.
             let isHTTPError = (error is M3UParseError && "\(error)".contains("httpError")) || error is XtreamError || error is TvheadendError
-            if !isHTTPError && shouldCaptureEPGError(error) {
+            if !isHTTPError && Self.shouldCaptureEPGError(error) {
                 let capturedSourceType = self.sourceType
                 let capturedDisplayName = self.displayName
                 SentryBridge.capture(error: error) { scope in
@@ -303,7 +303,7 @@ actor IPTVProvider: LiveTVProvider {
             // third-party content, so upstream HTTP failures, DNS/timeout/TLS
             // errors, and task cancellations are not Rivulet bugs — log them
             // locally and surface via the UI, but don't file Sentry events.
-            if shouldCaptureEPGError(error) {
+            if Self.shouldCaptureEPGError(error) {
                 let capturedDisplayName = self.displayName
                 SentryBridge.capture(error: error) { scope in
                     scope.setTag(value: "iptv", key: "component")
@@ -452,7 +452,11 @@ actor IPTVProvider: LiveTVProvider {
     /// URLs can return any HTTP status, time out, or fail DNS without it
     /// being our fault, so those get surfaced via the UI but not filed to
     /// Sentry. Parse failures on otherwise-valid responses still get captured.
-    private func shouldCaptureEPGError(_ error: Error) -> Bool {
+    nonisolated static func shouldCaptureEPGError(_ error: Error) -> Bool {
+        // Dispatcharr answering 401/403/404/5xx: a revoked or replaced API key
+        // or a wrong URL on the user's own server. Nothing the app can retry.
+        if error is DispatcharrError { return false }
+
         // Upstream HTTP failure (4xx/5xx from the EPG server)
         if error is XMLTVParseError {
             if case XMLTVParseError.httpError = error {

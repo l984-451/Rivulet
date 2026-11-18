@@ -106,4 +106,23 @@ final class MediaRatingTests: XCTestCase {
     func test_worker_decode_garbage_isEmpty() {
         XCTAssertTrue(RatingsClient.decode(Data("nope".utf8)).isEmpty)
     }
+
+    // MARK: Detail row
+
+    /// The chosen source, then Rotten Tomatoes, then the server's unnamed score.
+    func test_detailRating_fallsBackToServerScore() {
+        let key = MediaRating.detailSourceKey
+        let saved = UserDefaults.standard.object(forKey: key)
+        defer { UserDefaults.standard.set(saved, forKey: key) }
+        UserDefaults.standard.set(MediaRating.Source.imdb.rawValue, forKey: key)
+
+        let community = MediaRating(7.8, source: .unknown)
+        let tomatoes = MediaRating(8.9, source: .rottenTomatoes)
+        let imdb = MediaRating(7.6, source: .imdb)
+        XCTAssertEqual(MediaRating.detailRating(in: MediaRating.ordered([community, imdb]))?.source, .imdb)
+        XCTAssertEqual(MediaRating.detailRating(in: MediaRating.ordered([community, tomatoes]))?.source, .rottenTomatoes)
+        // Jellyfin and Emby with no critic score: their community rating, as their own web apps show it.
+        XCTAssertEqual(MediaRating.detailRating(in: MediaRating.ordered([community]))?.value, 7.8)
+        XCTAssertNil(MediaRating.detailRating(in: []))
+    }
 }

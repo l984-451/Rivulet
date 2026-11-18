@@ -528,10 +528,15 @@ final class MediaDetailChromeView: UIView {
         pendingLoads += 1
         Task { [weak self] in
             guard let self else { return }
-            guard let fetched = await Self.fetchDetail(item.ref) else {
+            guard var fetched = await Self.fetchDetail(item.ref) else {
                 await MainActor.run { self.finishLoad(token) }
                 return
             }
+            // The ratings Worker's scores, only when the server lacks the chosen source (Jellyfin and
+            // Emby name none of their own). Capped like the info popup's read. Empty for episodes.
+            let needsWorker = MediaRating.detailRating(in: fetched.ratings)?.source != MediaRating.detailSource
+            async let extraRatings: [MediaRating] = needsWorker
+                ? RatingsClient.shared.ratings(for: fetched, within: 1) : []
             // An episode's own detail has no genres — fall back to the parent
             // show's genres (same as the episode detail page).
             var genres = fetched.genres
@@ -539,6 +544,8 @@ final class MediaDetailChromeView: UIView {
                let showDetail = await Self.fetchDetail(showRef) {
                 genres = showDetail.genres
             }
+            let extra = await extraRatings
+            if !extra.isEmpty { fetched.ratings = MediaRating.ordered(fetched.ratings + extra) }
             await MainActor.run {
                 defer { self.finishLoad(token) }
                 guard self.loadToken == token else { return }
@@ -979,9 +986,15 @@ final class MediaDetailChromeView: UIView {
         if let rating = MediaRating.detailRating(in: ratings) {
             let label = makeCaptionLabel(rating.badgeText, alpha: alpha)
             let ratingStack: UIStackView
-            if rating.source == .rottenTomatoes || rating.source == .rottenTomatoesAudience {
-                let glyph = UIImageView(image: emojiGlyph(
-                    rating.source == .rottenTomatoes ? (rating.value >= 6 ? "🍅" : "🤢") : "🍿"))
+            let emoji: String? = switch rating.source {
+            case .rottenTomatoes: rating.value >= 6 ? "🍅" : "🤢"
+            case .rottenTomatoesAudience: "🍿"
+            // Jellyfin and Emby's community rating: a star, as their own apps draw it.
+            case .unknown: "⭐"
+            default: nil
+            }
+            if let emoji {
+                let glyph = UIImageView(image: emojiGlyph(emoji))
                 glyph.translatesAutoresizingMaskIntoConstraints = false
                 NSLayoutConstraint.activate([
                     glyph.widthAnchor.constraint(equalToConstant: 20),
@@ -1016,7 +1029,8 @@ final class MediaDetailChromeView: UIView {
     }
 
     /// An emoji as the score's glyph (tomato when fresh at 60% and up, nauseated face when rotten,
-    /// popcorn for the audience); the system's art, so no rating-site artwork ships in the app.
+    /// popcorn for the audience, a star for the server's own score); the system's art, so no
+    /// rating-site artwork ships in the app.
     private static func emojiGlyph(_ emoji: String) -> UIImage {
         UIGraphicsImageRenderer(size: CGSize(width: 20, height: 20)).image { _ in
             let glyph = emoji as NSString

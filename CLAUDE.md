@@ -1187,6 +1187,11 @@ copy lives in the **left-side description panel**, which is driven by
 `focusedSettingId` with an icon, color, and a clear description. The panel
 updates as the user moves focus between rows.
 
+**Word settings the way Apple does.** Name a toggle for the feature, never against
+it ("Preview Card", not "Skip Preview"). The description says what the feature does,
+as if it is on, in one short sentence where possible; never "On does X, Off does Y".
+A picker's description says how its options differ.
+
 ### Image Loading
 
 UIKit surfaces load remote images through `ImageCacheManager` (Music: `MusicChrome.loadArtwork`).
@@ -1497,6 +1502,14 @@ there unless `SWIFT_ACTIVE_COMPILATION_CONDITIONS` is overridden on the command 
 | `HTTP 500 on /hubs` | Plex server issue (not client-side) |
 | `NSURLErrorDomain -999 cancelled` | User navigated away, request timeout |
 | Aether/AVPlayer startup fatal → auto HLS fallback | Expected: ContentRouter falls back to `.hls` once at current playback time |
+
+### Settings usage
+
+`SettingsUsageTelemetry` (RivuletCore, scheduled by `SentryStartup` on all three apps)
+sends one "Settings snapshot" log a day: each setting's stored value by its `UserDefaults`
+key, never display text, `default` when never written. Its keys are `SyncCatalog.exactKeys`
+plus a short device-local list; a new setting worth counting that does not sync goes in
+that list. The report is `glitchtip/settings-usage.py` in the private unraid repo.
 
 ### Performance tracing
 

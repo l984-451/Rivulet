@@ -788,13 +788,19 @@ class PlayerContainerViewController: UIViewController {
     /// Up/Down: while scrubbing, Up snaps to the next chapter in the direction
     /// of travel and Down cancels. Otherwise they surface the controls as AVKit
     /// does: Up lands on the first tool button, Down opens the Info pane
-    /// (Insights over the pause screen, from its hint).
+    /// (Insights over the pause screen, from its hint). With the controls
+    /// already up, Down lands on the first tab instead, as Down from the bar does.
     private func handleContentVertical(up: Bool) {
         guard let vm = viewModel else { return }
         if !up, pauseScreen?.showsInsightsHint == true, !vm.isScrubbing {
             openPauseInsights()
             return
         }
+        // Whether the rail, tabs included (they hide while loading), was on screen
+        // before this press: a touch tap, Play/Pause, a scrub commit or the player
+        // opening show it while focus stays here. Read before anything below
+        // brings the chrome up.
+        let railWasUp = (rail?.alpha ?? 0) > 0.5 && rail?.pillRowView.isHidden == false
         vm.hidePausedPoster()
         if vm.isScrubbing {
             if up {
@@ -816,7 +822,7 @@ class PlayerContainerViewController: UIViewController {
         } else {
             if let info = rail?.infoButton { rail?.setFocusLanding(info) }
             vm.enterControlsFocus()
-            presentPane(.info)
+            if !railWasUp { presentPane(.info) }
         }
         setNeedsFocusUpdate()
         updateFocusIfNeeded()

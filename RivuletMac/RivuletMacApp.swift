@@ -8,6 +8,10 @@ import Sentry
 struct RivuletMacApp: App {
     @StateObject private var plex: PlexSession
     @StateObject private var playback = MacPlaybackController()
+    /// One per launch, so a reopened main window finds it finished and opens straight on Home.
+    @StateObject private var splashGate: LaunchSplashGate
+    /// Whether the splash has played its exit. Kept here, not in the window, for the same reason.
+    @State private var splashGone = !LaunchSplashAnimation.isWanted
 
     init() {
         #if DEBUG
@@ -30,6 +34,7 @@ struct RivuletMacApp: App {
         let session = PlexSession()
         session.installProfileHooks()
         _plex = StateObject(wrappedValue: session)
+        _splashGate = StateObject(wrappedValue: LaunchSplashGate(browse: session.browse))
         _ = NetworkPathMonitor.shared
         // The Live TV store re-keys old URL-named M3U favorites when it starts. That must finish
         // before the first sync pass, or a playlist URL with its login could be uploaded as a channel id.
@@ -49,10 +54,17 @@ struct RivuletMacApp: App {
 
     var body: some Scene {
         Window("Rivulet", id: "main") {
-            MacRootView()
+            MacRootView(splashGone: splashGone)
                 .environmentObject(plex)
                 .environmentObject(plex.browse)
                 .environmentObject(playback)
+                .environment(\.macLaunchHeroReady) { [splashGate] in splashGate.heroIsReady() }
+                .overlay {
+                    if !splashGone {
+                        MacLaunchSplash(finished: splashGate.isFinished) { splashGone = true }
+                            .ignoresSafeArea()
+                    }
+                }
                 .frame(minWidth: 1000, minHeight: 640)
         }
         // One window: one player surface, and a rivulet:// link has one place to land.

@@ -68,6 +68,11 @@ RivuletCore/            # Shared tvOS + iOS + macOS. Client/ (PlexSession, Brows
 │                       #   Models/Photos (the agnostic item types).
 │                       #   Home/ (Home row visibility and order, playlist pins,
 │                       #   hero sources, favorites and playlist rows).
+│                       #   Launch/ (the launch splash all three apps play: LaunchSplashAnimation,
+│                       #   LaunchSplashStroke, the line that draws the R, and its arrival map
+│                       #   LaunchRiverArrivals.bin, written by tools/launch-splash; Launch.xcassets;
+│                       #   LaunchSplashGate, when iOS and Mac let it go). The tvOS and iOS launch
+│                       #   screens (LaunchScreen.storyboard) show the icon's sky, which it opens on.
 │                       #   NO #if os(...), lint-enforced.
 RivuletiOS/             # iOS/iPadOS app (SwiftUI). Shell/ (tabs, Account sheet,
 │                       #   navigation contract), Plex/ (Home/Library/Detail

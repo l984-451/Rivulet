@@ -85,28 +85,13 @@ final class WelcomeGlowView: UIView {
         if !moving { metalView.setNeedsDisplay() }
         for star in stars.sublayers ?? [] {
             star.removeAllAnimations()
-            if moving { Self.addTwinkle(to: star) }
+            if moving { SplashStar.addTwinkle(to: star) }
         }
-    }
-
-    /// A star's slow, endless twinkle, out of step with the others. The launch splash shares it.
-    static func addTwinkle(to star: CALayer) {
-        let twinkle = CABasicAnimation(keyPath: "opacity")
-        twinkle.fromValue = Float.random(in: 0.1...0.3)
-        twinkle.toValue = 1
-        twinkle.duration = .random(in: 1.4...4)
-        twinkle.autoreverses = true
-        twinkle.repeatCount = .infinity
-        twinkle.beginTime = CACurrentMediaTime() + .random(in: 0...4)
-        twinkle.fillMode = .backwards
-        twinkle.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        twinkle.isRemovedOnCompletion = false
-        star.add(twinkle, forKey: "twinkle")
     }
 
     /// Stars gathered around the R, thinning toward the edges.
     private func scatterStars() {
-        let image = Self.starImage
+        let image = SplashStar.image
         for _ in 0..<Layout.starCount {
             let x = (CGFloat.random(in: 0...1) + CGFloat.random(in: 0...1)) / 2
             let y = (CGFloat.random(in: 0...1) + CGFloat.random(in: 0...1)) / 2
@@ -122,20 +107,6 @@ final class WelcomeGlowView: UIView {
         }
         updateMotion()
     }
-
-    /// A hot core that falls off quickly, with no wide halo.
-    static let starImage: CGImage? = {
-        let size = CGSize(width: 24, height: 24)
-        return UIGraphicsImageRenderer(size: size).image { context in
-            let colors = [UIColor.white.cgColor, UIColor(red: 1, green: 0.98, blue: 0.92, alpha: 0.55).cgColor,
-                          UIColor(red: 1, green: 0.98, blue: 0.92, alpha: 0).cgColor] as CFArray
-            guard let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors,
-                                            locations: [0, 0.45, 1]) else { return }
-            let center = CGPoint(x: size.width / 2, y: size.height / 2)
-            context.cgContext.drawRadialGradient(gradient, startCenter: center, startRadius: 0,
-                                                 endCenter: center, endRadius: size.width / 2, options: [])
-        }.cgImage
-    }()
 
     // MARK: - Renderer
 

@@ -12,6 +12,8 @@ struct MacHomeHero: View {
     /// Width of the page the hero sits in.
     let width: CGFloat
     @Binding var selection: MediaItemRef?
+    /// A page's artwork is on screen.
+    var onPageShown: ((MediaItemRef) -> Void)?
     @State private var hovering = false
     @State private var inView = true
     @State private var isPaging = false
@@ -87,6 +89,7 @@ struct MacHomeHero: View {
                 HStack(spacing: 0) {
                     ForEach(items) { item in
                         MacItemArtwork(item: item, kind: .backdrop, width: width, aspectRatio: 16 / 9, swapsTitledBackdrop: true)
+                            .environment(\.onArtworkShown, onPageShown.map { report in { report(item.id) } })
                             .frame(width: width, height: height)
                             .clipped()
                             .visualEffect { content, proxy in

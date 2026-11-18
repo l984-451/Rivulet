@@ -588,6 +588,10 @@ enum SettingsDescriptorStore {
             icon: "doc.text.fill",
             description: "Rivulet's license and the open-source software it uses, including FFmpeg (LGPL), libdovi, and Sentry."
         ),
+        "leaveTip": SettingDescriptor(
+            icon: "heart.fill",
+            description: "Rivulet is free and open source. A one-time tip helps keep it going and unlocks nothing."
+        ),
         "inputDiagnostics": SettingDescriptor(
             icon: "dot.radiowaves.left.and.right",
             description: "Shows every remote press on screen, how long it was held and which remote sent it."

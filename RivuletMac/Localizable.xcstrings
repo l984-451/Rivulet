@@ -44,6 +44,28 @@
         }
       }
     },
+    "Leave a Tip" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trinkgeld geben"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Άφησε φιλοδώρημα"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laisser un pourboire"
+          }
+        }
+      }
+    },
     "Map" : {
       "localizations" : {
         "de" : {
@@ -124,6 +146,28 @@
     "Reconnecting to Watch Together…" : {},
     "Room Code" : {},
     "Room codes have 6 letters and numbers." : {},
+    "Rivulet is free and open source. A one-time tip helps keep it going." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rivulet ist kostenlos und Open Source. Ein einmaliges Trinkgeld hilft, es am Leben zu halten."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το Rivulet είναι δωρεάν και ανοιχτού κώδικα. Ένα εφάπαξ φιλοδώρημα το βοηθά να συνεχίσει."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rivulet est gratuit et open source. Un pourboire unique l’aide à continuer."
+          }
+        }
+      }
+    },
     "Server Can't Play This" : {
       "localizations" : {
         "de" : {
@@ -228,6 +272,28 @@
       }
     },
     "That room is full or locked." : {},
+    "Thank You" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Danke"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ευχαριστούμε"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Merci"
+          }
+        }
+      }
+    },
     "The server can't find this video's file. It may have been moved or deleted." : {
       "localizations" : {
         "de" : {
@@ -604,6 +670,28 @@
     },
     "Your copy is %lld seconds longer than the room's, so it may not line up." : {},
     "Your copy is %lld seconds shorter than the room's, so it may not line up." : {},
+    "Your tip helps keep Rivulet going." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dein Trinkgeld hilft, Rivulet am Leben zu halten."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το φιλοδώρημά σου βοηθά το Rivulet να συνεχίσει."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Votre pourboire aide Rivulet à continuer."
+          }
+        }
+      }
+    },
     "Z to A" : {
       "localizations" : {
         "de" : {

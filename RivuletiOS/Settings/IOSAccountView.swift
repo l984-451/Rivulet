@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 
+import StoreKit
 import SwiftUI
 
 /// The Account sheet behind every tab's avatar: profile, server, settings pages, About.
@@ -93,6 +94,7 @@ struct IOSAccountView: View {
                     LabeledContent("Version", value: IOSChangelog.currentVersion)
                     NavigationLink("Changelog") { IOSChangelogView() }
                     NavigationLink("Licenses") { IOSLicensesView() }
+                    NavigationLink("Leave a Tip") { IOSTipJarView() }
                 }
 
                 if plex.isSignedIn, !profiles.isRestrictedProfile {
@@ -258,6 +260,41 @@ private struct IOSServerPicker: View {
             }
             connectingID = nil
             revision += 1
+        }
+    }
+}
+
+/// Account > Leave a Tip: one-time tips that unlock nothing.
+private struct IOSTipJarView: View {
+    @State private var products: [Product]?
+    @State private var thanked = false
+
+    var body: some View {
+        List {
+            Section {
+                if let products, !products.isEmpty {
+                    ForEach(products, id: \.id) { product in
+                        Button {
+                            Task { thanked = await TipJar.purchase(product) }
+                        } label: {
+                            LabeledContent(product.displayName, value: product.displayPrice)
+                        }
+                    }
+                } else if products != nil {
+                    Text("The App Store couldn't be reached. Try again later.").foregroundStyle(.secondary)
+                } else {
+                    ProgressView()
+                }
+            } footer: {
+                Text("Rivulet is free and open source. A tip helps keep it going.")
+            }
+        }
+        .navigationTitle("Leave a Tip")
+        .task { products = await TipJar.products() }
+        .alert("Thank You", isPresented: $thanked) {
+            Button("OK") {}
+        } message: {
+            Text("Your tip helps keep Rivulet going.")
         }
     }
 }

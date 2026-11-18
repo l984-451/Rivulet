@@ -23,6 +23,28 @@
         }
       }
     },
+    "Leave a Tip" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trinkgeld geben"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Άφησε φιλοδώρημα"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laisser un pourboire"
+          }
+        }
+      }
+    },
     "Map" : {
       "localizations" : {
         "de" : {
@@ -94,6 +116,28 @@
       }
     },
     "Plays surround soundtracks as stereo with the subwoofer channel mixed into left and right, for 2.1 speakers on a stereo connection." : {},
+    "Rivulet is free and open source. A tip helps keep it going." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rivulet ist kostenlos und Open Source. Ein Trinkgeld hilft, es am Leben zu halten."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το Rivulet είναι δωρεάν και ανοιχτού κώδικα. Ένα φιλοδώρημα το βοηθά να συνεχίσει."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rivulet est gratuit et open source. Un pourboire l’aide à continuer."
+          }
+        }
+      }
+    },
     "Server Can't Play This" : {
       "localizations" : {
         "de" : {
@@ -189,6 +233,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "En attente du serveur"
+          }
+        }
+      }
+    },
+    "The App Store couldn't be reached. Try again later." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der App Store ist nicht erreichbar. Versuche es später erneut."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η σύνδεση με το App Store. Δοκίμασε ξανά αργότερα."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de joindre l’App Store. Réessayez plus tard."
+          }
+        }
+      }
+    },
+    "Thank You" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Danke"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ευχαριστούμε"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Merci"
           }
         }
       }
@@ -561,6 +649,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Écran large"
+          }
+        }
+      }
+    },
+    "Your tip helps keep Rivulet going." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dein Trinkgeld hilft, Rivulet am Leben zu halten."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το φιλοδώρημά σου βοηθά το Rivulet να συνεχίσει."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Votre pourboire aide Rivulet à continuer."
           }
         }
       }

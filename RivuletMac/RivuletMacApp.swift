@@ -40,6 +40,7 @@ struct RivuletMacApp: App {
         // before the first sync pass, or a playlist URL with its login could be uploaded as a channel id.
         _ = LiveTVDataStore.shared
         CloudSync.shared.start()
+        TipJar.start()
         LiveTVDataStore.shared.startBackgroundPreload()
 
         #if !DEBUG

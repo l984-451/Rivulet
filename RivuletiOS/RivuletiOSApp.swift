@@ -52,6 +52,7 @@ struct RivuletiOSApp: App {
         _ = LiveTVDataStore.shared
         // The iOS views read their synced keys live (@AppStorage), so no reload hook is needed.
         CloudSync.shared.start()
+        TipJar.start()
         // Recreates the background session and resumes unfinished downloads.
         IOSDownloadCenter.shared.start()
         IOSDownloadActivity.shared.start()

@@ -13,6 +13,7 @@
 
 import Combine
 import Foundation
+import StoreKit
 import UIKit
 
 /// Small UserDefaults helpers that honor the SwiftUI `@AppStorage` default
@@ -1635,6 +1636,9 @@ enum SettingsContent {
             SettingsRowItem(id: "licensesLegal", title: "Licenses & Legal", kind: .action(destructive: false, handler: { vc in
                 presentAcknowledgements(on: vc)
             })),
+            SettingsRowItem(id: "leaveTip", title: "Leave a Tip", kind: .action(destructive: false, handler: { vc in
+                presentTipJar(on: vc)
+            })),
             // Writes through InputProbe rather than SettingsStore directly so
             // the HUD appears and disappears with the toggle.
             SettingsRowItem(id: "inputDiagnostics", title: "Input Diagnostics", kind: .toggle(
@@ -1689,6 +1693,34 @@ enum SettingsContent {
             ? Array(WhatsNewView.changelogs.prefix(1))
             : WhatsNewView.changelogs.filter { versions.contains($0.version) }
         return InfoPopupViewController(content: InfoPopupContent.changelog(entries), width: 1000, scrollable: true)
+    }
+
+    /// Leave a Tip: the three tips in the tile menu's glass panel, then a thank-you once one goes through.
+    private static func presentTipJar(on vc: UIViewController) {
+        Task { @MainActor in
+            let products = await TipJar.products()
+            guard !products.isEmpty else {
+                vc.present(ConfirmationPopupViewController(
+                    title: String(localized: "Tips Unavailable"),
+                    message: String(localized: "The App Store couldn't be reached. Try again later."),
+                    confirmTitle: String(localized: "OK"), cancelTitle: nil, onConfirm: {}), animated: true)
+                return
+            }
+            let tips = products.map { product in
+                TileMenuAction(verbatim: "\(product.displayName) · \(product.displayPrice)", systemImage: "heart") {
+                    Task { @MainActor in
+                        guard await TipJar.purchase(product) else { return }
+                        vc.present(ConfirmationPopupViewController(
+                            title: String(localized: "Thank You"),
+                            message: String(localized: "Your tip helps keep Rivulet going."),
+                            confirmTitle: String(localized: "OK"), cancelTitle: nil, onConfirm: {}), animated: true)
+                    }
+                }
+            }
+            let header = TileMenuHeader(title: String(localized: "Leave a Tip"),
+                                        summary: String(localized: "Rivulet is free and open source. A tip helps keep it going."))
+            vc.present(TileMenuPopupViewController(sections: [tips], header: header), animated: false)
+        }
     }
 
     /// Licenses & Legal renders into the app's contained glass popup (not a

@@ -142,6 +142,7 @@ struct RivuletApp: App {
             if SetupLandingViewController.hasAnySource { UserDefaults.standard.set(true, forKey: "setupComplete") }
         }
         CloudSync.shared.start()
+        TipJar.start()
     }
 
     #if !DEBUG

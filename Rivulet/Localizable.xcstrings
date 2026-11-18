@@ -4700,6 +4700,28 @@
       }
     },
     "Loudness Leveling" : {},
+    "Leave a Tip" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trinkgeld geben"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Άφησε φιλοδώρημα"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laisser un pourboire"
+          }
+        }
+      }
+    },
     "Playing away from home needs a Plex Pass or Remote Watch Pass." : {
       "localizations" : {
         "de" : {
@@ -4724,6 +4746,50 @@
     },
     "Plays every track at the same loudness, using the levels your Plex or Jellyfin server measured. Jellyfin measures them once its music library's LUFS scan is on. Emby measures none." : {},
     "Plays surround soundtracks as stereo with the subwoofer channel mixed into left and right, for 2.1 speakers on a stereo connection." : {},
+    "Rivulet is free and open source. A tip helps keep it going." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rivulet ist kostenlos und Open Source. Ein Trinkgeld hilft, es am Leben zu halten."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το Rivulet είναι δωρεάν και ανοιχτού κώδικα. Ένα φιλοδώρημα το βοηθά να συνεχίσει."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rivulet est gratuit et open source. Un pourboire l’aide à continuer."
+          }
+        }
+      }
+    },
+    "Rivulet is free and open source. A one-time tip helps keep it going and unlocks nothing." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rivulet ist kostenlos und Open Source. Ein einmaliges Trinkgeld hilft, es am Leben zu halten, und schaltet nichts frei."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το Rivulet είναι δωρεάν και ανοιχτού κώδικα. Ένα εφάπαξ φιλοδώρημα το βοηθά να συνεχίσει και δεν ξεκλειδώνει τίποτα."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rivulet est gratuit et open source. Un pourboire unique l’aide à continuer et ne débloque rien."
+          }
+        }
+      }
+    },
     "Server Can't Play This" : {
       "localizations" : {
         "de" : {
@@ -4787,6 +4853,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "En attente du serveur"
+          }
+        }
+      }
+    },
+    "The App Store couldn't be reached. Try again later." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der App Store ist nicht erreichbar. Versuche es später erneut."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η σύνδεση με το App Store. Δοκίμασε ξανά αργότερα."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de joindre l’App Store. Réessayez plus tard."
+          }
+        }
+      }
+    },
+    "Thank You" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Danke"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ευχαριστούμε"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Merci"
           }
         }
       }
@@ -15072,6 +15182,28 @@
         }
       }
     },
+    "Tips Unavailable" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trinkgeld nicht verfügbar"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Τα φιλοδωρήματα δεν είναι διαθέσιμα"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pourboires indisponibles"
+          }
+        }
+      }
+    },
     "Video" : {
       "localizations" : {
         "de" : {
@@ -25318,6 +25450,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Votre serveur Threadfin. Rivulet charge sa playlist et son guide depuis l’adresse."
+          }
+        }
+      }
+    },
+    "Your tip helps keep Rivulet going." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dein Trinkgeld hilft, Rivulet am Leben zu halten."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Το φιλοδώρημά σου βοηθά το Rivulet να συνεχίσει."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Votre pourboire aide Rivulet à continuer."
           }
         }
       }

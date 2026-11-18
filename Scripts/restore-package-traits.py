@@ -11,7 +11,8 @@ import sys
 
 PATH = "Rivulet.xcodeproj/project.pbxproj"
 REF = re.compile(r'(\t\t(\w+) /\* XCRemoteSwiftPackageReference "([^"]+)" \*/ = \{\n.*?)(\n\t\t\};)', re.S)
-TRAITS = re.compile(r'\n\t\t\ttraits = \(\n.*?\n\t\t\t\);', re.S)
+# An empty list counts: it switches a package's default traits off (FluidAudio).
+TRAITS = re.compile(r'\n\t\t\ttraits = \((?:\n.*?)?\n\t\t\t\);', re.S)
 
 committed = subprocess.run(["git", "show", f"HEAD:{PATH}"], check=True,
                            capture_output=True, text=True).stdout

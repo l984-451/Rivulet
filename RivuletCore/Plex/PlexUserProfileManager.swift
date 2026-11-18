@@ -229,6 +229,7 @@ class PlexUserProfileManager: ObservableObject {
             guard let serverAccessToken = await networkManager.getServerAccessToken(
                 authToken: userPlexToken,
                 serverURL: serverURL,
+                machineID: PlexAuthManager.shared.selectedServerMachineID,
                 serverName: PlexAuthManager.shared.savedServerName
             ) else {
                 DiagLog.error(.profile, "Profile entry: no server access token")

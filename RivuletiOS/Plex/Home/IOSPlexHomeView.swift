@@ -39,8 +39,7 @@ struct IOSPlexHomeView: View {
         .toolbar {
             IOSAccountToolbarItem()
         }
-        .task(id: [String(showHero)] + HeroSources.sources.map(\.rawValue) + browse.shelves.map(\.id)
-                   + browse.hiddenSidebarLibraries.sorted()) {
+        .task(id: heroTaskID) {
             guard showHero else { return }
             trending = await browse.trendingHeroItems()
             if HeroSources.isOn(.watchlist) { watchlist = await browse.watchlistHeroItems() }
@@ -67,9 +66,20 @@ struct IOSPlexHomeView: View {
     }
 
     /// The chosen lists mixed; with nothing in them, trending, and with no trending match, Home's rows.
+    /// What the trending and watchlist lookups depend on; a change asks again.
+    private var heroTaskID: [String] {
+        var id = [String(showHero)]
+        id += HeroSources.sources.map(\.rawValue)
+        id += browse.shelves.map(\.id)
+        id += browse.hiddenSidebarLibraries.sorted()
+        id += HeroLibraries.excluded.sorted()
+        return id
+    }
+
     private var heroItems: [MediaItem] {
         HomeHero.items(sources: HeroSources.sources, continueWatching: browse.continueWatching, shelves: browse.shelves,
                        watchlist: watchlist, trending: trending, personal: browse.personalRows,
-                       heroPins: HomePlaylistPins.pins(in: .hero), isRowHidden: browse.isHomeRowHidden)
+                       heroPins: HomePlaylistPins.pins(in: .hero), isRowHidden: browse.isHomeRowHidden,
+                       allows: HeroLibraries.allows)
     }
 }

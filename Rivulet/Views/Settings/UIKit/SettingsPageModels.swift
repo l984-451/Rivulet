@@ -312,7 +312,30 @@ enum SettingsContent {
                     }
                 })))
         }
+        let libraries = heroLibraries()
+        if !libraries.isEmpty { rows.append(.header("Libraries")) }
+        for library in libraries {
+            rows.append(SettingsRowItem(id: "hh_library_\(library.providerID)/\(library.libraryID)",
+                                        verbatim: serverLabeled(library.title, providerID: library.providerID), kind: .toggle(
+                get: { HeroLibraries.isIncluded(providerID: library.providerID, libraryID: library.libraryID) },
+                set: { HeroLibraries.set(providerID: library.providerID, libraryID: library.libraryID, included: $0) })))
+        }
         return rows
+    }
+
+    /// The video libraries the sidebar shows, every server's, in sidebar order: the hero draws from
+    /// these (the watchlist, favorites and playlists reach past the libraries pinned to Home).
+    private static func heroLibraries() -> [(providerID: String, libraryID: String, title: String, sidebarKey: String)] {
+        var libraries: [(providerID: String, libraryID: String, title: String, sidebarKey: String)] = []
+        if let plexID = MediaProviderRegistry.shared.plexProvider?.id {
+            libraries += PlexDataStore.shared.visibleLibraries.filter(\.isVideoLibrary).map {
+                (providerID: plexID, libraryID: $0.key, title: $0.title, sidebarKey: $0.key)
+            }
+        }
+        libraries += ServerDataStore.shared.visibleLibraries.filter { ServerDataStore.homeRowKinds.contains($0.kind) }.map {
+            (providerID: $0.providerID, libraryID: $0.id, title: $0.title, sidebarKey: $0.settingsKey)
+        }
+        return LibrarySettingsManager.shared.arrange(libraries, key: { $0.sidebarKey })
     }
 
     /// The Home section's value: Off, the one source, or Mixed.

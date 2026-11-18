@@ -3627,7 +3627,10 @@ final class PlexHomeViewController: UIViewController {
     /// just built, mixed by `HomeHero.mix`. Recently Added reads only the shown rows (#597). Empty when only trending is on.
     private func heroItemsForList(from sections: [HomeSectionData], rail: [(row: CachedHomeHub, kind: MediaProviderKind)]) -> [MediaItem] {
         guard !HeroSources.isTrendingOnly else { return [] }
-        let hasBackdrop = { (item: MediaItem) in (item.grandparentArtwork?.backdrop ?? item.artwork.backdrop) != nil }
+        let allows = HeroLibraries.allows
+        let fits = { (item: MediaItem) in
+            (item.grandparentArtwork?.backdrop ?? item.artwork.backdrop) != nil && allows(item)
+        }
         let personal = PersonalHomeRows.shared.rows
         var lists: [[MediaItem]] = []
         for source in HeroSources.Source.allCases where HeroSources.isOn(source) {
@@ -3636,28 +3639,28 @@ final class PlexHomeViewController: UIViewController {
                 lists.append(homeHeroSource == .plex ? heroItems.map(mediaItemMapper()) : homeMediaHeroItems())
             case .continueWatching:
                 if let row = sections.first(where: { $0.kind == .continueWatching }) {
-                    lists.append(row.items)
+                    lists.append(row.items.filter(allows))
                     continue
                 }
                 // The row is hidden: merge the servers' rows as Home would have.
                 let rows = rail.filter(\.row.isContinueWatching).map(\.row.items)
-                lists.append(rows.count > 1
+                lists.append((rows.count > 1
                     ? ContinueWatchingRow.shared.cards(rows, identity: { $0.identity ?? [] }, showKey: \.showKey,
                                                        watched: \.userState.lastViewedAt).map(\.item)
-                    : rows.first ?? [])
+                    : rows.first ?? []).filter(allows))
             case .recentlyAdded:
                 let rows = HomeHero.shownOrAll(rail.map(\.row).filter { !$0.isContinueWatching && Self.isRecentlyAddedRow($0) },
                                                isHidden: { HomeRowSettings.isHidden($0.hubIdentifier) })
-                lists.append(Array(Self.roundRobin(rows.map(\.items)).filter(Self.isHeroCandidate).prefix(10)))
+                lists.append(Array(Self.roundRobin(rows.map(\.items)).filter { Self.isHeroCandidate($0) && allows($0) }.prefix(10)))
             case .watchlist:
                 refreshWatchlistHeroIfNeeded()
-                lists.append(watchlistHeroItems)
+                lists.append(watchlistHeroItems.filter(allows))
             case .favoriteMovies, .favoriteShows:
                 let kind: MediaLibrary.LibraryKind = source == .favoriteShows ? .shows : .movies
-                lists.append(Self.roundRobin(PersonalRows.favoriteItems(personal, kind)).filter(hasBackdrop))
+                lists.append(Self.roundRobin(PersonalRows.favoriteItems(personal, kind)).filter(fits))
             }
         }
-        lists += HomePlaylistPins.pins(in: .hero).map { PersonalRows.playlistItems(personal, $0).filter(hasBackdrop) }
+        lists += HomePlaylistPins.pins(in: .hero).map { PersonalRows.playlistItems(personal, $0).filter(fits) }
         return HomeHero.mix(lists)
     }
 
@@ -3854,24 +3857,29 @@ final class PlexHomeViewController: UIViewController {
     /// Last-seen shown-on-Home library set, so the UserDefaults observer can
     /// tell a library-visibility change from any other defaults write.
     private var lastHomeLibraryKeys: Set<String>?
+    /// Last-seen `HeroLibraries` exclusions, for the same reason.
+    private var lastHeroExcludedLibraries = HeroLibraries.excluded
 
-    /// Re-derives Home's cross-library content when the libraries on Home change. `LibrarySettingsManager`
-    /// posts no notification, and CW and the hero are filtered from caches written under the old set.
-    /// Keyed on `librariesPinnedToHome`, the set Home draws rows from.
+    /// Re-derives Home's cross-library content when the libraries on Home, or those the hero leaves out,
+    /// change. `LibrarySettingsManager` posts no notification, and CW and the hero are filtered from caches
+    /// written under the old set. Keyed on `librariesPinnedToHome`, the set Home draws rows from.
     private func reprojectIfHomeLibrariesChanged() {
         guard case .home = mode else { return }
         let keys = Set(dataStore.librariesPinnedToHome.map { $0.key })
-        guard lastHomeLibraryKeys != nil else {
+        let heroExcluded = HeroLibraries.excluded
+        let heroLibrariesChanged = heroExcluded != lastHeroExcludedLibraries
+        lastHeroExcludedLibraries = heroExcluded
+        guard let lastKeys = lastHomeLibraryKeys else {
             // First observation is the baseline, not a change.
             lastHomeLibraryKeys = keys
             return
         }
-        guard lastHomeLibraryKeys != keys else { return }
+        guard lastKeys != keys || heroLibrariesChanged else { return }
         lastHomeLibraryKeys = keys
 
         // Re-run the projection so Continue Watching is re-filtered from the
         // metadata still held in the data store (no refetch needed).
-        dataStore.projectHomeItems()
+        if lastKeys != keys { dataStore.projectHomeItems() }
 
         // Drop the hero and re-resolve. The persisted hero is PlexMetadata from
         // the old visibility, so `selectHeroItemsIfNeeded` would just replay it;
@@ -5027,8 +5035,15 @@ final class PlexHomeViewController: UIViewController {
     /// unavailable). Empty for a Plex-only Home, whose hero is `heroItems`.
     private func homeMediaHeroItems() -> [MediaItem] {
         let store = ServerDataStore.shared
-        // Every row, hidden ones included: Settings > Home > Rows never changes the hero.
-        let others = Self.heroItems(trending: store.visibleTrending, rows: store.homeRowsInSidebarOrder)
+        // Every row, hidden ones included: Settings > Home > Rows never changes the hero. The libraries
+        // the hero leaves out (`HeroLibraries`) do, before the cap.
+        let allows = HeroLibraries.allows
+        let rows = store.homeRowsInSidebarOrder.map { row in
+            var row = row
+            row.items = row.items.filter(allows)
+            return row
+        }
+        let others = Self.heroItems(trending: store.visibleTrending.map { $0.filter(allows) }, rows: rows)
         switch homeHeroSource {
         case .plex: return []
         case .otherServers, .none: return others
@@ -5358,18 +5373,32 @@ final class PlexHomeViewController: UIViewController {
         }
     }
 
-    /// Drops hero candidates from libraries removed from Home. Neither `/hubs` nor `LibraryGUIDIndex`
-    /// knows the client-side Home set, and only PlexMetadata carries section attribution, so this is the
-    /// last place to apply it. Fails open on an unloaded library list. Library heroes are left alone.
+    /// Drops hero candidates from libraries removed from Home, and from those the hero leaves out
+    /// (`HeroLibraries`). Neither `/hubs` nor `LibraryGUIDIndex` knows the client-side Home set, and only
+    /// PlexMetadata carries section attribution, so this is the last place to apply it. Fails open on an
+    /// unloaded library list. Library heroes are left alone.
     private func heroItemsVisibleOnHome(_ items: [PlexMetadata]) -> [PlexMetadata] {
         switch mode {
         case .home:
             return PlexLibraryVisibilityFilter.filter(
                 items,
                 toLibraryKeys: dataStore.librariesPinnedToHome.map { $0.key }
-            )
+            ).filter(HeroLibraries.allows(plexProviderID: MediaProviderRegistry.shared.plexProvider?.id))
         case .library, .discover, .search, .watchlist, .favorites, .collection, .playlists, .playlist:
             return items
+        }
+    }
+
+    /// The sections Home's trending hero may draw from: those on Home, less the ones the hero leaves out.
+    /// Any section on a library page, or before the libraries load.
+    private func heroSectionFilter() -> (String) -> Bool {
+        guard case .home = mode else { return { _ in true } }
+        let onHome = Set(dataStore.librariesPinnedToHome.map { PlexLibraryVisibilityFilter.normalizedSectionID($0.key) })
+        let plexID = MediaProviderRegistry.shared.plexProvider?.id
+        let excluded = HeroLibraries.excluded
+        return { section in
+            (onHome.isEmpty || onHome.contains(section))
+                && !(plexID.map { excluded.contains(SidebarLibraryVisibility.key(providerID: $0, libraryID: section)) } ?? false)
         }
     }
 
@@ -5402,7 +5431,10 @@ final class PlexHomeViewController: UIViewController {
 
     /// Up to `cap` owned library items from TMDB trending. `type == nil` (Home) interleaves movies and
     /// TV; a typed library fetches only its own type.
-    static func computeTMDBHero(cap: Int, type: TMDBMediaType? = nil) async -> [PlexMetadata] {
+    /// `allowsSection` skips sections before they count toward the cap: a large library the hero
+    /// leaves out (a library of placeholders) would otherwise fill every slot and leave too few to show.
+    static func computeTMDBHero(cap: Int, type: TMDBMediaType? = nil,
+                                allowsSection: (String) -> Bool = { _ in true }) async -> [PlexMetadata] {
         let indexEmpty = await LibraryGUIDIndex.shared.isEmpty
 
         let ordered: [TMDBListItem]
@@ -5434,7 +5466,8 @@ final class PlexHomeViewController: UIViewController {
         // Twice the cap, so dropping low-resolution art still fills the hero.
         var entries: [LibraryGUIDIndex.Entry] = []
         for item in ordered {
-            if let entry = await LibraryGUIDIndex.shared.lookup(tmdbId: item.id, type: item.mediaType) {
+            if let entry = await LibraryGUIDIndex.shared.lookup(tmdbId: item.id, type: item.mediaType),
+               allowsSection(entry.sectionID) {
                 entries.append(entry)
                 if entries.count >= cap * 2 { break }
             }
@@ -5525,7 +5558,7 @@ final class PlexHomeViewController: UIViewController {
         // (Which of two mirrored copies the index returns is a separate
         // problem; this only drops copies that are hidden outright.)
         let curated = heroItemsVisibleOnHome(
-            await Self.computeTMDBHero(cap: Self.heroItemCap, type: heroType)
+            await Self.computeTMDBHero(cap: Self.heroItemCap, type: heroType, allowsSection: heroSectionFilter())
         )
         guard curated.count >= Self.heroTMDBMinMatches else {
             homeUIKitLog.debug("[Hero] upgradeHeroFromTMDB bailed: only \(curated.count, privacy: .public) matches (need \(Self.heroTMDBMinMatches, privacy: .public))")

@@ -207,6 +207,7 @@ final class ServerDataStore: ObservableObject {
                 if let hub {
                     var row = Self.row(hub)
                     row.libraryKey = library.settingsKey
+                    row.items = row.items.map { $0.inLibrary(library.id) }
                     recent.append(row)
                 }
             case .failure(let error):
@@ -257,7 +258,8 @@ final class ServerDataStore: ObservableObject {
             let libraries = slice.libraries.filter { Self.homeRowKinds.contains($0.kind) }.map { ($0.settingsKey, $0) }
             let found = await BoundedFanOut.map(libraries) { key, library in
                 do {
-                    return (key, Result<[MediaItem], Error>.success(try await provider.trending(in: library, from: titles, limit: 10)))
+                    let found = try await provider.trending(in: library, from: titles, limit: 10).map { $0.inLibrary(library.id) }
+                    return (key, Result<[MediaItem], Error>.success(found))
                 } catch {
                     return (key, .failure(error))
                 }

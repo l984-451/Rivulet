@@ -487,13 +487,16 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
             URLQueryItem(name: "ids", value: ids.joined(separator: ",")), Self.listFields
         ])
         let byID = Dictionary(map(result.items).map { ($0.ref.itemID, $0) }, uniquingKeysWith: { a, _ in a })
-        return ids.compactMap { byID[$0] }
+        let libraryOf = Dictionary(owned.map { ($0.id, $0.libraryID) }, uniquingKeysWith: { a, _ in a })
+        return ids.compactMap { id in byID[id]?.inLibrary(libraryOf[id]) }
     }
 
     private struct OwnedEntry: Sendable {
         let id: String
         let kind: MediaKind
         let ids: [String: String]
+        /// The library it was listed in, which an item does not name (the hero's library filter reads it).
+        let libraryID: String
     }
 
     private struct OwnedIndex {
@@ -536,17 +539,25 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
         }
     }
 
+    /// One listing per video library, so each entry knows its library; an item in two libraries is
+    /// listed under the first.
     private func listOwned() async throws -> [OwnedEntry] {
-        let index: JFQueryResult = try await client.get("Items", [
-            URLQueryItem(name: "recursive", value: "true"),
-            URLQueryItem(name: "includeItemTypes", value: "Movie,Series"),
-            URLQueryItem(name: "fields", value: "ProviderIds"),
-            URLQueryItem(name: "enableImages", value: "false"),
-            URLQueryItem(name: "enableUserData", value: "false")
-        ])
-        return (index.items ?? []).compactMap { dto in
-            dto.id.map { OwnedEntry(id: $0, kind: JellyfinMediaMapper.kind(dto.type), ids: JellyfinMediaMapper.externalIDs(dto.providerIds)) }
+        var entries: [OwnedEntry] = []
+        for library in try await libraries() where [.movies, .shows, .mixed].contains(library.kind) {
+            let index: JFQueryResult = try await client.get("Items", [
+                URLQueryItem(name: "parentId", value: library.id),
+                URLQueryItem(name: "recursive", value: "true"),
+                URLQueryItem(name: "includeItemTypes", value: "Movie,Series"),
+                URLQueryItem(name: "fields", value: "ProviderIds"),
+                URLQueryItem(name: "enableImages", value: "false"),
+                URLQueryItem(name: "enableUserData", value: "false")
+            ])
+            entries += (index.items ?? []).compactMap { dto in
+                dto.id.map { OwnedEntry(id: $0, kind: JellyfinMediaMapper.kind(dto.type),
+                                        ids: JellyfinMediaMapper.externalIDs(dto.providerIds), libraryID: library.id) }
+            }
         }
+        return entries
     }
 
     /// This server's image resized to fill the box (measured on 12.1: a cover that never upscales).

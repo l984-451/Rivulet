@@ -44,6 +44,7 @@ enum SettingsDescriptorStore {
         if id.hasPrefix("hs_") { return descriptors["heightSpeakers"] }
         if id.hasPrefix("sm_") { return descriptors["subtitleMode"] }
         if id.hasPrefix("ai_") { return descriptors["appIcon"] }
+        if id.hasPrefix("hh_library_") { return descriptors["homeHeroLibrary"] }
         if id.hasPrefix("hh_") { return descriptors["homeHero"] }
         if id.hasPrefix("dr_") { return descriptors["detailRating"] }
         if id.hasPrefix("alim_") { return descriptors["autoplayLimit"] }
@@ -158,6 +159,10 @@ enum SettingsDescriptorStore {
         "homeHero": SettingDescriptor(
             icon: "sparkles.rectangle.stack",
             description: "Choose what the hero shows. Pick more than one to mix them. Turn all off to hide the hero."
+        ),
+        "homeHeroLibrary": SettingDescriptor(
+            icon: "sparkles.rectangle.stack",
+            description: "Turn a library off to keep its titles out of the hero. Its rows stay on Home."
         ),
         "topShelfStyle": SettingDescriptor(
             icon: "tv",

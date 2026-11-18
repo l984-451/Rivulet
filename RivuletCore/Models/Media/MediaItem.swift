@@ -60,8 +60,8 @@ nonisolated struct MediaItem: Identifiable, Hashable, Sendable, Codable {
     let genres: [String]?
     /// External ids keyed lowercase ("tmdb", "imdb", "tvdb", Plex's own as "plex"); nil when the list had none.
     let externalIDs: [String: String]?
-    /// The library the item sits in, when the list said (Plex `librarySectionID`).
-    let libraryID: String?
+    /// The library the item sits in, when the list said (Plex `librarySectionID`) or was one library's (`inLibrary`).
+    var libraryID: String?
 
     init(
         ref: MediaItemRef,
@@ -144,6 +144,15 @@ extension MediaItem {
     )
 
     var isGridPlaceholder: Bool { ref.itemID.isEmpty }
+
+    /// The item as fetched from one library's list, which does not name the library on each item
+    /// (a section listing, Jellyfin and Emby). An item that names its own keeps it.
+    func inLibrary(_ libraryID: String?) -> MediaItem {
+        guard self.libraryID == nil, let libraryID else { return self }
+        var copy = self
+        copy.libraryID = libraryID
+        return copy
+    }
 
     /// A season's show, from what the season knows of it; a detail page reads the rest by ref.
     /// Nil for anything else. A tile opens the show, never the season.

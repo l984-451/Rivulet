@@ -60,6 +60,22 @@ final class HomeHeroTests: XCTestCase {
         XCTAssertEqual(result.map(\.ref.itemID), ["a1", "b1", "a2", "b2"])
     }
 
+    /// A left-out library (`HeroLibraries`) is dropped from every list before the cap, so a large library
+    /// of placeholders cannot take the hero's slots.
+    func test_aLeftOutLibrary_isDroppedBeforeTheCap() {
+        let placeholders = (0..<12).map { item("s\($0)").inLibrary("3") }
+        let real = [item("m1").inLibrary("1"), item("m2").inLibrary("1")]
+        let allows = { (item: MediaItem) in item.libraryID != "3" }
+        let trending = HomeHero.items(sources: [.trending], continueWatching: [], shelves: [], watchlist: [],
+                                      trending: placeholders + real, personal: [], heroPins: [], allows: allows)
+        XCTAssertEqual(trending.map(\.ref.itemID), ["m1", "m2"])
+
+        let row = shelf("plex:a|home.movies.recent.recentlyadded", placeholders + real)
+        let recent = HomeHero.items(sources: [.recentlyAdded], continueWatching: [], shelves: [row], watchlist: [],
+                                    trending: [], personal: [], heroPins: [], allows: allows)
+        XCTAssertEqual(recent.map(\.ref.itemID), ["m1", "m2"])
+    }
+
     func test_recentlyAdded_skipsHiddenRows_unlessEveryOneIsHidden() {
         let a = shelf("plex:a|movie.recentlyadded.1", [item("a1")])
         let b = shelf("plex:a|show.recentlyadded.2", [item("b1")])

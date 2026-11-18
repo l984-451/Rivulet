@@ -133,6 +133,10 @@ final class IOSFixPassTests: XCTestCase {
         sources.trendingTitles = { (1...5).map { TitleMatch(kind: .movie, externalIDs: ["tmdb": "\($0)"], plexGUID: nil) } }
         let items = await sources.trending(providers: [plex, jf])
         XCTAssertEqual(items.map(\.ref.itemID), ["p1", "j2"])
+
+        // A copy the hero leaves out is dropped before the copies become one: the other server's stands.
+        let shown = await sources.trending(providers: [plex, jf], shown: { $0.ref.providerID != "plex:a" })
+        XCTAssertEqual(shown.map(\.ref.itemID), ["j1", "j2"])
     }
 
     // MARK: - Plex routing

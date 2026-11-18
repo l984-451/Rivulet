@@ -35,6 +35,7 @@ extension BrowseStore {
     func observeHomeSettings() {
         let center = NotificationCenter.default
         center.publisher(for: HomeRowSettings.changedNotification)
+            .merge(with: center.publisher(for: HeroLibraries.changedNotification))
             .sink { [weak self] _ in self?.homeSettingsRevision += 1 }
             .store(in: &cancellables)
         // The settings that change which lists are fetched.

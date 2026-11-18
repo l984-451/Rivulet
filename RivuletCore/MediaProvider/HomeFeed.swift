@@ -92,11 +92,13 @@ nonisolated enum HomeFeed {
             }
             for case let (id, rows?) in found { hubs[id] = rows }
         }
-        // Two servers can share a hub id, so a row's id names its server.
-        let rows = hubs.mapValues { rows in
-            rows.filter { !$0.items.isEmpty }.map {
+        // Two servers can share a hub id, so a row's id names its server. Each item names its library,
+        // which Jellyfin and Emby leave out, for the hero's library filter (`HeroLibraries`).
+        var rows: [String: [MediaHub]] = [:]
+        for (libraryID, libraryRows) in hubs {
+            rows[libraryID] = libraryRows.filter { !$0.items.isEmpty }.map {
                 MediaHub(id: "\(provider.id)|\($0.id)", providerID: $0.providerID, title: $0.title, style: $0.style,
-                         items: $0.items, pagingKey: $0.pagingKey, isPromoted: $0.isPromoted)
+                         items: $0.items.map { $0.inLibrary(libraryID) }, pagingKey: $0.pagingKey, isPromoted: $0.isPromoted)
             }
         }
         return ServerRows(libraries: libraries, photoLibraries: all.filter { $0.kind == .photos },

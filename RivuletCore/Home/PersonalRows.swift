@@ -119,7 +119,7 @@ nonisolated enum PersonalRows {
             do {
                 var items: [MediaItem] = []
                 for library in request.libraries {
-                    items += try await request.provider.favorites(in: library, limit: rowLimit)
+                    items += try await request.provider.favorites(in: library, limit: rowLimit).map { $0.inLibrary(library.id) }
                 }
                 // Each library's come sorted by name; merge them the same way.
                 if request.libraries.count > 1 {

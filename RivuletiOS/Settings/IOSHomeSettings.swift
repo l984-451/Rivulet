@@ -45,6 +45,23 @@ struct IOSHomeSettingsView: View {
                 }
             }
 
+            let heroLibraries = browse.heroLibraries
+            if !heroLibraries.isEmpty {
+                Section {
+                    // Two servers can number a library alike, so the id names the server too.
+                    ForEach(heroLibraries, id: \.self) { library in
+                        Toggle(isOn: Binding(get: { HeroLibraries.isIncluded(library) },
+                                             set: { HeroLibraries.set(library, included: $0) })) {
+                            Text(verbatim: browse.labels.title(library.title, providerID: library.providerID))
+                        }
+                    }
+                } header: {
+                    Text("Hero Libraries")
+                } footer: {
+                    Text("Turn a library off to keep its titles out of the hero. Its rows stay on Home.")
+                }
+            }
+
             Section {
                 Button("Reset Hero", role: .destructive) { confirmingReset = true }
             }

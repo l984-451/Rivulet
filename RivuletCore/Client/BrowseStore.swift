@@ -398,14 +398,16 @@ final class BrowseStore: ObservableObject {
     // MARK: - Hero
 
     func trendingHeroItems() async -> [MediaItem] {
-        await heroSources.trending(providers: allProviders).filter(isShownOnHome)
+        let heroAllows = HeroLibraries.allows
+        return await heroSources.trending(providers: allProviders, shown: { self.isShownOnHome($0) && heroAllows($0) })
     }
 
     /// The watchlist's first ten entries that any server owns, in watchlist order.
     func watchlistHeroItems() async -> [MediaItem] {
         let entries = Array(PlexWatchlistService.shared.watchlistItems.prefix(10))
-        return await heroSources.watchlist(titles: entries.map(TitleMatch.init), key: entries.map(\.id), providers: allProviders)
-            .filter(isShownOnHome)
+        let heroAllows = HeroLibraries.allows
+        return await heroSources.watchlist(titles: entries.map(TitleMatch.init), key: entries.map(\.id), providers: allProviders,
+                                           shown: { self.isShownOnHome($0) && heroAllows($0) })
     }
 
     /// False for an item from a hidden library; an item that names no library stays.

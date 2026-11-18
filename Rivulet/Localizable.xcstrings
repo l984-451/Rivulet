@@ -4627,6 +4627,28 @@
         }
       }
     },
+    "Libraries" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mediatheken"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Βιβλιοθήκες"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bibliothèques"
+          }
+        }
+      }
+    },
     "The Guide lists every channel against the time. What's On shows rows of what is on now, with multiview, like the Apple TV app." : {
       "localizations" : {
         "de" : {
@@ -14589,6 +14611,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Plex HTTP %lld"
+          }
+        }
+      }
+    },
+    "Turn a library off to keep its titles out of the hero. Its rows stay on Home." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schalte eine Mediathek aus, damit ihre Titel nicht im Hero erscheinen. Ihre Reihen bleiben auf der Startseite."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Απενεργοποιήστε μια βιβλιοθήκη για να μην εμφανίζονται οι τίτλοι της στην κεντρική προβολή. Οι σειρές της παραμένουν στην Αρχική."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Désactivez une bibliothèque pour exclure ses titres de la bannière. Ses rangées restent dans Accueil."
           }
         }
       }

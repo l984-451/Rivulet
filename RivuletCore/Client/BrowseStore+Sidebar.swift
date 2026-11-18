@@ -37,6 +37,12 @@ extension BrowseStore {
         !hiddenSidebarLibraries.contains(SidebarLibraryVisibility.key(for: library))
     }
 
+    /// The video libraries the hero can draw from (Home's, hidden ones left out), in sidebar order.
+    /// Settings > Home lists them so one can be left out of the hero (`HeroLibraries`).
+    var heroLibraries: [MediaLibrary] {
+        libraries.filter(isSidebarLibraryShown).sidebarOrder(servers: providerOrder)
+    }
+
     func setSidebarLibrary(_ library: MediaLibrary, shown: Bool) {
         setSidebarLibraries([library], shown: shown)
     }

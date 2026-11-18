@@ -451,7 +451,8 @@ extension EmbyProvider {
             .filter { seen.insert($0).inserted }
         guard !pairs.isEmpty else { return [] }
         var found: [EmbyItem] = []
-        var foundIDs = Set<String>()
+        // The library each hit was found in, which an item does not name (the hero's library filter reads it).
+        var libraryOf: [String: String] = [:]
         for library in try await libraries() where [.movies, .shows, .mixed].contains(library.kind) {
             for start in stride(from: 0, to: pairs.count, by: 200) {
                 let batch = pairs[start..<min(start + 200, pairs.count)]
@@ -462,12 +463,15 @@ extension EmbyProvider {
                     URLQueryItem(name: "AnyProviderIdEquals", value: batch.joined(separator: ",")),
                     Self.identityFields
                 ]).items ?? []
-                found += hits.filter { foundIDs.insert($0.id.value).inserted }
+                for hit in hits where libraryOf[hit.id.value] == nil {
+                    libraryOf[hit.id.value] = library.id
+                    found.append(hit)
+                }
             }
         }
         let owned = found.map { (id: $0.id.value, kind: EmbyMediaMapper.kind($0.type), ids: EmbyMediaMapper.externalIDs($0)) }
         let byID = Dictionary(map(found).map { ($0.ref.itemID, $0) }, uniquingKeysWith: { first, _ in first })
-        return TitleMatch.orderedIDs(titles, among: owned, limit: limit).compactMap { byID[$0] }
+        return TitleMatch.orderedIDs(titles, among: owned, limit: limit).compactMap { id in byID[id]?.inLibrary(libraryOf[id]) }
     }
 
     /// This server's image fitted to the box. `FillWidth` and `FillHeight` are ignored here (measured: the

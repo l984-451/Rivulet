@@ -115,11 +115,20 @@ final class JellyfinSeamTests: XCTestCase {
 
     // MARK: - Owned by id
 
-    func test_ownedItems_listsProviderIdsThenFetchesTheMatchesInTitleOrder() async throws {
-        server.respond("/Items", query: ["fields": "ProviderIds"], body: """
+    /// Each video library is listed on its own, so a match names the library it is in (the hero's
+    /// library filter reads it). The music library is not listed.
+    func test_ownedItems_listsEachLibrarysProviderIdsThenFetchesTheMatchesInTitleOrder() async throws {
+        server.respond("/UserViews", body: """
+            {"Items":[{"Id":"lib-m","Name":"Movies","CollectionType":"movies"},
+                      {"Id":"lib-tv","Name":"TV","CollectionType":"tvshows"},
+                      {"Id":"lib-music","Name":"Music","CollectionType":"music"}],"TotalRecordCount":3}
+            """)
+        server.respond("/Items", query: ["fields": "ProviderIds", "parentId": "lib-m"], body: """
             {"Items":[{"Id":"up","Type":"Movie","ProviderIds":{"Tmdb":"14160"}},
-                      {"Id":"abbott","Type":"Series","ProviderIds":{"Tvdb":"9","Imdb":"tt1"}},
-                      {"Id":"none","Type":"Movie","ProviderIds":{}}],"TotalRecordCount":3}
+                      {"Id":"none","Type":"Movie","ProviderIds":{}}],"TotalRecordCount":2}
+            """)
+        server.respond("/Items", query: ["fields": "ProviderIds", "parentId": "lib-tv"], body: """
+            {"Items":[{"Id":"abbott","Type":"Series","ProviderIds":{"Tvdb":"9","Imdb":"tt1"}}],"TotalRecordCount":1}
             """)
         server.respond("/Items", query: ["ids": "abbott,up"], body: """
             {"Items":[{"Id":"up","Name":"Up","Type":"Movie"},{"Id":"abbott","Name":"Abbott","Type":"Series"}]}
@@ -130,20 +139,31 @@ final class JellyfinSeamTests: XCTestCase {
                       TitleMatch(kind: .show, externalIDs: ["tmdb": "14160"], plexGUID: nil)]
         let items = try await provider().ownedItems(matching: titles, limit: 10)
         XCTAssertEqual(items.map(\.ref.itemID), ["abbott", "up"])
-        XCTAssertEqual(dict(0)["recursive"], "true")
-        XCTAssertEqual(dict(0)["includeItemTypes"], "Movie,Series")
-        XCTAssertNil(dict(0)["parentId"], "server-wide")
+        XCTAssertEqual(items.map(\.libraryID), ["lib-tv", "lib-m"])
+        let listings = server.requests.compactMap { request -> [String: String]? in
+            let q = queryDict(request.url!)
+            return q["fields"] == "ProviderIds" ? q : nil
+        }
+        XCTAssertEqual(listings.map { $0["parentId"] }, ["lib-m", "lib-tv"])
+        XCTAssertEqual(listings.first?["recursive"], "true")
+        XCTAssertEqual(listings.first?["includeItemTypes"], "Movie,Series")
     }
 
     private let ownedIndex = """
         {"Items":[{"Id":"up","Type":"Movie","ProviderIds":{"Tmdb":"14160"}}],"TotalRecordCount":1}
         """
 
+    /// One movie library, for the tests about the listing's lifetime.
+    private func respondWithOneLibrary() {
+        server.respond("/UserViews", body: #"{"Items":[{"Id":"lib-m","Name":"Movies","CollectionType":"movies"}]}"#)
+    }
+
     private func idIndexRequests() -> Int {
         server.requests.filter { $0.url?.query?.contains("fields=ProviderIds") == true }.count
     }
 
     func test_ownedItems_theIdIndexIsKeptForTenMinutes() async throws {
+        respondWithOneLibrary()
         server.respond("/Items", query: ["fields": "ProviderIds"], body: ownedIndex)
         server.respond("/Items", query: ["ids": "up"], body: #"{"Items":[{"Id":"up","Name":"Up","Type":"Movie"}]}"#)
         let clock = Clock()
@@ -167,6 +187,7 @@ final class JellyfinSeamTests: XCTestCase {
         let p = provider()
         let titles = [TitleMatch(kind: .movie, externalIDs: ["tmdb": "14160"], plexGUID: nil)]
         do { _ = try await p.ownedItems(matching: titles, limit: 10); XCTFail("expected a throw") } catch {}
+        respondWithOneLibrary()
         server.respond("/Items", query: ["fields": "ProviderIds"], body: ownedIndex)
         server.respond("/Items", query: ["ids": "up"], body: #"{"Items":[{"Id":"up","Name":"Up","Type":"Movie"}]}"#)
         let items = try await p.ownedItems(matching: titles, limit: 10)
@@ -174,6 +195,7 @@ final class JellyfinSeamTests: XCTestCase {
     }
 
     func test_ownedItems_concurrentCallsShareOneListing() async throws {
+        respondWithOneLibrary()
         server.respond("/Items", query: ["fields": "ProviderIds"], body: ownedIndex)
         server.respond("/Items", query: ["ids": "up"], body: #"{"Items":[{"Id":"up","Name":"Up","Type":"Movie"}]}"#)
         let p = provider()
@@ -185,11 +207,12 @@ final class JellyfinSeamTests: XCTestCase {
     }
 
     func test_ownedItems_nothingMatchedSkipsTheSecondRequest() async throws {
+        respondWithOneLibrary()
         server.respond("/Items", body: #"{"Items":[{"Id":"up","Type":"Movie","ProviderIds":{"Tmdb":"1"}}]}"#)
         let items = try await provider().ownedItems(
             matching: [TitleMatch(kind: .movie, externalIDs: ["tmdb": "2"], plexGUID: nil)], limit: 10)
         XCTAssertTrue(items.isEmpty)
-        XCTAssertEqual(server.requests.count, 1)
+        XCTAssertFalse(server.requests.contains { queryDict($0.url!)["ids"] != nil }, "no lookup of the matches")
     }
 
     // MARK: - Image sizing

@@ -26,23 +26,31 @@ nonisolated enum HomeHero {
     }
 
     /// iOS's slides: the lists `sources` and the hero playlists name, mixed. With nothing in them,
-    /// trending, and with no trending match, Home's rows.
+    /// trending, and with no trending match, Home's rows. `allows` leaves out the libraries the hero skips
+    /// (`HeroLibraries`), before the cap.
     static func items(sources: Set<HeroSources.Source>, continueWatching: [MediaItem], shelves: [MediaHub],
                       watchlist: [MediaItem], trending: [MediaItem], personal: [PersonalRow],
-                      heroPins: [HomePlaylistPins.Pin], isRowHidden: (MediaHub) -> Bool = { _ in false }) -> [MediaItem] {
+                      heroPins: [HomePlaylistPins.Pin], isRowHidden: (MediaHub) -> Bool = { _ in false },
+                      allows: (MediaItem) -> Bool = { _ in true }) -> [MediaItem] {
+        let trending = trending.filter(allows)
+        let shelves = shelves.map { hub in
+            MediaHub(id: hub.id, providerID: hub.providerID, title: hub.title, style: hub.style,
+                     items: hub.items.filter(allows), pagingKey: hub.pagingKey, isPromoted: hub.isPromoted)
+        }
         var lists: [[MediaItem]] = []
         for source in HeroSources.Source.allCases where sources.contains(source) {
             switch source {
             case .trending: lists.append(trending)
-            case .continueWatching: lists.append(continueWatching.prefix(HomeFeed.railLimit).filter(hasBackdrop))
+            case .continueWatching:
+                lists.append(continueWatching.prefix(HomeFeed.railLimit).filter { hasBackdrop($0) && allows($0) })
             case .recentlyAdded: lists.append(recentlyAdded(shelves, isRowHidden: isRowHidden))
-            case .watchlist: lists.append(watchlist)
+            case .watchlist: lists.append(watchlist.filter(allows))
             case .favoriteMovies, .favoriteShows:
                 let kind: MediaLibrary.LibraryKind = source == .favoriteShows ? .shows : .movies
-                lists.append(roundRobin(PersonalRows.favoriteItems(personal, kind)).filter(hasBackdrop))
+                lists.append(roundRobin(PersonalRows.favoriteItems(personal, kind)).filter { hasBackdrop($0) && allows($0) })
             }
         }
-        lists += heroPins.map { PersonalRows.playlistItems(personal, $0).filter(hasBackdrop) }
+        lists += heroPins.map { PersonalRows.playlistItems(personal, $0).filter { hasBackdrop($0) && allows($0) } }
         let mixed = mix(lists)
         if !mixed.isEmpty { return mixed }
         return trending.isEmpty ? rowItems(shelves) : trending
@@ -112,38 +120,42 @@ final class HomeHeroSources {
         return TrendingMatch.interleave(movies: await movies, shows: await shows).map(TitleMatch.init)
     }
 
-    private var trendingCache: (servers: [String], items: [MediaItem], at: Date)?
-    private var watchlistCache: (key: [String], servers: [String], items: [MediaItem])?
+    /// Each server's matches as found, so what `shown` leaves out is dropped before the cap, and
+    /// before the copies of a title on two servers become one.
+    private var trendingCache: (servers: [String], lists: [[MediaItem]], at: Date)?
+    private var watchlistCache: (key: [String], servers: [String], lists: [[MediaItem]])?
 
     func reset() {
         trendingCache = nil
         watchlistCache = nil
     }
 
-    func trending(providers: [any MediaProvider]) async -> [MediaItem] {
+    /// `shown` leaves out titles Home or the hero skips (a hidden or left-out library).
+    func trending(providers: [any MediaProvider], shown: (MediaItem) -> Bool = { _ in true }) async -> [MediaItem] {
         let servers = providers.map(\.id)
         if let cache = trendingCache, cache.servers == servers, Date.now.timeIntervalSince(cache.at) < Self.lifetime {
-            return cache.items
+            return Self.pick(cache.lists, shown)
         }
         let titles = await trendingTitles()
         guard !titles.isEmpty else { return [] }
-        let items = await owned(titles, providers)
-        if !items.isEmpty { trendingCache = (servers, items, .now) }
-        return items
+        let lists = await owned(titles, providers)
+        if lists.contains(where: { !$0.isEmpty }) { trendingCache = (servers, lists, .now) }
+        return Self.pick(lists, shown)
     }
 
     /// The watchlist's entries that any server owns, in watchlist order. `key` names the entries
     /// (their ids), so a changed list asks again.
-    func watchlist(titles: [TitleMatch], key: [String], providers: [any MediaProvider]) async -> [MediaItem] {
+    func watchlist(titles: [TitleMatch], key: [String], providers: [any MediaProvider],
+                   shown: (MediaItem) -> Bool = { _ in true }) async -> [MediaItem] {
         let servers = providers.map(\.id)
-        if let cache = watchlistCache, cache.key == key, cache.servers == servers { return cache.items }
-        let items = await owned(titles, providers)
-        watchlistCache = (key, servers, items)
-        return items
+        if let cache = watchlistCache, cache.key == key, cache.servers == servers { return Self.pick(cache.lists, shown) }
+        let lists = await owned(titles, providers)
+        watchlistCache = (key, servers, lists)
+        return Self.pick(lists, shown)
     }
 
-    /// Each server's matches with a backdrop, one server after another in turn, at most ten.
-    private func owned(_ titles: [TitleMatch], _ providers: [any MediaProvider]) async -> [MediaItem] {
+    /// Each server's matches with a backdrop, in provider order.
+    private func owned(_ titles: [TitleMatch], _ providers: [any MediaProvider]) async -> [[MediaItem]] {
         let lists = await withTaskGroup(of: (Int, [MediaItem]).self) { group in
             for (index, provider) in providers.enumerated() {
                 group.addTask {
@@ -153,6 +165,11 @@ final class HomeHeroSources {
             }
             return await group.reduce(into: [Int: [MediaItem]]()) { $0[$1.0] = $1.1 }
         }
-        return Array(HomeHero.deduplicated(HomeHero.roundRobin(providers.indices.map { lists[$0] ?? [] })).prefix(HomeHero.cap))
+        return providers.indices.map { lists[$0] ?? [] }
+    }
+
+    /// The shown matches, one server after another in turn, each title once, at most ten.
+    private static func pick(_ lists: [[MediaItem]], _ shown: (MediaItem) -> Bool) -> [MediaItem] {
+        Array(HomeHero.deduplicated(HomeHero.roundRobin(lists.map { $0.filter(shown) })).prefix(HomeHero.cap))
     }
 }

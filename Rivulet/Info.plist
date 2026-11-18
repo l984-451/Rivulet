@@ -44,5 +44,8 @@
 	<array>
 		<string>audio</string>
 	</array>
+	<!-- The app icon's sky, which the launch splash opens on. -->
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
 </dict>
 </plist>

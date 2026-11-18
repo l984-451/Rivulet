@@ -42,7 +42,10 @@ nonisolated extension ContinueWatchingCardCompositor {
         let key = cacheKey(layer, url, geometry, scale)
         if let cached = cache.object(forKey: key) { return cached }
         let diskKey = key as String
-        var rendered = storedImage(diskKey)
+        // On its own queue: this function runs on its caller's actor, which is the main actor for a cell.
+        var rendered = await offMain { storedImage(diskKey) }
+        // Another caller may have finished the same layer meanwhile.
+        if let cached = cache.object(forKey: key) { return cached }
         if rendered == nil {
             guard let source = await ImageCacheManager.shared.image(for: url)?.cgImage else { return nil }
             rendered = await offPool {
@@ -69,6 +72,15 @@ nonisolated extension ContinueWatchingCardCompositor {
     private static func offPool<T: Sendable>(_ work: @escaping @Sendable () -> T) async -> T {
         await withCheckedContinuation { continuation in
             workQueue.async { continuation.resume(returning: work()) }
+        }
+    }
+
+    /// Reads of stored layers: short, and kept off `workQueue` so they never wait behind a still's analysis.
+    private static let diskQueue = DispatchQueue(label: "rivulet.artwork-disk", qos: .userInitiated)
+
+    private static func offMain<T: Sendable>(_ work: @escaping @Sendable () -> T) async -> T {
+        await withCheckedContinuation { continuation in
+            diskQueue.async { continuation.resume(returning: work()) }
         }
     }
 
@@ -160,7 +172,7 @@ nonisolated extension ContinueWatchingCardCompositor {
 
     private static func storedImage(_ key: String) -> CGImage? {
         guard let url = diskURL(key), let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-        // Decoded here, not on the main thread at first draw.
+        // Decoded here (on `diskQueue`), not on the main thread at first draw.
         return CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary)
     }
 

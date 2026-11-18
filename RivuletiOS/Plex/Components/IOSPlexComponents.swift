@@ -184,7 +184,8 @@ struct IOSPlexResolvedLogo: View {
 // MARK: - Watch state
 
 extension View {
-    /// Progress bar along the bottom, or the watched check when there is no bar.
+    /// Progress bar along the bottom, or the watched check when there is no bar. A show with
+    /// episodes left wears their count instead (#658).
     func plexWatchState(_ item: MediaItem) -> some View {
         overlay(alignment: .bottom) {
             if let fraction = item.progressBarFraction {
@@ -197,7 +198,9 @@ extension View {
             }
         }
         .overlay(alignment: .topTrailing) {
-            if item.progressBarFraction == nil, item.isWatched {
+            if let count = item.unwatchedEpisodeCount {
+                UnwatchedCountPill(count: count)
+            } else if item.progressBarFraction == nil, item.isWatched {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.subheadline)
                     .symbolRenderingMode(.palette)
@@ -205,6 +208,22 @@ extension View {
                     .padding(6)
             }
         }
+    }
+}
+
+/// A show's unwatched episodes, in the edition badge's dark capsule.
+private struct UnwatchedCountPill: View {
+    let count: Int
+
+    var body: some View {
+        Text(count, format: .number)
+            .font(.caption2.weight(.semibold))
+            .monospacedDigit()
+            .foregroundStyle(.white)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(.black.opacity(0.55), in: Capsule())
+            .padding(6)
     }
 }
 

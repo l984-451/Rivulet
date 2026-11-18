@@ -15,14 +15,17 @@ final class PosterCell: UICollectionViewCell {
 
     private let overlayContainer = UIView()
 
-    private let watchedBadge = PosterWatchedBadge()
+    /// A show's unwatched episodes.
+    private let unwatchedBadge = SourceBadgeView(style: .onArtwork)
     private let sourceBadge = SourceBadgeView(style: .onArtwork)
     /// Plex edition ("Director's Cut"), so two editions sharing a poster tell apart.
     private let editionBadge = SourceBadgeView(style: .onArtwork)
     /// Top-leading column: the server badge.
     private let topBadges = UIStackView()
-    /// Top-trailing column: unwatched count, then edition badge.
+    /// Top-trailing column: unwatched count, then edition badge. Shown on focus; a dot stands in at rest.
     private let trailingBadges = UIStackView()
+    /// Drawn glass, not a UIVisualEffectView: one per cell is a measured cost (see `bottomInfoBlur`).
+    private let trailingDot = UIView()
     private let failureIcon = UIImageView()
     /// The title on the failure card, so an item with no artwork is still named.
     private let failureTitle = UILabel()
@@ -144,14 +147,26 @@ final class PosterCell: UICollectionViewCell {
         overlayContainer.addSubview(progressInfoBar)
 
         // Unwatched count then edition badge: top-trailing, 10pt inset. Hidden badges collapse.
-        watchedBadge.isHidden = true
         trailingBadges.translatesAutoresizingMaskIntoConstraints = false
         trailingBadges.axis = .vertical
         trailingBadges.alignment = .trailing
         trailingBadges.spacing = 6
-        trailingBadges.addArrangedSubview(watchedBadge)
+        trailingBadges.addArrangedSubview(unwatchedBadge)
         trailingBadges.addArrangedSubview(editionBadge)
         overlayContainer.addSubview(trailingBadges)
+
+        trailingDot.translatesAutoresizingMaskIntoConstraints = false
+        trailingDot.isUserInteractionEnabled = false
+        trailingDot.alpha = 0
+        trailingDot.backgroundColor = UIColor(white: 1, alpha: 0.35)
+        trailingDot.layer.cornerRadius = 6
+        trailingDot.layer.borderWidth = 1
+        trailingDot.layer.borderColor = UIColor(white: 1, alpha: 0.5).cgColor
+        trailingDot.layer.shadowColor = UIColor.black.cgColor
+        trailingDot.layer.shadowOpacity = 0.35
+        trailingDot.layer.shadowRadius = 3
+        trailingDot.layer.shadowOffset = CGSize(width: 0, height: 1)
+        overlayContainer.addSubview(trailingDot)
 
         // Server badge: top-leading, 10pt inset.
         topBadges.translatesAutoresizingMaskIntoConstraints = false
@@ -210,6 +225,10 @@ final class PosterCell: UICollectionViewCell {
             trailingBadges.topAnchor.constraint(equalTo: overlayContainer.topAnchor, constant: 10),
             trailingBadges.trailingAnchor.constraint(equalTo: overlayContainer.trailingAnchor, constant: -10),
             trailingBadges.leadingAnchor.constraint(greaterThanOrEqualTo: overlayContainer.leadingAnchor, constant: 10),
+            trailingDot.topAnchor.constraint(equalTo: overlayContainer.topAnchor, constant: 14),
+            trailingDot.trailingAnchor.constraint(equalTo: overlayContainer.trailingAnchor, constant: -14),
+            trailingDot.widthAnchor.constraint(equalToConstant: 12),
+            trailingDot.heightAnchor.constraint(equalToConstant: 12),
             topBadges.topAnchor.constraint(equalTo: overlayContainer.topAnchor, constant: 10),
             topBadges.leadingAnchor.constraint(equalTo: overlayContainer.leadingAnchor, constant: 10),
             topBadges.trailingAnchor.constraint(lessThanOrEqualTo: overlayContainer.trailingAnchor, constant: -10),
@@ -245,10 +264,13 @@ final class PosterCell: UICollectionViewCell {
         super.didUpdateFocus(in: context, with: coordinator)
         let nowFocused = context.nextFocusedView === self
                       || context.nextFocusedView?.isDescendant(of: self) == true
+        // Start the badges from the dot's corner at their current size.
+        if nowFocused { UIView.performWithoutAnimation { revealTrailingBadges(false) } }
         coordinator.addCoordinatedAnimations({
             self.posterView.transform = nowFocused ? self.tile.focusScale : .identity
             self.progressInfoBar.setFocused(nowFocused)
             self.caption.setFocused(nowFocused)
+            self.revealTrailingBadges(nowFocused)
         }, completion: { [weak self] in
             guard let self, !nowFocused else { return }
             // TVPosterView's own unfocus sometimes leaves the poster enlarged; enforce the end state.
@@ -284,6 +306,7 @@ final class PosterCell: UICollectionViewCell {
         loadImage(from: url, item: item)
         configureProgressBar(item: item)
         configureWatchedBadge(item: item)
+        revealTrailingBadges(isFocused)
     }
 
     /// MediaItem path. All artwork URLs are already resolved — no serverURL/token needed.
@@ -298,6 +321,7 @@ final class PosterCell: UICollectionViewCell {
         loadImage(from: url, failureKind: item.kind)
         configureProgressBar(item: item)
         configureWatchedBadge(item: item)
+        revealTrailingBadges(isFocused)
     }
 
     /// The title line (`PosterCaption.set`); call after `configure`.
@@ -352,7 +376,7 @@ final class PosterCell: UICollectionViewCell {
         clearArtwork()
         progressInfoBar.isHidden = true; bottomInfoBlur?.isHidden = true
         progressInfoBar.reset()
-        watchedBadge.isHidden = true
+        unwatchedBadge.text = nil
         sourceBadge.text = nil
         editionBadge.text = nil
         watchedGlyph.isHidden = true
@@ -361,6 +385,7 @@ final class PosterCell: UICollectionViewCell {
         failureTitle.isHidden = true
         failureTitle.text = nil
         caption.set(nil)
+        revealTrailingBadges(false)
         // A recycled cell must not inherit a prior occupant's stranded focus
         // (enlarged) appearance — clear any leftover scale transform.
         resetStaleFocusAppearance()
@@ -551,7 +576,7 @@ final class PosterCell: UICollectionViewCell {
     private func configureWatchedBadge(item: PlexMetadata) {
         // Ladder:
         //  1. Audio items: nothing.
-        //  2. TV show with leafCount > 0 and unwatched > 0: blue count pill (top-right).
+        //  2. TV show with leafCount > 0 and unwatched > 0: count badge (top-right, on focus).
         //  3. Fully watched (show / movie / episode): rewatch glyph (bottom-left).
         if isAudioItem(item) {
             hideWatchedIndicators()
@@ -665,76 +690,41 @@ final class PosterCell: UICollectionViewCell {
     /// own soft shadow.
     private func showWatchedGlyph() {
         watchedGlyph.isHidden = false
-        watchedBadge.isHidden = true
+        unwatchedBadge.text = nil
     }
 
-    /// Unwatched TV show → blue count pill, top-right.
+    /// Unwatched TV show → count badge, top-right.
     private func showUnwatchedCount(_ count: Int) {
-        watchedBadge.setStyle(.unwatchedCount(count))
-        watchedBadge.isHidden = false
+        unwatchedBadge.text = count.formatted()
         watchedGlyph.isHidden = true
     }
 
     private func hideWatchedIndicators() {
-        watchedBadge.isHidden = true
+        unwatchedBadge.text = nil
         watchedGlyph.isHidden = true
     }
-}
 
-// MARK: - Unwatched-count badge
-
-/// Top-trailing blue pill with an in-progress show's unwatched-episode count.
-@MainActor
-final class PosterWatchedBadge: UIView {
-    enum Style {
-        case unwatchedCount(Int)
+    /// The trailing badges show on focus; at rest a dot says the tile has something there.
+    private func revealTrailingBadges(_ focused: Bool) {
+        let hasBadge = trailingBadges.arrangedSubviews.contains { !$0.isHidden }
+        trailingBadges.alpha = focused ? 1 : 0
+        trailingBadges.transform = focused ? .identity : Self.shrunk(trailingBadges.bounds.size)
+        // The dot swells as it fades, so it reads as growing into the badges.
+        trailingDot.alpha = hasBadge && !focused ? 1 : 0
+        trailingDot.transform = focused ? CGAffineTransform(scaleX: 1.8, y: 1.8) : .identity
     }
 
-    private let pillLabel = UILabel()
-    private let pillBackground = UIView()
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        isUserInteractionEnabled = false
-        backgroundColor = .clear
-
-        // Blue capsule with N text.
-        pillBackground.translatesAutoresizingMaskIntoConstraints = false
-        pillBackground.backgroundColor = .systemBlue
-        pillBackground.layer.cornerRadius = 10
-        pillBackground.layer.cornerCurve = .continuous
-        pillBackground.layer.shadowColor = UIColor.black.cgColor
-        pillBackground.layer.shadowOpacity = 0.3
-        pillBackground.layer.shadowRadius = 4
-        pillBackground.layer.shadowOffset = CGSize(width: 0, height: 2)
-        addSubview(pillBackground)
-
-        pillLabel.translatesAutoresizingMaskIntoConstraints = false
-        pillLabel.font = .systemFont(ofSize: 12, weight: .bold)
-        pillLabel.textColor = .white
-        pillBackground.addSubview(pillLabel)
-
-        NSLayoutConstraint.activate([
-            pillLabel.topAnchor.constraint(equalTo: pillBackground.topAnchor, constant: 4),
-            pillLabel.bottomAnchor.constraint(equalTo: pillBackground.bottomAnchor, constant: -4),
-            pillLabel.leadingAnchor.constraint(equalTo: pillBackground.leadingAnchor, constant: 8),
-            pillLabel.trailingAnchor.constraint(equalTo: pillBackground.trailingAnchor, constant: -8),
-
-            pillBackground.topAnchor.constraint(equalTo: topAnchor),
-            pillBackground.bottomAnchor.constraint(equalTo: bottomAnchor),
-            pillBackground.leadingAnchor.constraint(equalTo: leadingAnchor),
-            pillBackground.trailingAnchor.constraint(equalTo: trailingAnchor)
-        ])
+    /// Half size, pinned at the top-trailing corner.
+    private static func shrunk(_ size: CGSize) -> CGAffineTransform {
+        let scale: CGFloat = 0.5
+        return CGAffineTransform(translationX: size.width * (1 - scale) / 2, y: -size.height * (1 - scale) / 2)
+            .scaledBy(x: scale, y: scale)
     }
 
-    required init?(coder: NSCoder) { fatalError() }
-
-    func setStyle(_ style: Style) {
-        switch style {
-        case .unwatchedCount(let count):
-            pillLabel.text = "\(count)"
-        }
-    }
+    /// The unwatched count while it shows (tests).
+    var unwatchedBadgeText: String? { unwatchedBadge.isHidden ? nil : unwatchedBadge.text }
+    /// Whether the resting dot shows (tests).
+    var showsTrailingDot: Bool { trailingDot.alpha > 0 }
 }
 
 extension PosterCell: PreviewSourceTile {

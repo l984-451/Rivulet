@@ -16221,6 +16221,28 @@
           }
         }
       }
+    },
+    "%lld unwatched episodes" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld unwatched episode"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld unwatched episodes"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

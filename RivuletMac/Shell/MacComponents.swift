@@ -177,7 +177,8 @@ struct MacProgressBar: View {
 }
 
 extension View {
-    /// Progress bar along the bottom, or the watched check when there is no bar.
+    /// Progress bar along the bottom, or the watched check when there is no bar. A show with
+    /// episodes left wears their count instead (#658).
     func macWatchState(_ item: MediaItem) -> some View {
         overlay(alignment: .bottom) {
             if let fraction = item.progressBarFraction {
@@ -185,7 +186,9 @@ extension View {
             }
         }
         .overlay(alignment: .topTrailing) {
-            if item.progressBarFraction == nil, item.isWatched {
+            if let count = item.unwatchedEpisodeCount {
+                MacUnwatchedCountPill(count: count)
+            } else if item.progressBarFraction == nil, item.isWatched {
                 Image(systemName: "checkmark.circle.fill")
                     .font(.subheadline)
                     .symbolRenderingMode(.palette)
@@ -204,6 +207,22 @@ extension View {
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.secondary, lineWidth: 1))
+    }
+}
+
+/// A show's unwatched episodes, in the edition badge's dark capsule.
+private struct MacUnwatchedCountPill: View {
+    let count: Int
+
+    var body: some View {
+        Text(count, format: .number)
+            .font(.caption2.weight(.semibold))
+            .monospacedDigit()
+            .foregroundStyle(.white)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(.black.opacity(0.55), in: Capsule())
+            .padding(6)
     }
 }
 

@@ -91,6 +91,7 @@ final class PosterCell: UICollectionViewCell {
     /// 2:3 poster one. Set per item in `configure(...)`.
     private var posterWidthConstraint: NSLayoutConstraint!
     private var posterHeightConstraint: NSLayoutConstraint!
+    private var caption: PosterCaption!
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -180,10 +181,15 @@ final class PosterCell: UICollectionViewCell {
         watchedGlyph.isHidden = true
         overlayContainer.addSubview(watchedGlyph)
 
+        let posterCenterY = posterView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor)
+        caption = PosterCaption(in: contentView, under: posterView,
+                                leading: posterView.imageView.leadingAnchor,
+                                trailing: posterView.imageView.trailingAnchor,
+                                tileCenterY: posterCenterY)
         posterWidthConstraint = posterView.widthAnchor.constraint(equalToConstant: tile.hostSize.width)
         posterHeightConstraint = posterView.heightAnchor.constraint(equalToConstant: tile.hostSize.height)
         NSLayoutConstraint.activate([
-            posterView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            posterCenterY,
             posterView.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
             posterWidthConstraint,
             posterHeightConstraint,
@@ -242,6 +248,7 @@ final class PosterCell: UICollectionViewCell {
         coordinator.addCoordinatedAnimations({
             self.posterView.transform = nowFocused ? self.tile.focusScale : .identity
             self.progressInfoBar.setFocused(nowFocused)
+            self.caption.setFocused(nowFocused)
         }, completion: { [weak self] in
             guard let self, !nowFocused else { return }
             // TVPosterView's own unfocus sometimes leaves the poster enlarged; enforce the end state.
@@ -292,6 +299,9 @@ final class PosterCell: UICollectionViewCell {
         configureProgressBar(item: item)
         configureWatchedBadge(item: item)
     }
+
+    /// The title line (`PosterCaption.set`); call after `configure`.
+    func setCaption(_ text: String?) { caption.set(text) }
 
     /// Names the item's server; call after `configure` (which never adds one).
     func setSourceBadge(_ text: String?) { sourceBadge.text = text }
@@ -350,6 +360,7 @@ final class PosterCell: UICollectionViewCell {
         failureIcon.image = nil
         failureTitle.isHidden = true
         failureTitle.text = nil
+        caption.set(nil)
         // A recycled cell must not inherit a prior occupant's stranded focus
         // (enlarged) appearance — clear any leftover scale transform.
         resetStaleFocusAppearance()

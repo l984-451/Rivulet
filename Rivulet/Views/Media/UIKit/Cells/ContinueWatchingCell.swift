@@ -30,6 +30,7 @@ final class ContinueWatchingCell: UICollectionViewCell {
     private let placeholderIcon = UIImageView()
     private let titleLogoView = ContinueWatchingTitleLogoView()
     private let infoBar = MediaProgressInfoBar()
+    private var caption: PosterCaption!
 
     private var artworkLoadTask: Task<Void, Never>?
     private var currentArtworkURL: URL?
@@ -63,8 +64,9 @@ final class ContinueWatchingCell: UICollectionViewCell {
         let host = Self.tile.hostSize
         card.contentSize = host
         contentView.addSubview(card)
+        let cardCenterY = card.centerYAnchor.constraint(equalTo: contentView.centerYAnchor)
         NSLayoutConstraint.activate([
-            card.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            cardCenterY,
             card.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
             card.widthAnchor.constraint(equalToConstant: host.width),
             card.heightAnchor.constraint(equalToConstant: host.height)
@@ -130,6 +132,18 @@ final class ContinueWatchingCell: UICollectionViewCell {
             infoBar.centerYAnchor.constraint(equalTo: card.contentView.bottomAnchor,
                                              constant: -MediaProgressInfoBar.centerFromBottom)
         ])
+        // On the resting card's width: the host is the focused card's extent.
+        caption = PosterCaption(in: contentView, under: card,
+                                leading: card.leadingAnchor, trailing: card.trailingAnchor,
+                                inset: (host.width - Self.tile.art.width) / 2,
+                                tileCenterY: cardCenterY)
+    }
+
+    /// The title line for `item`, or none when nil; call after `configure`. An episode's line is its
+    /// own title, under the show's logo. A movie's title replaces its logo: one line per card.
+    func setCaption(for item: MediaItem?) {
+        caption.set(item?.title)
+        titleLogoView.isHidden = item != nil && item?.kind != .episode
     }
 
     /// The status row's glyph, label and bar fill follow focus, on the focus clock.
@@ -141,6 +155,7 @@ final class ContinueWatchingCell: UICollectionViewCell {
         coordinator.addCoordinatedAnimations({
             self.card.transform = nowFocused ? Self.tile.focusScale : .identity
             self.infoBar.setFocused(nowFocused)
+            self.caption.setFocused(nowFocused)
         }, completion: nil)
         // Apple's floating view clears its rim while focused.
         card.contentView.layer.borderColor = nowFocused ? UIColor.clear.cgColor : Self.restingRim
@@ -213,6 +228,7 @@ final class ContinueWatchingCell: UICollectionViewCell {
         placeholderIcon.isHidden = true
         titleLogoView.prepareForReuse()
         infoBar.reset()
+        setCaption(for: nil)
     }
 
     // MARK: - Artwork

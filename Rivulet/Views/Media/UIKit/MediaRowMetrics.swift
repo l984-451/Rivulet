@@ -166,6 +166,17 @@ enum MediaRowMetrics {
         return (artBelowHeader - half, shelfArtGap - half - headerHeight - artBelowHeader)
     }
 
+    /// Room under a tile for its title line (`PosterCaption`).
+    static let posterCaptionHeight: CGFloat = 36
+    /// Settings → Appearance → Titles Under Posters: every poster row and grid.
+    static let posterTitlesKey = "showPosterTitles"
+    static let posterTitlesDefault = false
+    static var showsPosterTitles: Bool {
+        (UserDefaults.standard.object(forKey: posterTitlesKey) as? Bool) ?? posterTitlesDefault
+    }
+    /// Extra row height for the title line, 0 while the setting is off.
+    static var posterCaptionSpace: CGFloat { showsPosterTitles ? posterCaptionHeight : 0 }
+
     /// Library poster grid: artwork top to the next row's artwork top (Apple's 55 between 390-tall tiles).
     static var posterGridPitch: CGFloat { poster.art.height + 55 }
 }

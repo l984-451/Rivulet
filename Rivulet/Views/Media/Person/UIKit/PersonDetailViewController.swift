@@ -268,6 +268,7 @@ final class PersonDetailViewController: UIViewController {
     private func makeShelfSectionLayout() -> NSCollectionLayoutSection {
         let shelfHeaderHeight: CGFloat = 44   // ShelfRowCell.headerHeight
         let rowHeight = shelfHeaderHeight + MediaRowMetrics.posterHeight + MediaRowMetrics.focusGrowthPadding
+            + MediaRowMetrics.posterCaptionSpace
         let size = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1),
                                           heightDimension: .absolute(rowHeight))
         let item = NSCollectionLayoutItem(layoutSize: size)
@@ -326,7 +327,9 @@ final class PersonDetailViewController: UIViewController {
             let poster = innerCV.dequeueReusableCell(withReuseIdentifier: PosterCell.reuseID, for: indexPath) as! PosterCell
             let entries = self.entries(for: section)
             if indexPath.item < entries.count {
-                poster.configure(item: entries[indexPath.item].item)
+                let item = entries[indexPath.item].item
+                poster.configure(item: item)
+                poster.setCaption(MediaRowMetrics.showsPosterTitles ? PosterCaption.text(for: item) : nil)
             }
             return poster
         }
@@ -345,7 +348,8 @@ final class PersonDetailViewController: UIViewController {
             realCount: entries.count,
             hasSkeleton: false,
             contentToken: contentToken(for: entries),
-            initialOffset: shelfOffsets[section] ?? 0)
+            initialOffset: shelfOffsets[section] ?? 0,
+            captionHeight: MediaRowMetrics.posterCaptionSpace)
     }
 
     private func entries(for section: Section) -> [FilmographyEntry] {

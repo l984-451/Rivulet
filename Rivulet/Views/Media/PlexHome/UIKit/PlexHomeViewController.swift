@@ -2999,7 +2999,8 @@ final class PlexHomeViewController: UIViewController {
         let columns = isPlaylists ? MediaRowMetrics.playlistFullCount : MediaRowMetrics.posterFullCount
         // Posters sit on Apple's row pitch; the other tiles keep their padded rows with a gap.
         let isPosterGrid = !isPlaylists && !data.isMusic
-        let groupHeight = isPosterGrid ? MediaRowMetrics.posterGridPitch
+        let groupHeight = isPosterGrid
+            ? MediaRowMetrics.posterGridPitch + MediaRowMetrics.posterCaptionSpace
             : tile.frame.height + MediaRowMetrics.focusGrowthPadding
 
         let itemSize = NSCollectionLayoutSize(
@@ -3115,6 +3116,7 @@ final class PlexHomeViewController: UIViewController {
             : section.isEpisodeRow ? EpisodeCollectionCell.searchTile
             : (section.isMusic ? MediaRowMetrics.music : MediaRowMetrics.poster))
         let rowHeight = tile.frame.height + MediaRowMetrics.focusGrowthPadding  // room for focus growth
+            + (override == nil ? Self.shelfCaptionHeight(section) : 0)
 
         let itemSize = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1),
                                               heightDimension: .absolute(rowHeight))
@@ -3320,12 +3322,16 @@ final class PlexHomeViewController: UIViewController {
             let cell = collectionView.dequeueReusableCell(withReuseIdentifier: PosterCell.reuseID, for: indexPath) as! PosterCell
             if indexPath.item < section.items.count {
                 let item = section.items[indexPath.item]
+                // Same gate as the grid's row height in makeGridSectionLayout (poster grids only).
+                let captioned = MediaRowMetrics.showsPosterTitles && !section.isMusic
                 if item.isGridPlaceholder {
                     cell.configurePlaceholder()
+                    cell.setCaption(captioned ? "" : nil)
                 } else {
                     Perf.interval(.cellPrepare, key: perfKey) {
                         cell.configure(item: item)
                     }
+                    cell.setCaption(captioned ? PosterCaption.text(for: item) : nil)
                 }
             }
             return cell
@@ -3336,6 +3342,7 @@ final class PlexHomeViewController: UIViewController {
                 Perf.interval(.cellPrepare, key: perfKey) {
                     cell.configure(item: item)
                 }
+                cell.setCaption(MediaRowMetrics.showsPosterTitles ? item.title : nil)
             }
             return cell
 
@@ -3768,6 +3775,10 @@ final class PlexHomeViewController: UIViewController {
             .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
+                if MediaRowMetrics.showsPosterTitles != self.lastShowsPosterTitles {
+                    self.lastShowsPosterTitles = MediaRowMetrics.showsPosterTitles
+                    self.reloadForPosterTitles()
+                }
                 self.backdropView.isHidden = !self.showHomeHero
                 if !self.showHomeHero {
                     self.setHeroBackdrop(url: nil)
@@ -4033,13 +4044,39 @@ final class PlexHomeViewController: UIViewController {
             realCount: shelfRealCount(section),
             hasSkeleton: paginationStates[section.id]?.isLoadingMore == true,
             contentToken: shelfContentToken(section),
-            initialOffset: shelfOffsets[sectionID] ?? 0
+            initialOffset: shelfOffsets[sectionID] ?? 0,
+            captionHeight: Self.shelfCaptionHeight(section)
         )
         if section.kind == .liveChannels, let inner = cell.rowCollectionView {
             for case let card as LiveCardCell in inner.visibleCells {
                 guard let path = inner.indexPath(for: card), path.item < section.liveCards.count else { continue }
                 card.configure(section.liveCards[path.item])
             }
+        }
+    }
+
+    private var lastShowsPosterTitles = MediaRowMetrics.showsPosterTitles
+
+    /// Row heights and tile captions both read the setting, so re-run the layout and every cell.
+    private func reloadForPosterTitles() {
+        guard let dataSource else { return }
+        collectionView.collectionViewLayout.invalidateLayout()
+        var snapshot = dataSource.snapshot()
+        snapshot.reconfigureItems(snapshot.itemIdentifiers)
+        dataSource.apply(snapshot, animatingDifferences: false)
+    }
+
+    /// Rows of posters and Continue Watching carry a title line under each tile; music, people
+    /// and the episode cards in search (titled already) do not.
+    private static func shelfCaptionHeight(_ section: HomeSectionData) -> CGFloat {
+        guard !section.isMusic else { return 0 }
+        switch section.kind {
+        case .continueWatching, .recentlyAdded, .recommendations, .discoverList, .watchlist:
+            return MediaRowMetrics.posterCaptionSpace
+        case .searchGrid:
+            return section.isEpisodeRow ? 0 : MediaRowMetrics.posterCaptionSpace
+        default:
+            return 0
         }
     }
 
@@ -4107,6 +4144,8 @@ final class PlexHomeViewController: UIViewController {
             Perf.interval(.cellPrepare, key: perfKey) {
                 cell.configure(item: section.items[indexPath.item])
             }
+            // Always set: a reconfigured cell skips `prepareForReuse`.
+            cell.setCaption(for: Self.shelfCaptionHeight(section) > 0 ? section.items[indexPath.item] : nil)
             // The next few cards build now, so one reaching the edge arrives finished.
             let ahead = (indexPath.item + 1)..<min(indexPath.item + 5, section.items.count)
             ContinueWatchingCell.prewarm(section.items[ahead], scale: innerCV.traitCollection.displayScale)
@@ -4125,6 +4164,7 @@ final class PlexHomeViewController: UIViewController {
                     cell.setSourceBadge(Self.sourceBadge(for: item.ref,
                                                          labelsServers: ServerDataStore.shared.labelsServers))
                 }
+                cell.setCaption(Self.shelfCaptionHeight(section) > 0 ? PosterCaption.text(for: item) : nil)
             }
             return cell
         case .watchlist:
@@ -4132,6 +4172,7 @@ final class PlexHomeViewController: UIViewController {
             Perf.interval(.cellPrepare, key: perfKey) {
                 cell.configure(item: section.watchlistItems[indexPath.item])
             }
+            cell.setCaption(Self.shelfCaptionHeight(section) > 0 ? section.watchlistItems[indexPath.item].title : nil)
             return cell
         case .searchPeople:
             let cell = innerCV.dequeueReusableCell(withReuseIdentifier: CastCollectionCell.reuseID, for: indexPath) as! CastCollectionCell

@@ -18586,6 +18586,16 @@
         }
       }
     },
+    "Shows each title's name beneath its poster, everywhere posters appear. Continue Watching shows the episode's name." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeigt den Namen jedes Titels unter seinem Poster, überall wo Poster erscheinen. Bei „Weiter ansehen“ steht dort der Name der Folge."
+          }
+        }
+      }
+    },
     "Shows all Live TV sources together under one sidebar entry." : {
       "localizations" : {
         "de" : {
@@ -22246,6 +22256,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Titres"
+          }
+        }
+      }
+    },
+    "Titles Under Posters" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Titel unter Postern"
           }
         }
       }

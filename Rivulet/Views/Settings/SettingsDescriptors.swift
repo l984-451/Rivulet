@@ -82,7 +82,7 @@ enum SettingsDescriptorStore {
         ),
         "photoSlidePlaysClips": SettingDescriptor(
             icon: "video",
-            description: "Plays each video clip in full when a slideshow reaches it, then carries on with the next photo. When off, slideshows skip them."
+            description: "Plays each video clip in full when a slideshow reaches it."
         ),
         "cat_music": SettingDescriptor(
             icon: "music.note",
@@ -171,13 +171,13 @@ enum SettingsDescriptorStore {
             icon: "tv",
             description: "The top row of the Apple TV Home Screen. Posters shows a row of posters. Full Screen fills it with artwork from what you are watching."
         ),
-        "skipPreview": SettingDescriptor(
+        "previewCard": SettingDescriptor(
             icon: "rectangle.expand.vertical",
-            description: "Selecting a movie or show opens its full details at once, skipping the preview card. Off keeps the preview, where you can browse the row."
+            description: "Selecting a movie or show opens a preview card first, where you can browse the row."
         ),
         "posterTitles": SettingDescriptor(
             icon: "textformat",
-            description: "Shows each title's name beneath its poster, everywhere posters appear. Continue Watching shows the episode's name."
+            description: "Shows the title under posters."
         ),
         "detailRating": SettingDescriptor(
             icon: "star.leadinghalf.filled",
@@ -222,7 +222,7 @@ enum SettingsDescriptorStore {
         ),
         "instantResume": SettingDescriptor(
             icon: "play.rectangle.on.rectangle",
-            description: "Selecting a Continue Watching tile resumes it at once. Off opens the preview instead and turns off the Resume or Restart Prompt."
+            description: "Selecting a Continue Watching tile resumes it at once."
         ),
         "homeStreamingQuality": SettingDescriptor(
             icon: "house.fill",
@@ -258,7 +258,7 @@ enum SettingsDescriptorStore {
         ),
         "heightSpeakers": SettingDescriptor(
             icon: "hifispeaker.2",
-            description: "Keeps the height channels of object-based soundtracks, lossless over HDMI. Off plays 7.1 without them. Some soundtracks need 7.1.4 or 9.1.6."
+            description: "Keeps the height channels of object-based soundtracks, lossless over HDMI. Some soundtracks need 7.1.4 or 9.1.6."
         ),
         "upscaleLowResolution": SettingDescriptor(
             icon: "sparkles.tv",
@@ -266,7 +266,7 @@ enum SettingsDescriptorStore {
         ),
         "dolbyVisionFEL": SettingDescriptor(
             icon: "4k.tv",
-            description: "Composes both layers of Dolby Vision Profile 7 FEL on a Dolby Vision TV. Plays without AirPlay or Picture in Picture, and E-AC3 Atmos loses its objects. Off folds the enhancement layer into 8.1."
+            description: "Composes both layers of Dolby Vision Profile 7 FEL on a Dolby Vision TV. Plays without AirPlay or Picture in Picture, and E-AC3 Atmos loses its objects."
         ),
         "autoplayCountdown": SettingDescriptor(
             icon: "forward.end.alt",
@@ -356,23 +356,23 @@ enum SettingsDescriptorStore {
         ),
         "plexServerEnabled": SettingDescriptor(
             icon: "power",
-            description: "Turn off to remove this server from Rivulet: its libraries, Home rows, Continue Watching and Live TV. Your account stays signed in."
+            description: "Shows this server's libraries, Home rows, Continue Watching and Live TV."
         ),
         "plexServerLiveTV": SettingDescriptor(
             icon: "tv.and.mediabox",
-            description: "Off hides this server's channels from Live TV. Its libraries stay."
+            description: "Shows this server's channels in Live TV."
         ),
         "jellyfinLiveTV": SettingDescriptor(
             icon: "tv.and.mediabox",
-            description: "Off hides this server's channels from Live TV. Its libraries stay."
+            description: "Shows this server's channels in Live TV."
         ),
         "embyLiveTV": SettingDescriptor(
             icon: "tv.and.mediabox",
-            description: "Off hides this server's channels from Live TV. Its libraries stay."
+            description: "Shows this server's channels in Live TV."
         ),
         "src_showInLiveTV": SettingDescriptor(
             icon: "tv.and.mediabox",
-            description: "Off hides this server's channels from Live TV. Its libraries stay."
+            description: "Shows this server's channels in Live TV."
         ),
         "plexServerRefresh": SettingDescriptor(
             icon: "arrow.clockwise",

@@ -88,7 +88,9 @@ extension EmbyProvider {
             )
         )
         // A bad `MediaSourceId` is a 200 with no sources and `ErrorCode: NoCompatibleStream`.
-        guard !(response.mediaSources ?? []).isEmpty else { throw MediaProviderError.notPlayable }
+        guard !(response.mediaSources ?? []).isEmpty else {
+            throw ServerRefusal(playbackErrorCode: response.errorCode) ?? MediaProviderError.notPlayable
+        }
         return response
     }
 

@@ -58,6 +58,11 @@ nonisolated struct EmbyUser: Decodable, Sendable {
     let id: EmbyID?
     let name: String?
     let policy: Policy?
+    let configuration: Configuration?
+
+    nonisolated struct Configuration: Decodable, Sendable {
+        let latestItemsExcludes: [EmbyID]?
+    }
 
     nonisolated struct Policy: Decodable, Sendable {
         let isAdministrator: Bool?
@@ -285,6 +290,7 @@ nonisolated struct EmbyMediaStream: Decodable, Sendable {
     let realFrameRate: Double?
     let averageFrameRate: Double?
     let aspectRatio: String?
+    let isAnamorphic: Bool?
     let pixelFormat: String?
     let videoRange: String?
     let colorTransfer: String?

@@ -37,14 +37,14 @@ actor PlexProgressReporter {
 
     private let countedPlay: @Sendable (PlexServerAddress, String, Int) async -> Bool
     private let stopRetryDelay: Duration
-    private let openSession: @Sendable (PlexServerAddress, String, Int, String) async -> Void
+    private let openSession: @Sendable (PlexServerAddress, String, Int, String) async -> Bool
     private let request: @Sendable (URL, [String: String]) async throws -> Data
 
     init(countedPlay: @escaping @Sendable (PlexServerAddress, String, Int) async -> Bool = { server, key, count in
         await PlexNetworkManager.shared.serverCountedPlay(
             serverURL: server.address, authToken: server.token, ratingKey: key, playsBefore: count)
     }, requestTimeout: Duration = PlaybackReportTimeout.duration, stopRetryDelay: Duration = .seconds(5),
-         openSession: @escaping @Sendable (PlexServerAddress, String, Int, String) async -> Void = { server, key, index, session in
+         openSession: @escaping @Sendable (PlexServerAddress, String, Int, String) async -> Bool = { server, key, index, session in
              await PlexNetworkManager.shared.openDirectPlaySession(
                  serverURL: server.address, authToken: server.token, ratingKey: key,
                  mediaIndex: index, sessionIdentifier: session)
@@ -203,10 +203,12 @@ actor PlexProgressReporter {
         }
     }
 
+    /// Returns true when the server refused to direct play the file (see `openDirectPlaySession`).
+    @discardableResult
     func beginPlaybackSession(ratingKey: String, mediaIndex: Int? = nil,
                               sessionIdentifier: String = UUID().uuidString, resetReporting: Bool = false,
-                              server explicit: PlexServerAddress? = nil) async {
-        guard !ratingKey.isEmpty, let server = await server(explicit) else { return }
+                              server explicit: PlexServerAddress? = nil) async -> Bool {
+        guard !ratingKey.isEmpty, let server = await server(explicit) else { return false }
         let key = server.address + "|" + ratingKey
         // An old stop/scrobble must finish before a replay can write this item's resume point.
         if let retry = stopRetries[key] {
@@ -218,12 +220,11 @@ actor PlexProgressReporter {
             lastReportedTimes[key] = nil
             lastReportedStates[key] = nil
         }
-        if let mediaIndex {
-            let openSession = openSession
-            try? await PlaybackReportTimeout.run {
-                await openSession(server, ratingKey, mediaIndex, sessionIdentifier)
-            }
-        }
+        guard let mediaIndex else { return false }
+        let openSession = openSession
+        return (try? await PlaybackReportTimeout.run {
+            await openSession(server, ratingKey, mediaIndex, sessionIdentifier)
+        }) ?? false
     }
 
     /// Marks an item as fully watched (scrobble)

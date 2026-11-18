@@ -41,6 +41,8 @@ struct RivuletiOSApp: App {
         MediaProviderRegistry.shared.populateFromCurrentAuth()
         let session = PlexSession()
         session.installProfileHooks()
+        IOSPlaybackController.shared.plex = session
+        IOSWatchTogether.install(controller: .shared, plex: session)
         _plex = StateObject(wrappedValue: session)
         _splashGate = StateObject(wrappedValue: LaunchSplashGate(browse: session.browse))
         // Start the path monitor now; its first reading arrives after a delay.

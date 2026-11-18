@@ -109,7 +109,8 @@ enum ProviderPlayer {
 
     /// What the error popup says for a failed start.
     static func errorMessage(for error: Error) -> String {
-        switch error as? MediaProviderError {
+        if let refusal = error as? ServerRefusal { return refusal.message }
+        return switch error as? MediaProviderError {
         case .transcodeRequired: String(localized: "This server can't stream this title to Apple TV.")
         case .unreachable: String(localized: "Couldn't reach the server.")
         case .unauthorized: String(localized: "The server didn't accept your sign-in.")

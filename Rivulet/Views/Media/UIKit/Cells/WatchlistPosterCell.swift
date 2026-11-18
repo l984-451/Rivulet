@@ -17,6 +17,7 @@ final class WatchlistPosterCell: UICollectionViewCell {
     private let placeholderView = UIView()
     private let placeholderGradient = CAGradientLayer()
     private let placeholderIcon = UIImageView()
+    private var caption: PosterCaption!
 
     private var imageLoadTask: Task<Void, Never>?
     private var currentURL: URL?
@@ -67,8 +68,13 @@ final class WatchlistPosterCell: UICollectionViewCell {
         // Insert placeholder below the poster view so the image covers it.
         contentView.insertSubview(placeholderView, belowSubview: posterView)
 
+        let posterCenterY = posterView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor)
+        caption = PosterCaption(in: contentView, under: posterView,
+                                leading: posterView.imageView.leadingAnchor,
+                                trailing: posterView.imageView.trailingAnchor,
+                                tileCenterY: posterCenterY)
         NSLayoutConstraint.activate([
-            posterView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            posterCenterY,
             posterView.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
             posterView.widthAnchor.constraint(equalToConstant: tile.hostSize.width),
             posterView.heightAnchor.constraint(equalToConstant: tile.hostSize.height),
@@ -93,6 +99,7 @@ final class WatchlistPosterCell: UICollectionViewCell {
                       || context.nextFocusedView?.isDescendant(of: self) == true
         coordinator.addCoordinatedAnimations({
             self.posterView.transform = nowFocused ? self.tile.focusScale : .identity
+            self.caption.setFocused(nowFocused)
         }, completion: nil)
     }
 
@@ -106,6 +113,9 @@ final class WatchlistPosterCell: UICollectionViewCell {
         placeholderGradient.frame = placeholderView.bounds
         CATransaction.commit()
     }
+
+    /// The title line (`PosterCaption.set`); call after `configure`.
+    func setCaption(_ text: String?) { caption.set(text) }
 
     func configure(item: PlexWatchlistItem) {
         // `film` for movies, `tv` for shows.
@@ -128,6 +138,7 @@ final class WatchlistPosterCell: UICollectionViewCell {
         clearArtwork()
         placeholderView.isHidden = false
         placeholderIcon.image = nil
+        caption.set(nil)
     }
 
     private func loadImage(from url: URL?, failureIcon: UIImage?) {

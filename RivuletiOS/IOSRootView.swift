@@ -10,7 +10,7 @@ struct IOSRootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var sizeClass
     @SceneStorage("iosSelectedTab") private var selectedTab = "home"
-    @StateObject private var playback = IOSPlaybackController()
+    @ObservedObject private var playback = IOSPlaybackController.shared
     @State private var showingAccount = false
     @State private var showingWhatsNew = false
     @State private var whatsNewVersions: [String] = []

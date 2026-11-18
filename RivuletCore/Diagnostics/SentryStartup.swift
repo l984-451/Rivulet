@@ -124,5 +124,10 @@ public enum SentryStartup {
             }
         }
         SentryBridge.isActive = true
+        // Settings usage, at most daily, once launch work has settled.
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(60))
+            SettingsUsageTelemetry.sendIfDue()
+        }
     }
 }

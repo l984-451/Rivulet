@@ -261,6 +261,7 @@ final class AetherPlayer: PlayerProtocol {
                 // Convert here: each cue's type is inferred as
                 // AetherEngine.SubtitleCue (it cannot be named explicitly),
                 // and the body cases are pattern-matched without naming them.
+                let isDVB = self?.activeSubtitleIsDVB ?? false
                 self?.subtitleCues = cues.map { cue in
                     let body: AetherSubtitleCue.Body
                     switch cue.body {
@@ -294,6 +295,10 @@ final class AetherPlayer: PlayerProtocol {
                             )
                         })
                     case .image(let image):
+                        if isDVB {
+                            ReleaseFixChecks.dvbSubtitle(position: image.position, canvas: image.canvasSize,
+                                                         video: self?.videoSize ?? .zero)
+                        }
                         body = .image(cgImage: image.cgImage, position: image.position)
                     }
                     // Placement the source asked for (ASS \an / \pos), nil for
@@ -312,6 +317,8 @@ final class AetherPlayer: PlayerProtocol {
                 }
             }
             .store(in: &cancellables)
+
+        observeReleaseFixChecks()
 
         engine.$isSubtitleActive
             .receive(on: DispatchQueue.main)
@@ -895,6 +902,7 @@ final class AetherPlayer: PlayerProtocol {
             // Costs rewind depth on short-GOP channels: the playlist caps at 900 segments.
             options.liveJoinProfile = .fastZap
             options.audioDelaySeconds = AudioSync.seconds()
+            options.audioShaping = Self.audioShaping()
             if role == .multiviewSlot {
                 // Field-rate deinterlacing on a quarter-screen tile only
                 // doubles decoder output for nothing.
@@ -1025,6 +1033,11 @@ final class AetherPlayer: PlayerProtocol {
 
     /// ML upscaling of SDR below 1080p (#846); absent = off.
     static let upscaleKey = "upscaleLowResolution"
+
+    /// Stereo with Subwoofer (#614): a stereo fold that keeps the LFE.
+    static func audioShaping() -> AudioShaping {
+        StereoWithSubwoofer.isOn() ? AudioShaping(maxChannels: 2, lfeMixDB: StereoWithSubwoofer.lfeMixDB) : AudioShaping()
+    }
 
     /// Profile 7 FEL composition; absent = on.
     static let dolbyVisionFELKey = "dolbyVisionFEL"
@@ -1191,6 +1204,7 @@ final class AetherPlayer: PlayerProtocol {
         // The engine takes it only for SDR below 1080p and switches it off if it can't keep up.
         options.upscalesLowResolutionVideo = UserDefaults.standard.bool(forKey: Self.upscaleKey)
         options.audioDelaySeconds = AudioSync.seconds()
+        options.audioShaping = Self.audioShaping()
         // Read ahead as far as the engine's disk budget allows; live sizes its own window.
         if !isLive { options.forwardBufferSegments = .max }
         // New content, so the previous item's aspect ratio describes nothing.
@@ -1844,5 +1858,27 @@ private extension PlaybackPhase {
         case .rebuffering: .rebuffering
         default: .loading
         }
+    }
+}
+
+// MARK: - Release fix checks (temporary: delete with ReleaseFixChecks)
+
+extension AetherPlayer {
+    var activeSubtitleIsDVB: Bool {
+        engine.subtitleTracks.first { $0.id == engine.activeSubtitleTrackIndex }?.codec == "dvb_subtitle"
+    }
+
+    func observeReleaseFixChecks() {
+        EngineLog.structuredHandler = { @Sendable line, _, _ in ReleaseFixChecks.engineLine(line) }
+        engine.$audioShapingState
+            .removeDuplicates()
+            .filter { $0 != .off }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] state in
+                guard let self else { return }
+                let track = self.engine.audioTracks.first { $0.id == self.engine.activeAudioTrackIndex }
+                ReleaseFixChecks.audioShaping(state: state.rawValue, codec: track?.codec, channels: track?.channels)
+            }
+            .store(in: &cancellables)
     }
 }

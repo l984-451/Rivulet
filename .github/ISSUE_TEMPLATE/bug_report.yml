@@ -74,6 +74,14 @@ body:
     validations:
       required: true
 
+  - type: input
+    id: diagnostic-code
+    attributes:
+      label: Diagnostic code
+      description: |
+        Most issues are easier to trace with a diagnostic report. Right after the problem happens, go to Settings > About > Send Diagnostics and enter the code here (Apple TV only).
+      placeholder: "ACDE-3479"
+
   - type: textarea
     id: additional-info
     attributes:

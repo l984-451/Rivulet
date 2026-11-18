@@ -294,4 +294,17 @@ final class PlexMediaMapperTests: XCTestCase {
             "https://example.plex.direct:32400/library/metadata/9144/thumb/1790714299?X-Plex-Token=TOK"
         )
     }
+
+    // MARK: - Aspect ratio
+
+    /// Measured on PMS 1.43: an anamorphic stream carries `pixelAspectRatio`, a square-pixel one none.
+    func test_videoTrack_aspectRatio_fromStreamSizeAndPixelAspect() throws {
+        func aspect(_ json: String) throws -> Double? {
+            PlexMediaMapper.videoTrack(try JSONDecoder().decode(PlexStream.self, from: Data(json.utf8)))?.aspectRatio
+        }
+        let anamorphic = #"{"id":1,"streamType":1,"codec":"mpeg4","width":544,"height":288,"anamorphic":true,"pixelAspectRatio":"40:33"}"#
+        XCTAssertEqual(try XCTUnwrap(try aspect(anamorphic)), 2.2895, accuracy: 0.0001)
+        let square = #"{"id":2,"streamType":1,"codec":"hevc","width":1920,"height":696}"#
+        XCTAssertEqual(try XCTUnwrap(try aspect(square)), 2.7586, accuracy: 0.0001)
+    }
 }

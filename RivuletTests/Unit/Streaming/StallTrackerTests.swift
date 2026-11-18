@@ -42,4 +42,12 @@ final class StallTrackerTests: XCTestCase {
         tracker.noteStepDown()   // the long stall stepped down
         XCTAssertEqual(tracker.bufferingStarted(at: t0 + 25), .counted)
     }
+
+    func test_stopStepping_ignoresEveryStallAfterAFailedTranscode() {
+        var tracker = StallTracker()
+        XCTAssertEqual(tracker.bufferingStarted(at: t0), .counted)
+        tracker.stopStepping()   // the step's transcode failed and the file plays
+        XCTAssertEqual(tracker.bufferingStarted(at: t0 + 10), .ignored)
+        XCTAssertEqual(tracker.bufferingStarted(at: t0 + 20), .ignored)
+    }
 }

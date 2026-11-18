@@ -63,6 +63,7 @@ struct IOSPlaybackSettingsView: View {
     @AppStorage(StreamingQuality.homeKey) private var homeQuality = StreamingQuality.homeDefault
     @AppStorage(StreamingQuality.awayKey) private var awayQuality = StreamingQuality.awayDefault
     @AppStorage(AetherPlayer.upscaleKey) private var upscales = false
+    @AppStorage(StereoWithSubwoofer.key) private var stereoWithSubwoofer = false
     /// Bumped on every track-intent write: `TrackIntentStore` is not observable.
     @State private var trackRevision = 0
 
@@ -116,6 +117,12 @@ struct IOSPlaybackSettingsView: View {
                 Toggle("Upscale SD and 720p", isOn: $upscales)
             } footer: {
                 Text("Sharpens video smaller than your screen with Apple's machine learning upscaler. Uses more power, and stops on its own if the device can't keep up. HDR and Dolby Vision play as before.")
+            }
+
+            Section {
+                Toggle("Stereo with Subwoofer", isOn: $stereoWithSubwoofer)
+            } footer: {
+                Text("Plays surround soundtracks as stereo with the subwoofer channel mixed into left and right, for 2.1 speakers on a stereo connection.")
             }
 
             Section {

@@ -107,14 +107,18 @@ extension PlexSession {
 
     /// Opens the server's play session before the player asks for media: the transcode's,
     /// or a direct-play one so the dashboard shows its bandwidth (#423).
-    func openPlaySession(_ request: PlexPlaybackRequest) async {
+    func openPlaySession(_ request: PlexPlaybackRequest) async -> ServerRefusal? {
         if request.transcodeSessionID != nil {
-            await network.startTranscodeDecision(hlsURL: request.url, headers: request.headers)
-        } else if let session = request.directPlaySessionID, let key = request.item.ratingKey {
-            await network.openDirectPlaySession(serverURL: request.serverURL, authToken: request.token,
-                                                ratingKey: key, mediaIndex: request.mediaIndex,
-                                                sessionIdentifier: session)
+            let decision = await network.startTranscodeDecision(hlsURL: request.url, headers: request.headers)
+            if let decision { DiagLog.notice(.playback, "Transcode decision: \(decision.verdict)") }
+            return decision?.refusal
+        } else if let session = request.directPlaySessionID, let key = request.item.ratingKey,
+                  await network.openDirectPlaySession(serverURL: request.serverURL, authToken: request.token,
+                                                      ratingKey: key, mediaIndex: request.mediaIndex,
+                                                      sessionIdentifier: session) {
+            return ServerRefusal(reason: .directPlayRefused)
         }
+        return nil
     }
 
     /// Sets the part's audio or subtitle stream, which a new transcode session reads.
@@ -144,6 +148,12 @@ extension PlexPlaybackRequest {
     /// download plays the first file only, so those stay single.
     var isStacked: Bool {
         !isLocal && providerPlayback == nil && (item.Media?.first?.Part?.count ?? 0) > 1
+    }
+
+    /// `checkFiles=1` marked the playing version's file gone. A hint for the failure message only:
+    /// a wrong flag must never stop a file that plays.
+    var playingFileIsMissing: Bool {
+        !isLocal && providerPlayback == nil && item.Media?.first?.isMissing == true
     }
 
     /// Every file of a stacked title, nil for one file or when a file has no length.

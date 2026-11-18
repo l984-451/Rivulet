@@ -324,6 +324,7 @@ final class AetherPlayer: ObservableObject {
             .sink { [weak self] cues in
                 guard let self else { return }
                 // The engine's cue type cannot be named here (module and class share a name).
+                let isDVB = self.activeSubtitleIsDVB
                 self.subtitleCues = cues.map { cue in
                     let body: SubtitleCue.Body
                     switch cue.body {
@@ -346,6 +347,9 @@ final class AetherPlayer: ObservableObject {
                             )
                         })
                     case .image(let image):
+                        if isDVB {
+                            ReleaseFixChecks.dvbSubtitle(position: image.position, canvas: image.canvasSize, video: self.videoSize)
+                        }
                         body = .image(UIImage(cgImage: image.cgImage), image.position)
                     }
                     return SubtitleCue(
@@ -358,6 +362,8 @@ final class AetherPlayer: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+
+        observeReleaseFixChecks()
 
         engine.$currentAVPlayer
             .receive(on: DispatchQueue.main)
@@ -451,6 +457,11 @@ final class AetherPlayer: ObservableObject {
     /// Same key as the tvOS Upscale SD and 720p setting; absent = off.
     static let upscaleKey = "upscaleLowResolution"
 
+    /// Stereo with Subwoofer (#614): a stereo fold that keeps the LFE.
+    static func audioShaping() -> AudioShaping {
+        StereoWithSubwoofer.isOn() ? AudioShaping(maxChannels: 2, lfeMixDB: StereoWithSubwoofer.lfeMixDB) : AudioShaping()
+    }
+
     func loadLive(url: URL, headers: [String: String]? = nil, forceEngineDemux: Bool = false) async throws {
         lastLoad = .live(url: url, headers: headers ?? [:], forceEngineDemux: forceEngineDemux)
         try await performLiveLoad(url: url, headers: headers ?? [:], forceEngineDemux: forceEngineDemux)
@@ -490,6 +501,7 @@ final class AetherPlayer: ObservableObject {
             // depth on short-GOP channels: the playlist caps at 900 segments.
             options.liveJoinProfile = .fastZap
             options.audioDelaySeconds = AudioSync.seconds()
+            options.audioShaping = Self.audioShaping()
             if joinsWirelessAudio {
                 options.liveJoinStartsImmediately = false
                 options.autoplay = false
@@ -633,6 +645,7 @@ final class AetherPlayer: ObservableObject {
         )
         options.autoplay = userIntendsToPlay
         options.audioDelaySeconds = AudioSync.seconds()
+        options.audioShaping = Self.audioShaping()
         // Read ahead as far as the engine's disk budget allows.
         options.forwardBufferSegments = .max
         // Engine takes it only for SDR below the screen's size and switches it off if it can't keep up.
@@ -1495,5 +1508,27 @@ private extension PlaybackPhase {
         case .rebuffering: .rebuffering
         default: .loading
         }
+    }
+}
+
+// MARK: - Release fix checks (temporary: delete with ReleaseFixChecks)
+
+extension AetherPlayer {
+    var activeSubtitleIsDVB: Bool {
+        engine.subtitleTracks.first { $0.id == engine.activeSubtitleTrackIndex }?.codec == "dvb_subtitle"
+    }
+
+    func observeReleaseFixChecks() {
+        EngineLog.structuredHandler = { @Sendable line, _, _ in ReleaseFixChecks.engineLine(line) }
+        engine.$audioShapingState
+            .removeDuplicates()
+            .filter { $0 != .off }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] state in
+                guard let self else { return }
+                let track = self.engine.audioTracks.first { $0.id == self.engine.activeAudioTrackIndex }
+                ReleaseFixChecks.audioShaping(state: state.rawValue, codec: track?.codec, channels: track?.channels)
+            }
+            .store(in: &cancellables)
     }
 }

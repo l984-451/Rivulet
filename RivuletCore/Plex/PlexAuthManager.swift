@@ -586,6 +586,31 @@ class PlexAuthManager: ObservableObject {
         }
     }
 
+    /// `http://<ip>:<port>` for a plex.direct URL naming a LAN address, else nil.
+    /// With no internet the router cannot resolve plex.direct names (#668).
+    nonisolated static func lanFallbackURL(for urlString: String) -> String? {
+        guard let components = URLComponents(string: urlString), let host = components.host,
+              let address = ServerLocation.plexDirectAddress(host.lowercased()),
+              ServerLocation.isPrivateAddress(address) else { return nil }
+        let literal = address.contains(":") ? "[\(address)]" : address
+        return "http://\(literal):\(components.port ?? 32400)"
+    }
+
+    /// Without plex.tv there is no connection list, so the saved plex.direct
+    /// URL's own address is the only candidate. It must answer as the saved server.
+    private func adoptLANAddressWithoutPlexTV(from currentURL: String, expecting savedID: String?) async -> Bool {
+        guard let savedID, let lanURL = Self.lanFallbackURL(for: currentURL),
+              await testConnection(lanURL, expecting: savedID) != nil,
+              await serverAcceptsToken(selectedServerToken, at: lanURL) else { return false }
+        DiagLog.notice(.connection, "plex.tv unreachable, using the LAN address: \(DiagLog.describe(url: lanURL))")
+        selectedServerURL = lanURL
+        userDefaults.set(lanURL, forKey: serverURLKey)
+        isConnected = true
+        connectionError = nil
+        state = .authenticated
+        return true
+    }
+
     /// False only on an explicit 401/403 from a server already proven to be the right one.
     private func serverAcceptsToken(_ token: String?, at urlString: String) async -> Bool {
         guard let token, let url = URL(string: "\(urlString)/") else { return true }
@@ -611,10 +636,11 @@ class PlexAuthManager: ObservableObject {
         return String(text[range].dropFirst("machineIdentifier=\"".count).dropLast())
     }
 
-    /// One breadcrumb per failed connection probe (mirrored as a log), so the
-    /// per-candidate failure trail is visible (GitHub #224).
+    /// One breadcrumb per failed connection probe, so an event carries the
+    /// per-candidate failure trail (GitHub #224). Debug, so it is not mirrored as a
+    /// log: losing candidates is normal, and a total failure is logged on its own.
     private static func addConnectionTestBreadcrumb(urlString: String, outcome: String) {
-        let breadcrumb = Breadcrumb(level: .warning, category: "plex_auth")
+        let breadcrumb = Breadcrumb(level: .debug, category: "plex_auth")
         breadcrumb.message = "Connection probe failed"
         breadcrumb.data = [
             "host": URL(string: urlString)?.host ?? "invalid-url",
@@ -1042,6 +1068,7 @@ class PlexAuthManager: ObservableObject {
                 }
             } catch {
                 DiagLog.error(.connection, "Server discovery for re-selection failed: \(DiagLog.describe(error))")
+                if await adoptLANAddressWithoutPlexTV(from: currentURL, expecting: savedID) { return }
                 // Keep existing credentials - just mark as not connected
                 // User can still see cached content
 

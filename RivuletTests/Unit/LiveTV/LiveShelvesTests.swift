@@ -152,6 +152,16 @@ final class LiveShelvesTests: XCTestCase {
         XCTAssertEqual(shelves.map(\.id).filter { $0.hasPrefix("group|") }, ["group|Zulu", "group|Alpha", "group|Mid"])
     }
 
+    /// A group row holds every channel in the group, however many (#654).
+    func test_groupRow_isNotCapped() {
+        let big = (1...107).map { channel("b\($0)", group: "Big", number: ChannelNumber(major: $0)) }
+        let channels = big + [channel("s", group: "Small", number: 200)]
+        let epg = Dictionary(uniqueKeysWithValues: channels.map { ($0.id, [program($0.id, "Show", from: -60, to: 60)]) })
+        let shelves = LiveShelves.build(LiveShelves.Input(channels: channels, epg: epg, suggestionsEnabled: false),
+                                        sourceIdFilter: nil, now: now)
+        XCTAssertEqual(shelves.first { $0.id == "group|Big" }?.items.count, 107)
+    }
+
     func test_backgroundBuild_matchesBuild() async {
         let channels = (1...12).map { channel("c\($0)", group: $0 % 2 == 0 ? "Even" : "Odd", number: ChannelNumber(major: $0)) }
         let epg = Dictionary(uniqueKeysWithValues: channels.map { ($0.id, [program($0.id, "Football", from: -60, to: 60)]) })

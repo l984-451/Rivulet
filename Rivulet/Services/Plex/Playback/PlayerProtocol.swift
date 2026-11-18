@@ -68,6 +68,8 @@ enum PlayerError: Error, Equatable, Sendable {
     case engineFailure(kind: String, message: String)
     /// The Plex server ended the session (dashboard Stop, paused too long); carries its reason.
     case serverTerminated(String)
+    /// The server will not play it (Plex Pass needed, file gone, no stream to offer); carries the sentence to show.
+    case serverRefused(String)
 
     /// Technical description for logging and Sentry - includes internal details
     var technicalDescription: String {
@@ -86,6 +88,8 @@ enum PlayerError: Error, Equatable, Sendable {
             return "Playback error [\(kind)]: \(message)"
         case .serverTerminated(let reason):
             return "Server ended the session: \(reason)"
+        case .serverRefused(let message):
+            return "Server refused: \(message)"
         }
     }
 
@@ -130,6 +134,8 @@ enum PlayerError: Error, Equatable, Sendable {
             }
         case .serverTerminated(let reason):
             return reason
+        case .serverRefused(let message):
+            return message
         }
     }
 
@@ -146,7 +152,7 @@ enum PlayerError: Error, Equatable, Sendable {
         switch self {
         case .loadFailed, .networkError, .unknown:
             return true
-        case .invalidURL, .codecUnsupported, .serverTerminated:
+        case .invalidURL, .codecUnsupported, .serverTerminated, .serverRefused:
             return false
         case .engineFailure(let kind, _):
             // A hardware decode limit is the one class retrying cannot move.

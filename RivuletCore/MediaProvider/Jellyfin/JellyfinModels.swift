@@ -31,9 +31,13 @@ nonisolated struct JFUser: Decodable, Sendable {
     let name: String?
 }
 
-/// `Users/Me`, read for the deletion and recording rights in its policy.
+/// `Users/Me`, read for the deletion and recording rights in its policy and the libraries kept off Home.
 nonisolated struct JFUserWithPolicy: Decodable, Sendable {
     let policy: Policy?
+    let configuration: Configuration?
+    nonisolated struct Configuration: Decodable, Sendable {
+        let latestItemsExcludes: [String]?
+    }
     nonisolated struct Policy: Decodable, Sendable {
         let isAdministrator: Bool?
         let enableContentDeletion: Bool?
@@ -251,6 +255,8 @@ nonisolated struct JFMediaStream: Decodable, Sendable {
     let sampleRate: Int?
     let realFrameRate: Double?
     let averageFrameRate: Double?
+    let aspectRatio: String?        // display aspect: "16:9", "2.40:1", or ffprobe's own ("80:29")
+    let isAnamorphic: Bool?
     let videoRangeType: String?     // SDR, HDR10, HLG, HDR10Plus, DOVI, DOVIWithHDR10, ...
     let colorTransfer: String?      // smpte2084 (PQ), arib-std-b67 (HLG), bt709, ...
     let dvProfile: Int?

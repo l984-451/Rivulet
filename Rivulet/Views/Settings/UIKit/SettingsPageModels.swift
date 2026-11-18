@@ -496,7 +496,11 @@ enum SettingsContent {
             SettingsRowItem(id: "topShelfStyle", title: "Top Shelf",
                             kind: .cycle(value: { TopShelfCache.shared.fullScreen ? String(localized: "Full Screen") : String(localized: "Posters") },
                                          next: { TopShelfCache.shared.fullScreen.toggle() })),
-            toggle("skipPreview", "Skip Preview", key: "skipPreviewCarousel", default: false),
+            // Stored inverted: the key is from when this row was Skip Preview.
+            SettingsRowItem(id: "previewCard", title: "Preview Card", kind: .toggle(
+                get: { !SettingsStore.bool("skipPreviewCarousel", default: false) },
+                set: { SettingsStore.setBool("skipPreviewCarousel", !$0) })),
+            toggle("posterTitles", "Titles Under Posters", key: MediaRowMetrics.posterTitlesKey, default: MediaRowMetrics.posterTitlesDefault),
 
             // Titles drop whatever their caption already says ("Home Hero" under
             // HOME reads as "Home Home Hero"), the way Apple TV Settings puts a
@@ -620,6 +624,7 @@ enum SettingsContent {
                                          })),
             .header("Home Theater"),
             toggle("upscaleLowResolution", "Upscale SD and 720p", key: AetherPlayer.upscaleKey, default: false),
+            toggle("stereoWithSubwoofer", "Stereo with Subwoofer", key: StereoWithSubwoofer.key, default: false),
         ] + selfBuiltHomeTheaterRows + [
             .header("Filtering"),
             SettingsRowItem(id: "cat_contentFilter", title: "Content Filtering",

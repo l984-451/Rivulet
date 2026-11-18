@@ -106,6 +106,12 @@ extension MediaItem {
         return year.map(String.init)
     }
 
+    /// A season's name in a picker or list header: "Season 2", "Specials" for season 0.
+    var seasonLabel: String {
+        guard let seasonNumber else { return displayTitle }
+        return seasonNumber == 0 ? String(localized: "Specials") : String(localized: "Season \(seasonNumber)")
+    }
+
     /// "S2, E5", the TV app's episode label.
     var episodeCode: String? {
         guard kind == .episode, let season = seasonNumber, let episode = episodeNumber else { return nil }

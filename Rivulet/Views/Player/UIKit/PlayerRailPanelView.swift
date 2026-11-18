@@ -50,6 +50,10 @@ final class PlayerRailPanelView: UIView {
         static let paneContentTop: CGFloat = 14
         static let panePillGap: CGFloat = 30
         static let paneCardRadius: CGFloat = 48
+        // The close-on-Up stop above the risen pills, sized and spaced as
+        // PauseInsightsView's.
+        static let closeCatcherHeight: CGFloat = 10
+        static let closeCatcherGap: CGFloat = 30
     }
 
     var onDismiss: (() -> Void)?
@@ -203,6 +207,29 @@ final class PlayerRailPanelView: UIView {
             guide.heightAnchor.constraint(equalToConstant: Metrics.panePillGap),
         ]
         panel.returnGuide = guide
+        // Up from the risen pills (or Insights' sub-tabs) closes the pane, as Up
+        // past PauseInsightsView's pills does: nothing else focusable sits above
+        // them while a pane is up, so Up was a dead end and only Menu closed it.
+        // An invisible stop in the rail, so the lift carries it: a gap above the
+        // pill row, from the row's leading edge to the rail's trailing inset (over
+        // the sub-tabs too), so Left/Right at either end of the row never pick it.
+        let catcher = PaneCloseCatcher()
+        catcher.isLive = { [weak panel] in
+            guard let panel else { return false }
+            return !panel.didDismiss && panel.window != nil
+        }
+        // Next turn: a focus request made inside this focus update is ignored,
+        // and the hosts move focus to the bar in `onDismiss`.
+        catcher.onFocus = { [weak panel] in DispatchQueue.main.async { panel?.dismissPanel() } }
+        rail.addSubview(catcher)
+        catcher.translatesAutoresizingMaskIntoConstraints = false
+        constraints += [
+            catcher.leadingAnchor.constraint(equalTo: rail.pillRowView.leadingAnchor),
+            catcher.trailingAnchor.constraint(equalTo: rail.trailingAnchor, constant: -PlayerRailView.sideInset),
+            catcher.bottomAnchor.constraint(equalTo: rail.pillRowView.topAnchor, constant: -Metrics.closeCatcherGap),
+            catcher.heightAnchor.constraint(equalToConstant: Metrics.closeCatcherHeight),
+        ]
+        panel.closeCatcher = catcher
         NSLayoutConstraint.activate(constraints)
         container.layoutIfNeeded()
 
@@ -240,6 +267,8 @@ final class PlayerRailPanelView: UIView {
     }
 
     private var returnGuide: UIFocusGuide?
+    /// The pane's close-on-Up stop, a subview of the rail.
+    private var closeCatcher: UIView?
     private weak var tabPill: UIView?
 
     /// Where Up from the content goes: the tab's pill, or the sub-tab showing.
@@ -253,6 +282,11 @@ final class PlayerRailPanelView: UIView {
         super.didMoveToSuperview()
         if superview == nil, let returnGuide {
             returnGuide.owningView?.removeLayoutGuide(returnGuide)
+        }
+        // The close-on-Up stop goes with the return guide.
+        if superview == nil {
+            closeCatcher?.removeFromSuperview()
+            closeCatcher = nil
         }
     }
 
@@ -389,5 +423,26 @@ final class PlayerRailPanelView: UIView {
             return
         }
         super.pressesEnded(presses, with: event)
+    }
+
+    /// The pane's close-on-Up stop: PauseInsightsView's invisible focus catcher
+    /// (clear but not hidden, so the engine can land on it) with a live gate.
+    private final class PaneCloseCatcher: UIView {
+        var isLive: () -> Bool = { false }
+        var onFocus: (() -> Void)?
+
+        override var canBecomeFocused: Bool { isLive() }
+
+        /// Only an Up move lands here, never a programmatic re-resolution that
+        /// happens to fall through to the rail's topmost focus item.
+        override func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool {
+            if context.nextFocusedView === self { return context.focusHeading.contains(.up) }
+            return super.shouldUpdateFocus(in: context)
+        }
+
+        override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
+            super.didUpdateFocus(in: context, with: coordinator)
+            if context.nextFocusedView === self { onFocus?() }
+        }
     }
 }

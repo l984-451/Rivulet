@@ -22,7 +22,9 @@ enum JellyfinMediaMapper {
     /// Library views Rivulet can render. Music videos browse by folder like any video
     /// library. Book, playlist, box set and trailer
     /// views have no surface, so they are dropped rather than shown empty.
-    static func library(_ view: JFItem, providerID: String, homeVideos: HomeVideosContent = .videos) -> MediaLibrary? {
+    /// `homeExcludes` is the user's `LatestItemsExcludes`: libraries kept off Home.
+    static func library(_ view: JFItem, providerID: String, homeVideos: HomeVideosContent = .videos,
+                        homeExcludes: Set<String> = []) -> MediaLibrary? {
         guard let id = view.id else { return nil }
         let kind: MediaLibrary.LibraryKind
         switch view.collectionType {
@@ -39,6 +41,7 @@ enum JellyfinMediaMapper {
         }
         var library = MediaLibrary(id: id, providerID: providerID, title: view.name ?? "", kind: kind)
         library.browsesByFolder = kind == .mixed
+        library.isPinnedToHome = !homeExcludes.contains(id)
         return library
     }
 
@@ -203,7 +206,12 @@ enum JellyfinMediaMapper {
             videoRange: range,
             isDefault: s.isDefault ?? false,
             scanType: s.isInterlaced.map { $0 ? "interlaced" : "progressive" },
-            hasHDR10Plus: s.videoRangeType?.hasSuffix("HDR10Plus") == true
+            hasHDR10Plus: s.videoRangeType?.hasSuffix("HDR10Plus") == true,
+            // The server's AspectRatio snaps to a few named ratios, so the frame size decides
+            // unless the pixels aren't square.
+            aspectRatio: s.isAnamorphic == true
+                ? VideoTrack.ratio(s.aspectRatio)
+                : VideoTrack.aspectRatio(width: s.width, height: s.height)
         )
     }
 

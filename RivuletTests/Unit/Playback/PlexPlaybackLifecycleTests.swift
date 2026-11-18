@@ -26,10 +26,11 @@ final class PlexPlaybackLifecycleTests: XCTestCase {
         var watchedKeys: Set<String> = []
         var openedSessions: [String: String] = [:]
 
-        func openSession(_ server: PlexServerAddress, key: String, index: Int, session: String) {
+        func openSession(_ server: PlexServerAddress, key: String, index: Int, session: String) -> Bool {
             XCTAssertEqual(server.address, "https://plex.invalid")
             XCTAssertEqual(index, 0)
             openedSessions[key] = session
+            return false
         }
 
         func releaseHeldRequest() {

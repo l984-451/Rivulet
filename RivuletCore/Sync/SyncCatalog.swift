@@ -18,7 +18,7 @@ nonisolated enum SyncCatalog {
         "showLibraryRecommendations", "enablePersonalizedRecommendations", "showDiscoverTab", "showWatchlistTab", "showFavoritesTab",
         // Playback
         "autoplayLimit", "autoplayCountdown", "atTheCredits", "promptResumeOrRestart",
-        "continueWatchingInstantResume", "skipPreviewCarousel", "useIntroDB", "cinemaTrailersCount",
+        "continueWatchingInstantResume", "skipPreviewCarousel", "showPosterTitles", "useIntroDB", "cinemaTrailersCount",
         "detailRatingSource", "generatedSubtitlesFallback", "playerShowsClockTimes",
         "showSkipIntro", "showSkipRecap", "showSkipAds",
         "autoSkipIntro", "autoSkipRecap", "autoSkipAds",

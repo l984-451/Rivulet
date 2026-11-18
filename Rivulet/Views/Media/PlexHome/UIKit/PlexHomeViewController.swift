@@ -1580,7 +1580,7 @@ final class PlexHomeViewController: UIViewController {
             let map = mediaItemMapper()
             if case .library(let key, _) = mode {
                 let sort = gridSort.apiParameter
-                let filters = PlexProvider.filterQuery(libraryFilter)
+                let filters = PlexProvider.filterQuery(libraryFilter, showLibrary: currentLibraryType == "show")
                 fetchPage = { start in
                     let result = try await network.getLibraryItemsWithTotal(
                         serverURL: serverURL,

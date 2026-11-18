@@ -163,11 +163,6 @@ struct RivuletApp: App {
         // AppHangContext as the user navigates and plays. See RIVULET-41.
         // Already on the main actor here, so no hop.
         AppHangContext.setScreen("launch")
-
-        Task { @MainActor in
-            try? await Task.sleep(for: .seconds(60))
-            SettingsUsageTelemetry.sendIfDue()
-        }
     }
     #endif
 

@@ -98,4 +98,30 @@ final class HLSManifestEnricherTests: XCTestCase {
         ))
         XCTAssertFalse(patched.contains("X-Plex-Token="))
     }
+
+    // MARK: - CODECS (#677)
+
+    /// PMS 1.43.4 HEVC encodes of a 10-bit HDR source, measured: the init is hvc1 Main10 level 4.0.
+    func test_pmsHEVCEncodeLosesItsWrongCodecs() {
+        for codecs in ["hev1.1.1.L93,mp4a.40.2", "ec-3,hev1.1.1.L93"] {
+            let master = """
+            #EXTM3U
+            #EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=7614000,RESOLUTION=1920x1080,FRAME-RATE=24.000000,VIDEO-RANGE=PQ,CODECS="\(codecs)"
+            session/s/base/index.m3u8
+            """
+            let patched = makeEnricher().patchMasterPlaylist(master)
+            XCTAssertFalse(patched.contains("CODECS"), codecs)
+            XCTAssertTrue(patched.contains("FRAME-RATE=24.000000,VIDEO-RANGE=PQ\n"), codecs)
+        }
+    }
+
+    /// A copied Dolby Vision stream's CODECS is what puts the TV in Dolby Vision; it stays.
+    func test_copiedStreamKeepsItsCodecs() {
+        let master = """
+        #EXTM3U
+        #EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=11508000,RESOLUTION=3840x2160,FRAME-RATE=24.000000,VIDEO-RANGE=PQ,CODECS="dvh1.08.06,ec-3"
+        session/s/base/index.m3u8
+        """
+        XCTAssertTrue(makeEnricher().patchMasterPlaylist(master).contains(#"CODECS="dvh1.08.06,ec-3""#))
+    }
 }

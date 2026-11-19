@@ -60,6 +60,10 @@ final class MediaItemDetailPageViewController: UIViewController {
     private let dateRow = UIStackView()
     private let dateLabel = UILabel()
     private let badgeRow = UIStackView()
+    /// The show's MyAnimeList score for this episode's season; empty and hidden for anything else.
+    private let animeScoreSlot = UIStackView()
+    /// The show's ids, kept from `loadDetail`: the episode's own ids are not the show's.
+    private var showExternalIDs: [String: String] = [:]
     private var playButton: FocusableActionButton?
     private weak var lastFocusedHeroButton: FocusableActionButton?
     /// The Play pill's own label, held so a post-playback refresh can flip
@@ -321,6 +325,8 @@ final class MediaItemDetailPageViewController: UIViewController {
         style(dateLabel, size: 25, weight: .medium, alpha: 0.75)
         dateLabel.text = dateRuntimeText()
         dateRow.addArrangedSubview(dateLabel)
+        animeScoreSlot.isHidden = true
+        dateRow.addArrangedSubview(animeScoreSlot)
         badgeRow.axis = .horizontal
         badgeRow.alignment = .center
         badgeRow.spacing = 12
@@ -559,6 +565,8 @@ final class MediaItemDetailPageViewController: UIViewController {
                 showGenres = showDetail.genres
                 await MainActor.run {
                     self.show = showDetail.item
+                    self.showExternalIDs = showDetail.externalIDs
+                    self.applyAnimeScore()
                     if (self.showTitleLabel.text ?? "").isEmpty { self.setShowTitle(showDetail.item.title) }
                 }
             }
@@ -576,8 +584,19 @@ final class MediaItemDetailPageViewController: UIViewController {
         genreRatingRow.isHidden = false
     }
 
+    private func applyAnimeScore() {
+        animeScoreSlot.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        guard item.kind == .episode else { return }
+        let season = detail?.item.seasonNumber ?? item.seasonNumber
+        if let score = AnimeScores.score(kind: .episode, ids: showExternalIDs, season: season) {
+            animeScoreSlot.addArrangedSubview(MediaDetailChromeView.animeScoreView(score, alpha: 0.75))
+        }
+        animeScoreSlot.isHidden = animeScoreSlot.arrangedSubviews.isEmpty
+    }
+
     private func applyDetail(_ detail: MediaItemDetail, fallbackGenres: [String]) {
         self.detail = detail
+        applyAnimeScore()
         // The seed can be stale on open; `detail` is a fresh read, so reuse it.
         applyWatchState(from: detail.item)
         setGenres(detail.genres.isEmpty ? fallbackGenres : detail.genres)

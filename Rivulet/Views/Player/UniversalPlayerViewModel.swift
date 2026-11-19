@@ -76,7 +76,9 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     /// Touch-surface double tap zooms the picture to fill the screen (#589). Kept for the session.
     @Published var fillsScreen = false
 
-    @Published var showControls = true {
+    /// Starts hidden: a video opens, or resumes mid-film, with nothing
+    /// over the picture. Any press brings the controls up as usual.
+    @Published var showControls = false {
         didSet {
             // Focus mode cannot outlive visible controls.
             if !showControls { controlsFocusActive = false }

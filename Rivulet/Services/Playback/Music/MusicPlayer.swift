@@ -101,6 +101,8 @@ final class MusicPlayer: ObservableObject {
                 case .readyToPlay:
                     self.duration = item.duration.seconds.isNaN ? 0 : item.duration.seconds
                     self.state = .playing
+                    await Self.preferOutputChannels(for: item.asset)
+                    guard self.currentItem === item else { return }
                     self.player?.play()
                 case .failed:
                     print("🎵 MusicPlayer: Item failed: \(item.error?.localizedDescription ?? "unknown")")
@@ -141,6 +143,19 @@ final class MusicPlayer: ObservableObject {
                 }
             }
         }
+    }
+
+    /// A bare AVPlayer never sets the session's output channel count, so surround music left HDMI as
+    /// stereo. Ask for the track's own count, as the engine's audio path does. Off main: it is an XPC call.
+    nonisolated private static func preferOutputChannels(for asset: AVAsset) async {
+        guard let track = try? await asset.loadTracks(withMediaType: .audio).first,
+              let format = try? await track.load(.formatDescriptions).first,
+              let channels = CMAudioFormatDescriptionGetStreamBasicDescription(format)?.pointee.mChannelsPerFrame
+        else { return }
+        let session = AVAudioSession.sharedInstance()
+        let maximum = session.maximumOutputNumberOfChannels
+        guard maximum > 0 else { return }
+        try? session.setPreferredOutputNumberOfChannels(min(Int(channels), maximum))
     }
 
     private func loadEngine(url: URL, headers: [String: String], gainDB: Double?) {

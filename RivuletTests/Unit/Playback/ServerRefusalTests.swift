@@ -70,6 +70,29 @@ final class ServerRefusalTests: XCTestCase {
         XCTAssertFalse(PlexNetworkManager.refusesDirectPlay(Data(#"{"MediaContainer":{}}"#.utf8)))
     }
 
+    /// Measured on PMS 1.43.5 over the LAN: a refusal for a track rule carries the same codes as a remote limit.
+    private let refusedForAudioTrack = #"{"MediaContainer":{"directPlayDecisionCode":3000,"directPlayDecisionText":"App cannot direct play this item. Selected audio stream is not the first audio stream and app cannot select audio streams in direct play.","generalDecisionCode":2000,"transcodeDecisionCode":4005}}"#
+    private let remoteServer = "https://203-0-113-7.0123abcd.plex.direct:32400"
+
+    func test_directPlayDecision_isNotActedOnOverTheLAN() {
+        let refused = Data(refusedForAudioTrack.utf8)
+        for local in ["http://192.168.1.20:32400", "https://192-168-1-140.0123abcd.plex.direct:32400", "http://nas.local:32400"] {
+            XCTAssertFalse(PlexNetworkManager.refusesDirectPlay(refused, serverURL: local), local)
+        }
+    }
+
+    func test_directPlayDecision_isActedOnOverARemoteConnection() {
+        XCTAssertTrue(PlexNetworkManager.refusesDirectPlay(Data(refusedForAudioTrack.utf8), serverURL: remoteServer))
+        XCTAssertFalse(PlexNetworkManager.refusesDirectPlay(
+            Data(#"{"MediaContainer":{"directPlayDecisionCode":1000}}"#.utf8), serverURL: remoteServer))
+    }
+
+    func test_directPlayDecisionText_isTheServersReason() {
+        XCTAssertEqual(PlexNetworkManager.directPlayDecisionText(Data(refusedForAudioTrack.utf8)),
+                       "App cannot direct play this item. Selected audio stream is not the first audio stream and app cannot select audio streams in direct play.")
+        XCTAssertNil(PlexNetworkManager.directPlayDecisionText(Data("<MediaContainer/>".utf8)))
+    }
+
     func test_directPlayRefusedNotice_namesTheStep_orTheServersBest() {
         XCTAssertEqual(ServerRefusal.directPlayRefusedNotice(convertingTo: nil).title, "Server Is Converting")
         XCTAssertTrue(ServerRefusal.directPlayRefusedNotice(convertingTo: nil).detail?.contains("best quality it allows") == true)

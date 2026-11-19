@@ -156,11 +156,7 @@ final class HLSManifestEnricher: NSObject, AVAssetResourceLoaderDelegate, @unche
     /// PMS 1.43.4 master playlist, because every sub-URL AVPlayer fetches comes
     /// out of here and a silent regression costs the whole session.
     func patchMasterPlaylist(_ manifest: String) -> String {
-        // PMS labels its own HEVC encodes `hev1` as 8-bit Main level 3.1, even a 10-bit HDR 1080p one.
-        // Without CODECS AVPlayer reads the real format from the init segment (#677).
-        var lines = manifest.components(separatedBy: "\n").map {
-            $0.replacingOccurrences(of: #",CODECS="[^"]*\bhev1\.[^"]*""#, with: "", options: .regularExpression)
-        }
+        var lines = manifest.components(separatedBy: "\n")
 
         // 1. Inject audio track metadata
         let audioTag = buildAudioTag()

@@ -30,6 +30,9 @@ final class PosterCell: UICollectionViewCell {
     /// The title on the failure card, so an item with no artwork is still named.
     private let failureTitle = UILabel()
     private let progressInfoBar = MediaProgressInfoBar()
+    /// "Movie · Action" at the bottom of a movie's or show's artwork (Settings → Genre on Posters),
+    /// on the info bar's blur band, as the Apple TV app labels its posters.
+    private let genreLabel = UILabel()
 
     /// Apple-style watched glyph, bottom-left (the progress bar's slot).
     private let watchedGlyph = WatchedGlyphView()
@@ -145,6 +148,22 @@ final class PosterCell: UICollectionViewCell {
         progressInfoBar.translatesAutoresizingMaskIntoConstraints = false
         progressInfoBar.isHidden = true; bottomInfoBlur?.isHidden = true
         overlayContainer.addSubview(progressInfoBar)
+
+        // Above the blur band, which `ensureBottomInfoBlur` slides in below the info bar.
+        genreLabel.translatesAutoresizingMaskIntoConstraints = false
+        genreLabel.font = .systemFont(ofSize: 20, weight: .semibold)
+        genreLabel.textColor = UIColor.white.withAlphaComponent(0.9)
+        genreLabel.lineBreakMode = .byTruncatingTail
+        genreLabel.textAlignment = .center
+        genreLabel.isHidden = true
+        overlayContainer.addSubview(genreLabel)
+        // Centred, as the Apple TV app sets it.
+        NSLayoutConstraint.activate([
+            genreLabel.centerXAnchor.constraint(equalTo: overlayContainer.centerXAnchor),
+            genreLabel.leadingAnchor.constraint(greaterThanOrEqualTo: overlayContainer.leadingAnchor, constant: 14),
+            genreLabel.trailingAnchor.constraint(lessThanOrEqualTo: overlayContainer.trailingAnchor, constant: -14),
+            genreLabel.bottomAnchor.constraint(equalTo: overlayContainer.bottomAnchor, constant: -14)
+        ])
 
         // Unwatched count then edition badge: top-trailing, 10pt inset. Hidden badges collapse.
         trailingBadges.translatesAutoresizingMaskIntoConstraints = false
@@ -271,6 +290,7 @@ final class PosterCell: UICollectionViewCell {
             self.progressInfoBar.setFocused(nowFocused)
             self.caption.setFocused(nowFocused)
             self.revealTrailingBadges(nowFocused)
+            self.revealGenreLine(nowFocused)
         }, completion: { [weak self] in
             guard let self, !nowFocused else { return }
             // TVPosterView's own unfocus sometimes leaves the poster enlarged; enforce the end state.
@@ -320,8 +340,42 @@ final class PosterCell: UICollectionViewCell {
         setEdition(item.editionTitle)
         loadImage(from: url, failureKind: item.kind)
         configureProgressBar(item: item)
+        configureGenreLine(item: item)
         configureWatchedBadge(item: item)
         revealTrailingBadges(isFocused)
+    }
+
+    /// The genre line shares the info bar's band, so an in-progress title keeps its progress instead.
+    private func configureGenreLine(item: MediaItem) {
+        let text = MediaRowMetrics.showsPosterGenre && progressInfoBar.isHidden ? Self.genreLine(for: item) : nil
+        genreLabel.text = text
+        genreLabel.isHidden = text == nil
+        if text != nil { ensureBottomInfoBlur().isHidden = false }
+        // A reconfigured cell skips prepareForReuse: an in-progress band must not keep the line's hidden alpha.
+        if text == nil { bottomInfoBlur?.alpha = 1 }
+        revealGenreLine(isFocused)
+    }
+
+    /// The genre line and its band show while the poster holds focus, as on the Apple TV app; at rest
+    /// the artwork is bare. A band under an in-progress info bar stays put.
+    private func revealGenreLine(_ shown: Bool) {
+        guard genreLabel.text != nil else { return }
+        genreLabel.alpha = shown ? 1 : 0
+        bottomInfoBlur?.alpha = shown ? 1 : 0
+    }
+
+    /// "Movie · Action" or "TV Show · Drama": the kind, then the server's first genre. nil for episodes,
+    /// seasons and music, whose artwork is their show's or album's.
+    static func genreLine(for item: MediaItem) -> String? {
+        guard item.isMusic != true else { return nil }
+        let kind: String
+        switch item.kind {
+        case .movie: kind = String(localized: "Movie")
+        case .show: kind = String(localized: "TV Show")
+        default: return nil
+        }
+        guard let genre = item.genres?.first(where: { !$0.isEmpty }) else { return kind }
+        return "\(kind) · \(genre)"
     }
 
     /// The title line (`PosterCaption.set`); call after `configure`.
@@ -376,6 +430,10 @@ final class PosterCell: UICollectionViewCell {
         clearArtwork()
         progressInfoBar.isHidden = true; bottomInfoBlur?.isHidden = true
         progressInfoBar.reset()
+        genreLabel.isHidden = true
+        genreLabel.text = nil
+        genreLabel.alpha = 1
+        bottomInfoBlur?.alpha = 1
         unwatchedBadge.text = nil
         sourceBadge.text = nil
         editionBadge.text = nil

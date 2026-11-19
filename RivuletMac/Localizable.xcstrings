@@ -166,6 +166,9 @@
     "Plays surround soundtracks as stereo with the subwoofer channel mixed into left and right, for 2.1 speakers on a stereo connection." : {},
     "Ready" : {},
     "Reconnecting to Watch Together…" : {},
+    "Recording in Progress" : {
+
+    },
     "Room Code" : {},
     "Room codes have 6 letters and numbers." : {},
     "Rivulet is free and open source. A one-time tip helps keep it going." : {
@@ -268,6 +271,9 @@
       }
     },
     "Start a Room" : {},
+    "Start from Beginning" : {
+
+    },
     "Starting…" : {},
     "Stay" : {},
     "Stereo with Subwoofer" : {},
@@ -687,6 +693,9 @@
           }
         }
       }
+    },
+    "Watch Live" : {
+
     },
     "Watch Together" : {},
     "Watch Together ended" : {},

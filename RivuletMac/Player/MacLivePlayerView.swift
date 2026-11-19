@@ -83,6 +83,16 @@ struct MacLivePlayerView: View {
         }
         .sheet(item: $info) { MacLiveProgrammeSheet(selection: $0, onWatch: nil) }
         .liveRecorder(recorder)
+        .alert("Recording in Progress", isPresented: Binding(
+            get: { session.startQuestion != nil },
+            // Dismissed without a choice: Watch Live. After a choice this is a no-op.
+            set: { if !$0 { session.startQuestion?.answer(startsFromBeginning: false) } }
+        ), presenting: session.startQuestion) { question in
+            Button("Start from Beginning") { question.answer(startsFromBeginning: true) }
+            Button("Watch Live", role: .cancel) { question.answer(startsFromBeginning: false) }
+        } message: { question in
+            Text(verbatim: question.recording.title)
+        }
     }
 
     // MARK: - State
@@ -103,7 +113,7 @@ struct MacLivePlayerView: View {
     private func liveScrub(now: Date) -> (bar: ClosedRange<Double>, sections: [Double])? {
         let window = player.liveWindow
         guard let range = window.seekableRange, window.edgeTime > range.lowerBound else { return nil }
-        let onAir = store.getCurrentProgram(for: session.channel)
+        let onAir = store.program(for: session.channel, at: now) ?? store.getCurrentProgram(for: session.channel)
         let earlier = onAir.map {
             store.getPrograms(for: session.channel,
                               startDate: now.addingTimeInterval(-LiveTimelineLayout.maximumLookback),
@@ -124,7 +134,7 @@ struct MacLivePlayerView: View {
     private func programme(at date: Date) -> UnifiedProgram? {
         let window = player.liveWindow
         let behind = window.isAtLiveEdge ? 0 : max(0, window.edgeTime - window.playhead)
-        return store.program(for: session.channel, at: date.addingTimeInterval(-behind))
+        return store.program(for: session.channel, at: date.addingTimeInterval(-behind - session.liveLag))
     }
 
     // MARK: - Controls
@@ -170,7 +180,7 @@ struct MacLivePlayerView: View {
 
     private func bottomBar(programme: UnifiedProgram?) -> some View {
         let window = player.liveWindow
-        let scrub = liveScrub(now: .now)
+        let scrub = liveScrub(now: Date.now.addingTimeInterval(-session.liveLag))
         return VStack(spacing: 6) {
             let range = window.seekableRange.flatMap { window.edgeTime > $0.lowerBound ? $0 : nil }
             if let range {
@@ -268,7 +278,7 @@ struct MacLivePlayerView: View {
         let channel = session.channel
         let isFavorite = store.isFavorite(channel)
         return HStack(spacing: 6) {
-            if !player.liveWindow.isAtLiveEdge {
+            if !player.liveWindow.isAtLiveEdge || session.liveLag > 0 {
                 Button { session.goLive(); scheduleHide() } label: { MacLivePill(text: String(localized: "Go Live"), dot: true, style: .red) }
                     .buttonStyle(.plain)
             }

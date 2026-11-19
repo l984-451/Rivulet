@@ -11,7 +11,14 @@ final class IOSLivePlayback: ObservableObject, IOSPlaybackSession {
     @Published private(set) var channel: UnifiedChannel
     /// Shown instead of the engine's failure: a refused tune or a busy tuner.
     @Published private(set) var notice: String?
+    /// Start from Beginning or Watch Live, for a recording in progress (#444).
+    @Published private(set) var startQuestion: LiveStartQuestion?
+    /// How far the session's edge trails live: nonzero only after a join at a
+    /// recording's start, which then plays at 1x.
+    @Published private(set) var liveLag: TimeInterval = 0
     var onItemChange: (() -> Void)?
+    /// The next join is Go Live from such a session: no question, the edge.
+    private var joinsLiveWithoutAsking = false
 
     private let store = LiveTVDataStore.shared
     private let keepalive = PlexLiveTimelineKeepalive()
@@ -58,6 +65,12 @@ final class IOSLivePlayback: ObservableObject, IOSPlaybackSession {
     }
 
     func goLive() {
+        if liveLag > 0 {
+            // Joined at a recording's start, the session only reaches its own edge; live is a new join.
+            joinsLiveWithoutAsking = true
+            retry()
+            return
+        }
         windowSeeker.cancelPending()
         Task { await player.seekToLiveEdge() }
     }
@@ -112,6 +125,7 @@ final class IOSLivePlayback: ObservableObject, IOSPlaybackSession {
 
     private func load() async {
         notice = nil
+        liveLag = 0
         windowSeeker.cancelPending()
         keepalive.stop()
         watchTask?.cancel()
@@ -119,12 +133,15 @@ final class IOSLivePlayback: ObservableObject, IOSPlaybackSession {
         watchTask = store.beganWatching(channel)
 
         let url: URL
+        let recordingStart: LiveRecordingStart?
         do {
-            guard let resolved = try await store.resolveStreamURL(for: channel) else {
+            let resolved = try await store.resolveStreamURLAndRecordingStart(for: channel)
+            guard let resolvedURL = resolved.url else {
                 notice = String(localized: "This channel has no stream.")
                 return
             }
-            url = resolved
+            url = resolvedURL
+            recordingStart = resolved.recordingStart
         } catch {
             guard !isCancellationError(error) else { return }
             notice = error is PlexLiveTuneError
@@ -137,10 +154,21 @@ final class IOSLivePlayback: ObservableObject, IOSPlaybackSession {
 
         // A no-op unless the URL is a Plex tuned session.
         keepalive.start(url: url)
+        let asksForStart = !joinsLiveWithoutAsking
+        joinsLiveWithoutAsking = false
+        var fromStart: LiveRecordingStart?
+        if asksForStart, let recordingStart {
+            let question = LiveStartQuestion(recording: recordingStart.recording)
+            if await question.ask(present: { startQuestion = question }) { fromStart = recordingStart }
+            if startQuestion === question { startQuestion = nil }
+            guard !Task.isCancelled else { return }
+        }
+        liveLag = fromStart.map { Date().timeIntervalSince($0.firstSegmentAired) } ?? 0
         let headers = LiveTVClientIdentity.streamHeaders(for: channel)
         do {
-            try await player.loadLive(url: url, headers: headers,
-                                      forceEngineDemux: url.path.hasPrefix("/livetv/sessions/"))
+            try await player.loadLive(url: fromStart?.url ?? url, headers: headers,
+                                      forceEngineDemux: url.path.hasPrefix("/livetv/sessions/"),
+                                      joinsAtRecordingStart: fromStart != nil)
         } catch {
             guard !Task.isCancelled, !isCancellationError(error) else { return }
             keepalive.stop()
@@ -189,7 +217,7 @@ private struct IOSLivePlayerScreen: View {
                     range: player.liveWindow.seekableRange,
                     position: session.stagedSkipTarget ?? player.pendingSeekTarget ?? player.liveWindow.playhead,
                     edge: player.liveWindow.edgeTime,
-                    isAtEdge: player.liveWindow.isAtLiveEdge,
+                    isAtEdge: player.liveWindow.isAtLiveEdge && session.liveLag == 0,
                     programme: programme.map { $0.startTime...$0.endTime }
                 ),
                 audioTracks: player.audioTracks,
@@ -214,7 +242,7 @@ private struct IOSLivePlayerScreen: View {
                     retry: session.retry,
                     swipeDown: controller.dismissGesture
                 ),
-                liveScrub: liveScrub(now: context.date)
+                liveScrub: liveScrub(now: context.date.addingTimeInterval(-session.liveLag))
             ) { osdTop in
                 ZStack {
                     IOSPlayerSurface(surface: controller.surface)
@@ -238,6 +266,16 @@ private struct IOSLivePlayerScreen: View {
             IOSLiveProgrammeSheet(selection: selection, onWatch: nil)
         }
         .liveRecorder(recorder)
+        .alert("Recording in Progress", isPresented: Binding(
+            get: { session.startQuestion != nil },
+            // Dismissed without a choice: Watch Live. After a choice this is a no-op.
+            set: { if !$0 { session.startQuestion?.answer(startsFromBeginning: false) } }
+        ), presenting: session.startQuestion) { question in
+            Button("Start from Beginning") { question.answer(startsFromBeginning: true) }
+            Button("Watch Live", role: .cancel) { question.answer(startsFromBeginning: false) }
+        } message: { question in
+            Text(verbatim: question.recording.title)
+        }
         .onReceive(NotificationCenter.default.publisher(for: CaptionAppearance.changedNotification)) { _ in
             captionStyle = CaptionAppearance.current()
         }
@@ -248,7 +286,7 @@ private struct IOSLivePlayerScreen: View {
     private func liveScrub(now: Date) -> IOSLiveScrub? {
         let window = player.liveWindow
         guard let range = window.seekableRange, window.edgeTime > range.lowerBound else { return nil }
-        let onAir = store.getCurrentProgram(for: session.channel)
+        let onAir = store.program(for: session.channel, at: now) ?? store.getCurrentProgram(for: session.channel)
         let earlier = onAir.map {
             store.getPrograms(for: session.channel,
                               startDate: now.addingTimeInterval(-LiveTimelineLayout.maximumLookback),
@@ -272,7 +310,7 @@ private struct IOSLivePlayerScreen: View {
     private func programme(at date: Date) -> UnifiedProgram? {
         let window = player.liveWindow
         let behind = window.isAtLiveEdge ? 0 : max(0, window.edgeTime - window.playhead)
-        return store.program(for: session.channel, at: date.addingTimeInterval(-behind))
+        return store.program(for: session.channel, at: date.addingTimeInterval(-behind - session.liveLag))
     }
 
     private var failure: IOSPlayerFailure? {

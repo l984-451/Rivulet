@@ -12,7 +12,14 @@ final class MacLivePlayback: ObservableObject, MacPlaybackSession {
     @Published private(set) var channel: UnifiedChannel
     /// Shown instead of the engine's failure: a refused tune or a busy tuner.
     @Published private(set) var notice: String?
+    /// Start from Beginning or Watch Live, for a recording in progress (#444).
+    @Published private(set) var startQuestion: LiveStartQuestion?
+    /// How far the session's edge trails live: nonzero only after a join at a
+    /// recording's start, which then plays at 1x.
+    @Published private(set) var liveLag: TimeInterval = 0
     var onItemChange: (() -> Void)?
+    /// The next join is Go Live from such a session: no question, the edge.
+    private var joinsLiveWithoutAsking = false
 
     private let store = LiveTVDataStore.shared
     private let tuner = MacLiveTuner()
@@ -70,6 +77,12 @@ final class MacLivePlayback: ObservableObject, MacPlaybackSession {
     }
 
     func goLive() {
+        if liveLag > 0 {
+            // Joined at a recording's start, the session only reaches its own edge; live is a new join.
+            joinsLiveWithoutAsking = true
+            retry()
+            return
+        }
         windowSeeker.cancelPending()
         Task { await player.seekToLiveEdge() }
     }
@@ -127,14 +140,27 @@ final class MacLivePlayback: ObservableObject, MacPlaybackSession {
 
     private func load() async {
         notice = nil
+        liveLag = 0
         windowSeeker.cancelPending()
         let channel = channel
         guard let stream = await tuner.tune(channel) else {
             if !Task.isCancelled { notice = tuner.notice }
             return
         }
+        let asksForStart = !joinsLiveWithoutAsking
+        joinsLiveWithoutAsking = false
+        var fromStart: LiveRecordingStart?
+        if asksForStart, let recordingStart = stream.recordingStart {
+            let question = LiveStartQuestion(recording: recordingStart.recording)
+            if await question.ask(present: { startQuestion = question }) { fromStart = recordingStart }
+            if startQuestion === question { startQuestion = nil }
+            guard !Task.isCancelled else { return }
+        }
+        liveLag = fromStart.map { Date().timeIntervalSince($0.firstSegmentAired) } ?? 0
         do {
-            try await player.loadLive(url: stream.url, headers: stream.headers, forceEngineDemux: stream.forceEngineDemux)
+            try await player.loadLive(url: fromStart?.url ?? stream.url, headers: stream.headers,
+                                      forceEngineDemux: stream.forceEngineDemux,
+                                      joinsAtRecordingStart: fromStart != nil)
         } catch {
             guard !Task.isCancelled, !isCancellationError(error) else { return }
             await tuner.loadFailed(stream, channel: channel)

@@ -849,9 +849,10 @@ final class AetherPlayer: PlayerProtocol {
 
     /// Live TV load. HLS sources go to AVPlayer directly (`nativeRemoteHLS`), anything else
     /// through the engine's remux. `forceEngineDemux` makes the engine open the playlist, the
-    /// fallback when a server rejects AVPlayer's request pattern.
+    /// fallback when a server rejects AVPlayer's request pattern. `joinsAtRecordingStart` plays a
+    /// Plex recording in progress from its first segment (`LiveRecordingStart`).
     func loadLive(url: URL, headers: [String: String]?, forceEngineDemux: Bool = false,
-                  role: LiveLoadRole = .fullscreen) async throws {
+                  joinsAtRecordingStart: Bool = false, role: LiveLoadRole = .fullscreen) async throws {
         finishAVCapture()
         dropFrameExtractor()
         if role == .fullscreen { startAVCapture(url: url) }
@@ -907,6 +908,11 @@ final class AetherPlayer: PlayerProtocol {
                 // Field-rate deinterlacing on a quarter-screen tile only
                 // doubles decoder output for nothing.
                 options.deinterlaceFieldRate = .frame
+            }
+            if joinsAtRecordingStart {
+                // #444: play from the recording's first segment; the window reaches back to it.
+                options.liveJoinsAtPlaylistStart = true
+                options.dvrWindowSeconds = 4 * 3600
             }
             if joinsWirelessAudio {
                 // AVPlayer's own start-up wait is what rides out the receiver's

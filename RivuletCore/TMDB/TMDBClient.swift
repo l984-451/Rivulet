@@ -5,7 +5,7 @@
 //  TMDBClient.swift
 //  Rivulet
 //
-//  Lightweight TMDB client that talks to the Cloudflare Worker proxy.
+//  Lightweight TMDB client over `TMDBTransport` (the proxy, or TMDB with the user's own key).
 //  Used only for per-item features (keywords/cast/genres/directors) that
 //  feed the personalized recommendation engine. Artwork (logos, backdrops)
 //  comes from Plex directly.
@@ -195,24 +195,7 @@ final class TMDBClient: @unchecked Sendable {
     }
 
     private func request<T: Decodable>(endpoint: String, queryItems: [URLQueryItem]) async throws -> T {
-        guard let url = URL(string: endpoint, relativeTo: TMDBConfig.proxyBaseURL) else {
-            throw URLError(.badURL)
-        }
-        var components = URLComponents(url: url, resolvingAgainstBaseURL: true)
-        components?.queryItems = queryItems
-        guard let finalURL = components?.url else {
-            throw URLError(.badURL)
-        }
-
-        var request = URLRequest(url: finalURL)
-        request.httpMethod = "GET"
-        request.addValue("application/json", forHTTPHeaderField: "Accept")
-
-        let (data, response) = try await session.attestedData(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw URLError(.badServerResponse)
-        }
-
+        let data = try await TMDBTransport.data(endpoint, query: queryItems, session: session)
         return try JSONDecoder().decode(T.self, from: data)
     }
 

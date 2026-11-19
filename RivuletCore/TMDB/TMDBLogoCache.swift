@@ -104,22 +104,8 @@ actor TMDBLogoCache {
     // MARK: - Networking
 
     private func fetchData(tmdbId: Int, type: TMDBMediaType) async throws -> Data {
-        guard let base = URL(string: "tmdb/images/\(tmdbId)", relativeTo: TMDBConfig.proxyBaseURL) else {
-            throw URLError(.badURL)
-        }
-        var components = URLComponents(url: base, resolvingAgainstBaseURL: true)
-        components?.queryItems = [URLQueryItem(name: "type", value: type.rawValue)]
-        guard let url = components?.url else { throw URLError(.badURL) }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.addValue("application/json", forHTTPHeaderField: "Accept")
-
-        let (data, response) = try await session.attestedData(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw URLError(.badServerResponse)
-        }
-        return data
+        try await TMDBTransport.data("tmdb/images/\(tmdbId)", query: [URLQueryItem(name: "type", value: type.rawValue)],
+                                     session: session)
     }
 
     // MARK: - Disk

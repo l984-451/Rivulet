@@ -10648,6 +10648,7 @@
         }
       }
     },
+    "How loud the theme tune plays, on top of your TV's own volume." : {},
     "How many more episodes play on their own after the one you picked." : {
       "localizations" : {
         "de" : {
@@ -14924,6 +14925,7 @@
         }
       }
     },
+    "Plays a TV show's theme tune quietly while you look at the show, its seasons and episodes. It stops when you leave or start playing." : {},
     "Plays each video clip in full when a slideshow reaches it." : {
       "localizations" : {
         "de" : {
@@ -22254,6 +22256,8 @@
         }
       }
     },
+    "Theme Music" : {},
+    "Theme Music Volume" : {},
     "This Dolby Vision file has no fallback layer this Apple TV can decode." : {
       "localizations" : {
         "de" : {

@@ -105,6 +105,7 @@ final class PreviewCarouselViewController: UIViewController {
 
     private func teardown() {
         backdropPlane.stopThemeVideo()
+        ThemeMusic.shared.refresh()
         onTeardown?()
         onTeardown = nil
     }
@@ -456,6 +457,7 @@ final class PreviewCarouselViewController: UIViewController {
             guard let self else { return }
             self.state.finishExpand()
             self.backdropPlane.playThemeVideo(at: self.selectedIndex, host: self)
+            ThemeMusic.shared.refresh()
             self.expandedDetail.revealBelowFoldCollection()
             self.setNeedsFocusUpdate()
         }
@@ -479,6 +481,7 @@ final class PreviewCarouselViewController: UIViewController {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         if isExpanded { backdropPlane.playThemeVideo(at: selectedIndex, host: self) }
+        ThemeMusic.shared.refresh()
         // Focus, not first responder, is what routes presses here on tvOS.
         becomeFirstResponder()
         // Re-arm a shelf row (Related) on its tile before the update resolves:
@@ -778,6 +781,7 @@ final class PreviewCarouselViewController: UIViewController {
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         backdropPlane.stopThemeVideo()
+        ThemeMusic.shared.refresh()
         previewCarouselLog.info("[Lifecycle] viewWillDisappear isExpanded=\(self.isExpanded) presentingVC=\(self.presentingViewController != nil)")
     }
 
@@ -1331,6 +1335,7 @@ final class PreviewCarouselViewController: UIViewController {
             guard let self else { return }
             self.state.finishExpand()
             self.backdropPlane.playThemeVideo(at: self.selectedIndex, host: self)
+            ThemeMusic.shared.refresh()
             // Reveal the real focus-driven below-fold (post-morph, §6).
             self.expandedDetail.revealBelowFoldCollection()
             self.setNeedsFocusUpdate()
@@ -1417,6 +1422,8 @@ final class PreviewCarouselViewController: UIViewController {
         previewCarouselLog.info("[Collapse] BEGIN idx=\(self.selectedIndex)")
 
         isExpanded = false
+        // After the flag: the tune asks this page whether it is still the show's page.
+        ThemeMusic.shared.refresh()
 
         // Back to the placeholder peek, at rest, before the collapse morph.
         expandedDetail.hideBelowFoldCollection()
@@ -1440,6 +1447,7 @@ final class PreviewCarouselViewController: UIViewController {
         guard pagingAnimation == nil, !morphController.isAnimating else { return }
         backdropPlane.stopThemeVideo()
         state.beginExit()
+        ThemeMusic.shared.refresh()
         onPrepareDismiss(dismissSourceTarget)
         // Fly only when the centred card has a tile on screen to land on.
         if !entrySnapshots.isEmpty {
@@ -1596,4 +1604,14 @@ extension PreviewCarouselViewController: UICollectionViewDataSource, UICollectio
 /// Zero-size focus target that lets Menu presses reach the carousel's responder chain.
 final class PreviewFocusAnchorView: UIView {
     override var canBecomeFocused: Bool { true }
+}
+
+// MARK: - Theme music
+
+extension PreviewCarouselViewController: ThemeMusicPage {
+    /// Only the expanded title is a show's page; the card carousel plays no tune.
+    var themeMusicShow: MediaItemRef? {
+        guard isExpanded, state.phase != .exiting, items.indices.contains(selectedIndex) else { return nil }
+        return items[selectedIndex].themeMusicShowRef
+    }
 }

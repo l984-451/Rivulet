@@ -66,6 +66,8 @@ enum PlayerPresenter {
             }
             guard allowed else { return false }
         }
+        // Before the player exists, and so before it configures the audio session.
+        ThemeMusic.shared.stopForVideo()
         let vc = makeViewController(viewModel: viewModel, onDismiss: onDismiss)
         presenter.topmostPresented.present(vc, animated: animated)
         return true

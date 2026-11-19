@@ -373,6 +373,9 @@ nonisolated struct PlexMetadata: Codable, Identifiable, Hashable, Sendable {
     var grandparentThumb: String?
     var grandparentArt: String?
     var grandparentTheme: String?
+    /// A show's theme tune (`/library/metadata/<ratingKey>/theme/<timestamp>`), and a season's show's.
+    var theme: String? = nil
+    var parentTheme: String? = nil
 
     // MARK: - Episode/Season Specific
     var index: Int?               // Episode number in season

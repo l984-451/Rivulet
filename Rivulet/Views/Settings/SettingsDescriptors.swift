@@ -382,6 +382,14 @@ enum SettingsDescriptorStore {
             icon: "rectangle.portrait.and.arrow.right",
             description: "Sign out of your Plex account. Every Plex server on it leaves Rivulet until you sign in again."
         ),
+        "tmdbKey": SettingDescriptor(
+            icon: "key",
+            description: "Uses your own TMDB key instead of Rivulet's service, for builds from source or to use your own TMDB quota. Takes an API Read Access Token or API key from themoviedb.org."
+        ),
+        "tmdbKeyRemove": SettingDescriptor(
+            icon: "trash",
+            description: "Removes your TMDB key from this Apple TV."
+        ),
         "jellyfinServer": SettingDescriptor(
             icon: "server.rack",
             description: "Sign in to your Jellyfin server."

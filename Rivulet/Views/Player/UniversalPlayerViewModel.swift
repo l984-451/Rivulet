@@ -2912,9 +2912,13 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         transcodeStartWatch = Task { @MainActor [weak self] in
             try? await Task.sleep(for: TranscodeStartWatch.deadline)
             guard let self, !Task.isCancelled, let player = self.player, player.currentItem === item,
-                  !self.avItemHasPlayed, item.status != .failed, player.timeControlStatus != .paused else { return }
-            let loaded = item.loadedTimeRanges.first.map { String(format: "%.1f", $0.timeRangeValue.duration.seconds) } ?? "0"
-            let state = "status=\(item.status.rawValue) waiting=\(player.reasonForWaitingToPlay?.rawValue ?? "none") loaded=\(loaded)s"
+                  item.status != .failed else { return }
+            let state = await TranscodeStartWatch.describe(item, player: player)
+            guard !Task.isCancelled, self.player?.currentItem === item else { return }
+            guard !self.avItemHasPlayed, player.timeControlStatus != .paused else {
+                DiagLog.notice(.playback, "Transcode at \(TranscodeStartWatch.deadline.components.seconds) s: \(state)")
+                return
+            }
             let notice = await TranscodeStartWatch.report(
                 serverURL: serverURL, authToken: authToken, sessionId: sessionId, playerState: state)
             guard !Task.isCancelled, self.player?.currentItem === item else { return }
@@ -3271,6 +3275,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         // session stops being the planned route. Tagged before the preflight:
         // a fallback that dies in preflight still died on HLS.
         transcodeTrackIDs = nil
+        diagnostics.noteFellBackToHLS()
         beginHLSSwitch(to: fallback)
 
         diagnostics.step("hls_fallback_preflight", detail: "reason=\(reason) kind=\(failureKind.rawValue)")

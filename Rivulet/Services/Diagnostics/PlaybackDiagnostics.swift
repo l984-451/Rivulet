@@ -65,6 +65,9 @@ final class PlaybackDiagnostics {
 
     func noteSeek() { record { $0.seekCount += 1 } }
 
+    /// The session left its planned route for the server's transcode.
+    func noteFellBackToHLS() { record { if $0.route != "hls" { $0.fellBackTo = "hls" } } }
+
     func noteError(_ text: String) {
         let line = SensitiveDataRedactor.redact(String(text.prefix(160)))
         record { if $0.errors.count < 6 { $0.errors.append(line) } }
@@ -197,7 +200,6 @@ final class PlaybackDiagnostics {
                 .map { "\($0.domain) code=\($0.code): \($0.localizedDescription)" } ?? "none"
         ]
         noteError("\(route)/\(kind.rawValue): \(error.localizedDescription)")
-        if route.lowercased() != "hls" { self.record { $0.fellBackTo = "hls" } }
         step("primary_failed", detail: "\(route)/\(kind.rawValue): \(error.localizedDescription)")
 
         // The origin answered 404 or 503: the server's file or load, not ours. A log, not an error.

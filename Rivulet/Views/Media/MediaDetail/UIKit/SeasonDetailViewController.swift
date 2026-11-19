@@ -39,6 +39,8 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
     private var loadToken: UInt64 = 0
     /// Go to Episode's episode: focused once its row exists, then forgotten.
     private var pendingFocusEpisodeID: String?
+    /// Runs once the page has closed; the show page puts focus back on the season's poster.
+    var onDismiss: (() -> Void)?
 
     private static let headerID = "header"
     private static let extrasID = "extras"
@@ -138,6 +140,11 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
         super.viewWillDisappear(animated)
         collectionView.settleFocusScroll()
         themeVideo.setActive(false)
+    }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        if isBeingDismissed { onDismiss?(); onDismiss = nil }
     }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {

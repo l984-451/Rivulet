@@ -539,6 +539,9 @@ enum SettingsContent {
             .header("Details"),
             SettingsRowItem(id: "detailRating", title: "Rating",
                             kind: .navigationValue(.detailRatingPicker, value: { MediaRating.detailSource.name })),
+            SettingsRowItem(id: "seasonStyle", title: "Seasons",
+                            kind: .cycle(value: { SeasonPosterStyle.isEnabled ? String(localized: "Posters") : String(localized: "Episode Row") },
+                                         next: { SeasonPosterStyle.isEnabled.toggle() })),
 
             .header("Live TV"),
         ] + liveTVLookRows + [

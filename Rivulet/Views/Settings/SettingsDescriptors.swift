@@ -183,6 +183,10 @@ enum SettingsDescriptorStore {
             icon: "star.leadinghalf.filled",
             description: "Choose the one rating shown at the top of a movie or show's details. If a title doesn't have the rating you choose, Rotten Tomatoes is shown instead."
         ),
+        "seasonStyle": SettingDescriptor(
+            icon: "rectangle.grid.3x1",
+            description: "How a show with more than one season lists them. Posters shows each season as a poster; choose one to see its episodes. Episode Row shows every episode in one row with the seasons above it."
+        ),
         "libraryHero": SettingDescriptor(
             icon: "rectangle.stack",
             description: "Shows a banner of featured titles at the top of each library."

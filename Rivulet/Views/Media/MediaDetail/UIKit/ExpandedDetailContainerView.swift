@@ -385,6 +385,7 @@ final class ExpandedDetailContainerView: UIView {
         }
         belowFoldCollection.onSelectSynopsis = { [weak self] d in self?.onSelectSynopsis?(d) }
         belowFoldCollection.onSelectAdvisory = { [weak self] a in self?.onSelectAdvisory?(a) }
+        belowFoldCollection.onOpenSeason = { [weak self] season in self?.onOpenSeason?(season) }
 
         // Logo + season pills sit ABOVE the collection (content scrolls under).
         bringSubviewToFront(smallTitleLogo)

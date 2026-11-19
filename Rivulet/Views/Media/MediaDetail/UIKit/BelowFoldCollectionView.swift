@@ -11,6 +11,8 @@ import UIKit
 // project's SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor (matches HomeSectionID).
 nonisolated enum BelowFoldSectionKind: Hashable, Sendable {
     case episodes
+    /// Season posters (Settings > Appearance > Seasons): the first row of a show with two or more seasons.
+    case seasons
     case trailers
     case extras
     case collection
@@ -33,6 +35,8 @@ nonisolated enum BelowFoldItem: Hashable, Sendable {
     case relatedShelf
     /// The collection row, hosted exactly like `.relatedShelf`.
     case collectionShelf
+    /// The season posters row, hosted exactly like `.collectionShelf`.
+    case seasonsShelf
     case cast(String)
     case about       // single full-width card block
     case info        // single full-width columns block
@@ -86,6 +90,8 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     /// the season it resolved as selected. The container builds the season pills
     /// from this instead of fetching `/children` a second time of its own.
     var onSeasonsLoaded: (([MediaItem], Int) -> Void)?
+    /// Select on a season poster: the host opens that season's page.
+    var onOpenSeason: ((MediaItem) -> Void)?
 
     /// Which sub-target of the focused episode card is focused (thumb vs
     /// description). Set from the cell's focus reporting.
@@ -233,7 +239,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
                     // Measured on device, tvOS 27: 105 from card bottom to the next header baseline.
                     sectionBottomInset: 91.5
                 )
-            case .related, .collection:
+            case .related, .collection, .seasons:
                 // As the primary row (also the collection row's case), lift by the header
                 // and 8 pt pad so the 40 pt peek strip shows posters, not the title.
                 let relatedLift = ShelfRowCell.headerHeight + 8
@@ -440,6 +446,10 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
                 self.configurePosterShelf(cell, section: .collection, title: row?.title ?? "",
                                           items: row?.members ?? [], trailing: row?.collection)
                 return cell
+            case .seasonsShelf:
+                let cell = cv.dequeueReusableCell(withReuseIdentifier: ShelfRowCell.reuseID, for: indexPath) as! ShelfRowCell
+                self.configureSeasonShelf(cell)
+                return cell
             case .relatedShelf:
                 let cell = cv.dequeueReusableCell(withReuseIdentifier: ShelfRowCell.reuseID, for: indexPath) as! ShelfRowCell
                 self.configurePosterShelf(cell, section: .related, title: String(localized: "Related"),
@@ -473,7 +483,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             case .extras:  header.configure(title: String(localized: "Extras"))
             case .related: header.configure(title: String(localized: "Related"))
             case .cast:    header.configure(title: String(localized: "Cast & Crew"), baseline: BelowFoldSectionHeader.castBaseline)
-            case .episodes, .collection, .about, .info: header.configure(title: "")
+            case .episodes, .seasons, .collection, .about, .info: header.configure(title: "")
             }
             return header
         }
@@ -519,6 +529,49 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             panelOvershoot: (left: Self.rowLeading - MediaRowMetrics.rowLeading, right: 0),
             captionHeight: MediaRowMetrics.posterCaptionSpace
         )
+    }
+
+    /// The season posters row. The content token hashes season ids only, so a watch-state
+    /// change never reloads the row under focus (`applyRefreshedSeasons` repaints in place).
+    private func configureSeasonShelf(_ cell: ShelfRowCell) {
+        var hasher = Hasher()
+        for season in seasonItems { hasher.combine(season.ref.itemID) }
+        cell.cellProvider = { [weak self] innerCV, ip in
+            let poster = innerCV.dequeueReusableCell(withReuseIdentifier: PosterCell.reuseID, for: ip) as! PosterCell
+            if let self, ip.item < self.seasonItems.count {
+                Self.configureSeasonPoster(poster, season: self.seasonItems[ip.item])
+            }
+            return poster
+        }
+        cell.onSelect = { [weak self] idx in
+            guard let self, idx < self.seasonItems.count else { return }
+            self.onOpenSeason?(self.seasonItems[idx])
+        }
+        cell.onWillDisplayItem = nil
+        cell.onLongPressItem = nil
+        cell.onOffsetChanged = { [weak self] offset in self?.shelfOffsets[.seasons] = offset }
+        cell.headerTitle = String(localized: "Seasons")
+        let column = SeasonPosterStyle.firstColumn(toShow: seasonEntryIndex ?? 0,
+                                                   count: seasonItems.count,
+                                                   fullCount: MediaRowMetrics.posterFullCount)
+        cell.configure(
+            kind: .poster,
+            realCount: seasonItems.count,
+            hasSkeleton: false,
+            contentToken: hasher.finalize(),
+            initialOffset: shelfOffsets[.seasons] ?? CGFloat(column) * ShelfRowCell.TileKind.poster.pitch,
+            panelOvershoot: (left: Self.rowLeading - MediaRowMetrics.rowLeading, right: 0),
+            captionHeight: MediaRowMetrics.posterCaptionSpace
+        )
+    }
+
+    /// A season poster: the season's name under it when poster titles are on, else in its badge.
+    private static func configureSeasonPoster(_ poster: PosterCell, season: MediaItem) {
+        let label = SeasonPillView.seasonLabel(for: season)
+        poster.configure(season: season, label: label)
+        let titled = MediaRowMetrics.showsPosterTitles
+        if titled { poster.setSourceBadge(nil) }
+        poster.setCaption(titled ? label : nil)
     }
 
     // MARK: - Configure (fetch + populate)
@@ -609,8 +662,18 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             // Fetched together: the rail's fade waits on both.
             async let target: MediaItem? = item.kind == .show
                 ? EpisodePicker.resolvePlayTarget(for: item, provider: provider) : nil
+            // Season posters: the season list replaces the all-episodes fetch for a multi-season show.
+            let postersEnabled = SeasonPosterStyle.isEnabled
+            var seasons: [MediaItem] = []
+            if postersEnabled, let showRef {
+                seasons = (try? await provider.children(of: showRef)) ?? []
+            }
+            let posters = SeasonPosterStyle.showsPosters(enabled: postersEnabled,
+                                                         seasonCount: seasons.count, pageKind: item.kind)
             let eps: [MediaItem]
-            if let showRef {
+            if posters {
+                eps = []
+            } else if let showRef {
                 eps = (try? await provider.allEpisodes(of: showRef)) ?? []
             } else if item.kind == .season {
                 eps = (try? await provider.children(of: item.ref)) ?? []
@@ -619,7 +682,13 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             }
             let playTarget = await target
             guard self.loadToken == token else { return }
-            self.ingestEpisodesOnly(eps)
+            if posters {
+                let holding = item.kind == .episode ? item.parentRef : playTarget?.parentRef
+                self.ingestSeasonsOnly(seasons, selectedIndex: SeasonPosterStyle.selectedIndex(
+                    seasons: seasons.map(\.ref), holding: holding))
+            } else {
+                self.ingestEpisodesOnly(eps)
+            }
             self.applySnapshot()
             let initialEpisode = eps.first { $0.ref == playTarget?.ref }
             self.scrollToInitialEpisode(item: initialEpisode ?? item)
@@ -651,10 +720,17 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         // (`ingestEpisodesOnly` clears both), so skip /related and the
         // collection fetch. Read before the await: the stores can change under it.
         let hasShelves = collectionRow != nil || !cachedRelated.isEmpty
+        // Season posters: the row carries the watch marks and there is no episode rail to repaint.
+        let showsSeasons = !seasonItems.isEmpty
         Task { [weak self] in
             guard let self else { return }
             let eps: [MediaItem]
-            if let showRef {
+            if showsSeasons, let showRef {
+                let fresh = (try? await provider.children(of: showRef)) ?? []
+                guard self.refreshToken == refresh, self.loadToken == load else { return }
+                if !fresh.isEmpty { self.applyRefreshedSeasons(fresh) }
+                eps = []
+            } else if let showRef {
                 eps = (try? await provider.allEpisodes(of: showRef)) ?? []
             } else if item.kind == .season {
                 eps = (try? await provider.children(of: item.ref)) ?? []
@@ -674,6 +750,20 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     }
 
     private var refreshToken: UInt64 = 0
+
+    /// Repaints the visible season posters in place with fresh watch marks. Never reloads the
+    /// row, so a focused poster keeps focus. A season that came or went waits for the next open.
+    private func applyRefreshedSeasons(_ fresh: [MediaItem]) {
+        guard fresh.map(\.ref) == seasonItems.map(\.ref) else { return }
+        seasonItems = fresh
+        guard let section = sectionKinds.firstIndex(of: .seasons),
+              let shelf = collectionView.cellForItem(at: IndexPath(item: 0, section: section)) as? ShelfRowCell
+        else { return }
+        for case let cell as PosterCell in shelf.rowCollectionView.visibleCells {
+            guard let ip = shelf.rowCollectionView.indexPath(for: cell), ip.item < fresh.count else { continue }
+            Self.configureSeasonPoster(cell, season: fresh[ip.item])
+        }
+    }
 
     /// Reconfigures the two shelf cells in place with refreshed items; only watch state is news.
     // ponytail: a refresh never adds or removes a row, so a collection or
@@ -750,13 +840,25 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         trailersByID = [:]; extrasByID = [:]; castEntriesByID = [:]
         cachedTrailers = []; cachedExtras = []; cachedRelated = []; cachedCastOrder = []
         collectionRow = nil; shelfOffsets = [:]
+        seasonItems = []; seasonEntryIndex = nil
         detail = nil
+    }
+
+    /// The peek load for a show shown as season posters: no episode rail, the seasons row instead.
+    private func ingestSeasonsOnly(_ seasons: [MediaItem], selectedIndex: Int) {
+        ingestEpisodesOnly([])
+        multiSeason = true
+        seasonItems = seasons
+        seasonEntryIndex = selectedIndex
     }
 
     private func ingest(_ content: BelowFoldContent) {
         detail = content.detail
         showDetail = content.showDetail
         multiSeason = content.seasons.count > 1
+        let posters = SeasonPosterStyle.showsPosters(enabled: SeasonPosterStyle.isEnabled,
+                                                     seasonCount: content.seasons.count,
+                                                     pageKind: configuredItem?.kind ?? .show)
         episodesByID = Dictionary(content.episodes.map { ($0.ref.itemID, $0) }, uniquingKeysWith: { a, _ in a })
         trailersByID = Dictionary(content.trailers.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         extrasByID = Dictionary(content.extras.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
@@ -779,7 +881,13 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             cachedCastOrder.append((id, .cast(id)))
         }
         castEntriesByID = entries
-        cachedEpisodes = buildRailItems(from: content.episodes)
+        if posters {
+            cachedEpisodes = []
+            railDividerLabels = [:]
+        } else {
+            cachedEpisodes = buildRailItems(from: content.episodes)
+        }
+        seasonItems = posters ? content.seasons : []
         cachedTrailers = content.trailers.map { BelowFoldItem.trailer($0.id) }
         cachedExtras = content.extras.map { BelowFoldItem.extra($0.id) }
         relatedItems = content.related
@@ -790,7 +898,9 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         // Last, so a handler reading back sees consistent state. The loader picked the season.
         let selectedSeasonIndex = content.selectedSeason
             .flatMap { sel in content.seasons.firstIndex(where: { $0.ref.itemID == sel.ref.itemID }) } ?? 0
-        onSeasonsLoaded?(content.seasons, selectedSeasonIndex)
+        seasonEntryIndex = posters ? selectedSeasonIndex : nil
+        // With season posters, no pills: an empty list removes them.
+        onSeasonsLoaded?(posters ? [] : content.seasons, selectedSeasonIndex)
     }
 
     /// Build the flat rail: the episodes, with a season divider inserted at each
@@ -839,6 +949,10 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     /// The collection row (Plex's hub title, members, optional trailing
     /// collection tile). nil or no members: no row.
     private var collectionRow: CollectionRow?
+    /// The season posters row (Settings > Appearance > Seasons); empty: no row.
+    private var seasonItems: [MediaItem] = []
+    /// The season the first entry into the row lands on; one-shot (`armSeasonEntryFocusIfNeeded`).
+    private var seasonEntryIndex: Int?
     /// Each poster shelf's resting horizontal offset, so a content reload or
     /// a reused host cell does not throw the row back to its first tile.
     private var shelfOffsets: [BelowFoldSectionKind: CGFloat] = [:]
@@ -853,6 +967,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         // TV-show order, minus whatever's absent. The FIRST section (Episodes for
         // shows, Trailers for movies) is the primary peek row (gets the big peek
         // inset in makeLayout). Related is always a normal row below Trailers.
+        if !seasonItems.isEmpty { add(.seasons, [.seasonsShelf]) }
         if !cachedEpisodes.isEmpty { add(.episodes, cachedEpisodes) }
         if !cachedTrailers.isEmpty { add(.trailers, cachedTrailers) }
         if !cachedExtras.isEmpty { add(.extras, cachedExtras) }
@@ -1222,6 +1337,18 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
 
     /// Clear the one-shot shelf restore target once focus has resolved.
     func clearArmedShelfRestore() { armedShelfRestoreCell = nil }
+
+    /// Season posters: the first entry into the row lands on the season holding the next
+    /// episode. One-shot; the caller clears the arm with `clearArmedShelfRestore` after the update.
+    func armSeasonEntryFocusIfNeeded() {
+        guard let index = seasonEntryIndex, let section = sectionKinds.firstIndex(of: .seasons) else { return }
+        collectionView.layoutIfNeeded()
+        guard let shelf = collectionView.cellForItem(at: IndexPath(item: 0, section: section)) as? ShelfRowCell
+        else { return }
+        seasonEntryIndex = nil
+        shelf.armFocusRestore(on: index)
+        armedShelfRestoreCell = shelf
+    }
 
     func indexPathForPreferredFocusedView(in collectionView: UICollectionView) -> IndexPath? {
         // One-shot targets first; `lastFocusedIndexPath` is the after-modal fallback.

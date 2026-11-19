@@ -327,6 +327,25 @@ final class PosterCell: UICollectionViewCell {
     /// The title line (`PosterCaption.set`); call after `configure`.
     func setCaption(_ text: String?) { caption.set(text) }
 
+    /// A season on its show's page: its own poster (a season tile elsewhere shows the show's),
+    /// its name in the top-left badge, and the show tile's unwatched count or watched glyph.
+    func configure(season: MediaItem, label: String) {
+        sourceBadge.text = nil
+        setSquare(false)
+        failureTitleText = label
+        setEdition(nil)
+        loadImage(from: season.artwork.poster ?? season.parentArtwork?.poster, failureKind: .season)
+        progressInfoBar.isHidden = true; bottomInfoBlur?.isHidden = true
+        progressInfoBar.reset()
+        switch SeasonPosterStyle.mark(progress: season.childProgress, isPlayed: season.userState.isPlayed) {
+        case .unwatched(let count): showUnwatchedCount(count)
+        case .watched: showWatchedGlyph()
+        case .hidden: hideWatchedIndicators()
+        }
+        revealTrailingBadges(isFocused)
+        setSourceBadge(label)
+    }
+
     /// Names the item's server; call after `configure` (which never adds one).
     func setSourceBadge(_ text: String?) { sourceBadge.text = text }
 

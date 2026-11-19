@@ -116,4 +116,10 @@ final class ThemeMusicTests: XCTestCase {
         XCTAssertNil(item(.episode, id: "12").themeMusicShowRef)
         XCTAssertNil(item(.season, id: "11", parent: MediaItemRef(providerID: "plex:m1", itemID: "")).themeMusicShowRef)
     }
+
+    func test_indicator_onlyLoadingShowsTheRing() {
+        XCTAssertTrue(ThemeMusic.Indicator.loading.showsRing)
+        XCTAssertFalse(ThemeMusic.Indicator.sounding.showsRing)
+        XCTAssertFalse(ThemeMusic.Indicator.quiet.showsRing)
+    }
 }

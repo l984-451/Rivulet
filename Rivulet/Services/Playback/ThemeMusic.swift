@@ -68,6 +68,21 @@ final class ThemeMusic {
         enabled && isForeground && !musicActive && !videoActive && !otherAppAudio
     }
 
+    /// What a show's pages may draw about its tune. No value means draw nothing: no tune,
+    /// not known yet, or Theme Music is off.
+    nonisolated enum Indicator: Equatable, Sendable {
+        /// The show has a tune and its file is opening.
+        case loading
+        case sounding
+        /// The show has a tune that is not sounding: it had its turn, or may not start now.
+        case quiet
+
+        var showsRing: Bool { self == .loading }
+    }
+
+    /// Posted on the main actor when any show's indicator changes.
+    nonisolated static let indicatorDidChange = Notification.Name("ThemeMusicIndicatorDidChange")
+
     // MARK: State
 
     /// The shows whose tune has had its turn. A show stays here while any of its pages is
@@ -76,6 +91,9 @@ final class ThemeMusic {
     private var served: Set<MediaItemRef> = []
     /// The show whose page was on top at the last look.
     private var onTop: MediaItemRef?
+    private var indicators: [MediaItemRef: Indicator] = [:]
+    /// The show whose tune the player holds, from the lookup's answer until it is let go.
+    private var tuneShow: MediaItemRef?
     private var lookup: Task<Void, Never>?
     private var player: AVPlayer?
     private var endObservers: [NSObjectProtocol] = []
@@ -111,6 +129,7 @@ final class ThemeMusic {
         let layers = ThemeMusicSettings.isEnabled ? Self.layersOnScreen() : []
         // A show is forgotten when its last page has left, not when another title covers it.
         served.formIntersection(layers.compactMap(\.show))
+        for show in indicators.keys.filter({ !served.contains($0) }) { setIndicator(nil, for: show) }
         switch Self.screen(for: layers) {
         case .noShow:
             onTop = nil
@@ -137,6 +156,22 @@ final class ThemeMusic {
         silence()
     }
 
+    func indicator(for show: MediaItemRef) -> Indicator? { indicators[show] }
+
+    /// Only a show that still has a page keeps a value.
+    private func setIndicator(_ value: Indicator?, for show: MediaItemRef) {
+        guard value == nil || served.contains(show), indicators[show] != value else { return }
+        indicators[show] = value
+        NotificationCenter.default.post(name: Self.indicatorDidChange, object: nil)
+    }
+
+    /// The player was let go: the show that was loading or sounding has a tune that is quiet now.
+    private func quietIndicator() {
+        guard let show = tuneShow else { return }
+        tuneShow = nil
+        setIndicator(.quiet, for: show)
+    }
+
     // MARK: Starting
 
     private func start(_ show: MediaItemRef) {
@@ -149,7 +184,10 @@ final class ThemeMusic {
                 .themeMusicURL(for: show)
             // A read, never a write, and off the main thread: it can wait on the audio server.
             let otherAppAudio = await Task.detached { AVAudioSession.sharedInstance().isOtherAudioPlaying }.value
-            guard let self, !Task.isCancelled, self.generation == generation else { return }
+            guard let self else { return }
+            // The show has a tune, whether or not it may sound now or this lookup lost its turn.
+            if url != nil { self.setIndicator(.quiet, for: show) }
+            guard !Task.isCancelled, self.generation == generation else { return }
             self.lookup = nil
             guard let url,
                   Self.mayStart(enabled: ThemeMusicSettings.isEnabled,
@@ -162,6 +200,8 @@ final class ThemeMusic {
                 self.stopPoll()
                 return
             }
+            self.tuneShow = show
+            self.setIndicator(.loading, for: show)
             self.play(url)
         }
     }
@@ -195,7 +235,7 @@ final class ThemeMusic {
         // (the URL and the player's error both carry the server's token).
         failureObservation = item.observe(\.status) { [weak self] item, _ in
             guard item.status == .failed else { return }
-            Task { @MainActor [weak self] in self?.ended(generation) }
+            Task { @MainActor [weak self] in self?.failedToOpen(generation) }
         }
 
         // The file is remote and takes a moment to open: fade in from when sound really starts.
@@ -205,6 +245,7 @@ final class ThemeMusic {
                 guard let self, generation == self.generation else { return }
                 self.soundingObservation?.invalidate()
                 self.soundingObservation = nil
+                if let show = self.tuneShow { self.setIndicator(.sounding, for: show) }
                 self.fade(to: ThemeMusicSettings.volume, over: Self.fadeInSeconds)
             }
         }
@@ -221,8 +262,19 @@ final class ThemeMusic {
         silence()
     }
 
+    /// The tune's file could not open: no icon is left claiming a tune that never sounds.
+    private func failedToOpen(_ generation: Int) {
+        guard generation == self.generation else { return }
+        if let show = tuneShow {
+            tuneShow = nil
+            setIndicator(nil, for: show)
+        }
+        silence()
+    }
+
     /// Hard stop, synchronous. The show keeps its turn.
     private func silence() {
+        quietIndicator()
         generation += 1
         lookup?.cancel()
         lookup = nil
@@ -233,6 +285,7 @@ final class ThemeMusic {
     /// No page of the sounding show is on top any more: fade out, then let go.
     private func leave() {
         guard player != nil || lookup != nil else { return }
+        quietIndicator()
         generation += 1
         lookup?.cancel()
         lookup = nil

@@ -70,26 +70,19 @@ final class ServerRefusalTests: XCTestCase {
         XCTAssertFalse(PlexNetworkManager.refusesDirectPlay(Data(#"{"MediaContainer":{}}"#.utf8)))
     }
 
-    /// Measured on PMS 1.43.5 over the LAN: a refusal for a track rule carries the same codes as a remote limit.
+    /// Measured on PMS 1.43.5 with a 2 Mbps remote stream limit: the direct-play code still says 1000.
+    private let refusedForBandwidth = #"{"MediaContainer":{"size":0,"directPlayDecisionCode":1000,"directPlayDecisionText":"Direct play OK.","generalDecisionCode":2000,"generalDecisionText":"Neither direct play nor conversion is available.","transcodeDecisionCode":4005}}"#
     private let refusedForAudioTrack = #"{"MediaContainer":{"directPlayDecisionCode":3000,"directPlayDecisionText":"App cannot direct play this item. Selected audio stream is not the first audio stream and app cannot select audio streams in direct play.","generalDecisionCode":2000,"transcodeDecisionCode":4005}}"#
-    private let remoteServer = "https://203-0-113-7.0123abcd.plex.direct:32400"
 
-    func test_directPlayDecision_isNotActedOnOverTheLAN() {
-        let refused = Data(refusedForAudioTrack.utf8)
-        for local in ["http://192.168.1.20:32400", "https://192-168-1-140.0123abcd.plex.direct:32400", "http://nas.local:32400"] {
-            XCTAssertFalse(PlexNetworkManager.refusesDirectPlay(refused, serverURL: local), local)
-        }
-    }
-
-    func test_directPlayDecision_isActedOnOverARemoteConnection() {
-        XCTAssertTrue(PlexNetworkManager.refusesDirectPlay(Data(refusedForAudioTrack.utf8), serverURL: remoteServer))
-        XCTAssertFalse(PlexNetworkManager.refusesDirectPlay(
-            Data(#"{"MediaContainer":{"directPlayDecisionCode":1000}}"#.utf8), serverURL: remoteServer))
+    func test_directPlayDecision_aRemoteLimitIsReadFromTheGeneralCode() {
+        XCTAssertTrue(PlexNetworkManager.refusesDirectPlay(Data(refusedForBandwidth.utf8)))
     }
 
     func test_directPlayDecisionText_isTheServersReason() {
         XCTAssertEqual(PlexNetworkManager.directPlayDecisionText(Data(refusedForAudioTrack.utf8)),
                        "App cannot direct play this item. Selected audio stream is not the first audio stream and app cannot select audio streams in direct play.")
+        XCTAssertEqual(PlexNetworkManager.directPlayDecisionText(Data(refusedForBandwidth.utf8)),
+                       "Neither direct play nor conversion is available.")
         XCTAssertNil(PlexNetworkManager.directPlayDecisionText(Data("<MediaContainer/>".utf8)))
     }
 

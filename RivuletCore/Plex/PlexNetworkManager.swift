@@ -2280,10 +2280,10 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
     /// bandwidth (#423). Measured on PMS 1.43.5: a LAN direct play gets no `Session` (bandwidth 0)
     /// until a direct-play decision has run under the `X-Plex-Session-Identifier` its timeline sends.
     /// The wildcard profile makes the decision direct play whatever the file is; no transcoder starts.
-    /// It must cover subtitles too: without `subtitleCodec`, a file with a selected subtitle is refused.
-    /// Returns true when the server still refuses direct play over a remote connection: that is its own
-    /// rule (a remote limit), so the file would only fail. On the LAN a refusal is never acted on
-    /// (see `refusesDirectPlay(_:serverURL:)`).
+    /// Measured on PMS 1.43.5: without the subtitle profile and `DirectPlayStreamSelection` the server
+    /// refuses a selected subtitle, a sidecar, or a non-first audio track, rules for clients that can't
+    /// pick tracks. With them, 1099 of 1100 LAN titles were allowed.
+    /// Returns true when the server still refuses: that is its own rule (a remote limit), so the file would only fail.
     @discardableResult
     func openDirectPlaySession(serverURL: String, authToken: String, ratingKey: String,
                                mediaIndex: Int, sessionIdentifier: String) async -> Bool {
@@ -2296,41 +2296,41 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             URLQueryItem(name: "directPlay", value: "1"),
             URLQueryItem(name: "directStream", value: "0"),
             URLQueryItem(name: "X-Plex-Client-Profile-Name", value: "Generic"),
-            URLQueryItem(name: "X-Plex-Client-Profile-Extra",
-                         value: "add-direct-play-profile(type=videoProfile&protocol=http&container=*&videoCodec=*&audioCodec=*&subtitleCodec=*)"),
+            URLQueryItem(name: "X-Plex-Client-Profile-Extra", value: [
+                "add-direct-play-profile(type=videoProfile&protocol=http&container=*&videoCodec=*&audioCodec=*&subtitleCodec=*)",
+                "add-direct-play-profile(type=subtitleProfile&container=*&subtitleCodec=*)",
+                "add-settings(DirectPlayStreamSelection=true)"
+            ].joined(separator: "+")),
             URLQueryItem(name: "X-Plex-Session-Identifier", value: sessionIdentifier)
         ]
-        guard let url = components.url else { return false }
+        guard let url = PlexLiveTVChannel.finalizedLiveURL(components) else { return false }
         var headers = plexHeaders(authToken: authToken)
         headers["X-Plex-Session-Identifier"] = sessionIdentifier
         headers["Accept"] = "application/json"
         guard let data = try? await requestData(url, method: "GET", headers: headers) else { return false }
-        if Self.refusesDirectPlay(data) {
+        let refused = Self.refusesDirectPlay(data)
+        if refused {
             DiagLog.notice(.playback, "Direct-play decision refused: \(Self.directPlayDecisionText(data) ?? "no reason given")")
         }
-        return Self.refusesDirectPlay(data, serverURL: serverURL)
-    }
-
-    /// Whether to act on a refused decision: only over a remote connection. Plex applies its stream
-    /// limits off the LAN. On the LAN the reasons it gives are rules for clients that can't pick
-    /// tracks (measured on PMS 1.43.5: "Selected audio stream is not the first audio stream",
-    /// "Selected sidecar subtitle stream cannot be direct played"), which the engine doesn't share.
-    nonisolated static func refusesDirectPlay(_ data: Data, serverURL: String) -> Bool {
-        refusesDirectPlay(data) && ServerLocation.classify(serverURL) != .local
+        return refused
     }
 
     /// The server's reason for its decision, for the log.
     nonisolated static func directPlayDecisionText(_ data: Data) -> String? {
         guard let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let container = body["MediaContainer"] as? [String: Any] else { return nil }
-        return container["directPlayDecisionText"] as? String
+        let general = container["generalDecisionText"] as? String
+        let direct = container["directPlayDecisionText"] as? String
+        return container["directPlayDecisionCode"] as? Int == 1000 ? general : direct ?? general
     }
 
-    /// Measured on PMS 1.43.5: an allowed decision carries `directPlayDecisionCode` 1000, a refused one 3000.
+    /// Measured on PMS 1.43.5: an allowed decision carries `generalDecisionCode` 1000. A remote
+    /// bandwidth limit answers 2000 while `directPlayDecisionCode` still says 1000, so read the general code.
     nonisolated static func refusesDirectPlay(_ data: Data) -> Bool {
         guard let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let container = body["MediaContainer"] as? [String: Any],
-              let code = container["directPlayDecisionCode"] as? Int else { return false }
+              let code = container["generalDecisionCode"] as? Int ?? container["directPlayDecisionCode"] as? Int
+        else { return false }
         return code != 1000
     }
 

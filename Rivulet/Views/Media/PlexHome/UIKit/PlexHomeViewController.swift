@@ -3333,7 +3333,7 @@ final class PlexHomeViewController: UIViewController {
                     Perf.interval(.cellPrepare, key: perfKey) {
                         cell.configure(item: item)
                     }
-                    cell.setCaption(captioned ? PosterCaption.text(for: item) : nil)
+                    cell.setCaption(captioned ? PosterCaption.text(for: item) : nil, year: PosterCaption.year(for: item))
                 }
             }
             return cell
@@ -3344,7 +3344,7 @@ final class PlexHomeViewController: UIViewController {
                 Perf.interval(.cellPrepare, key: perfKey) {
                     cell.configure(item: item)
                 }
-                cell.setCaption(MediaRowMetrics.showsPosterTitles ? item.title : nil)
+                cell.setCaption(MediaRowMetrics.showsPosterTitles ? item.title : nil, year: item.year)
             }
             return cell
 
@@ -3777,8 +3777,8 @@ final class PlexHomeViewController: UIViewController {
             .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
-                if MediaRowMetrics.showsPosterTitles != self.lastShowsPosterTitles {
-                    self.lastShowsPosterTitles = MediaRowMetrics.showsPosterTitles
+                if MediaRowMetrics.posterCaptionSpace != self.lastPosterCaptionSpace {
+                    self.lastPosterCaptionSpace = MediaRowMetrics.posterCaptionSpace
                     self.reloadForPosterTitles()
                 }
                 self.backdropView.isHidden = !self.showHomeHero
@@ -4057,7 +4057,8 @@ final class PlexHomeViewController: UIViewController {
         }
     }
 
-    private var lastShowsPosterTitles = MediaRowMetrics.showsPosterTitles
+    /// Changes with Titles Under Posters and with Year Under Titles, which both reshape the rows.
+    private var lastPosterCaptionSpace = MediaRowMetrics.posterCaptionSpace
 
     /// Row heights and tile captions both read the setting, so re-run the layout and every cell.
     private func reloadForPosterTitles() {
@@ -4069,11 +4070,13 @@ final class PlexHomeViewController: UIViewController {
     }
 
     /// Rows of posters and Continue Watching carry a title line under each tile; music, people
-    /// and the episode cards in search (titled already) do not.
+    /// and the episode cards in search (titled already) do not. Continue Watching never adds a year.
     private static func shelfCaptionHeight(_ section: HomeSectionData) -> CGFloat {
         guard !section.isMusic else { return 0 }
         switch section.kind {
-        case .continueWatching, .recentlyAdded, .recommendations, .discoverList, .watchlist:
+        case .continueWatching:
+            return MediaRowMetrics.posterTitleLineSpace
+        case .recentlyAdded, .recommendations, .discoverList, .watchlist:
             return MediaRowMetrics.posterCaptionSpace
         case .searchGrid:
             return section.isEpisodeRow ? 0 : MediaRowMetrics.posterCaptionSpace
@@ -4166,7 +4169,8 @@ final class PlexHomeViewController: UIViewController {
                     cell.setSourceBadge(Self.sourceBadge(for: item.ref,
                                                          labelsServers: ServerDataStore.shared.labelsServers))
                 }
-                cell.setCaption(Self.shelfCaptionHeight(section) > 0 ? PosterCaption.text(for: item) : nil)
+                cell.setCaption(Self.shelfCaptionHeight(section) > 0 ? PosterCaption.text(for: item) : nil,
+                                year: PosterCaption.year(for: item))
             }
             return cell
         case .watchlist:
@@ -4174,7 +4178,8 @@ final class PlexHomeViewController: UIViewController {
             Perf.interval(.cellPrepare, key: perfKey) {
                 cell.configure(item: section.watchlistItems[indexPath.item])
             }
-            cell.setCaption(Self.shelfCaptionHeight(section) > 0 ? section.watchlistItems[indexPath.item].title : nil)
+            let watchlistItem = section.watchlistItems[indexPath.item]
+            cell.setCaption(Self.shelfCaptionHeight(section) > 0 ? watchlistItem.title : nil, year: watchlistItem.year)
             return cell
         case .searchPeople:
             let cell = innerCV.dequeueReusableCell(withReuseIdentifier: CastCollectionCell.reuseID, for: indexPath) as! CastCollectionCell

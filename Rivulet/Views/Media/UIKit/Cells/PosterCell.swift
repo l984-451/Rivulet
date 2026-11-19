@@ -325,7 +325,7 @@ final class PosterCell: UICollectionViewCell {
     }
 
     /// The title line (`PosterCaption.set`); call after `configure`.
-    func setCaption(_ text: String?) { caption.set(text) }
+    func setCaption(_ text: String?, year: Int? = nil) { caption.set(text, year: year) }
 
     /// Names the item's server; call after `configure` (which never adds one).
     func setSourceBadge(_ text: String?) { sourceBadge.text = text }

@@ -4988,6 +4988,16 @@
         }
       }
     },
+    "Shows a movie's or show's year under its title." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeigt bei Filmen und Serien das Jahr unter dem Titel."
+          }
+        }
+      }
+    },
     "Stereo with Subwoofer" : {},
     "Still Waiting on the Server" : {
       "localizations" : {
@@ -15420,6 +15430,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Écran large"
+          }
+        }
+      }
+    },
+    "Year Under Titles" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jahr unter Titeln"
           }
         }
       }

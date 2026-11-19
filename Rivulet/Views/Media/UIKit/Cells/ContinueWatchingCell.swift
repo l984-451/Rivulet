@@ -136,7 +136,7 @@ final class ContinueWatchingCell: UICollectionViewCell {
         caption = PosterCaption(in: contentView, under: card,
                                 leading: card.leadingAnchor, trailing: card.trailingAnchor,
                                 inset: (host.width - Self.tile.art.width) / 2,
-                                tileCenterY: cardCenterY)
+                                tileCenterY: cardCenterY, carriesYear: false)
     }
 
     /// The title line for `item`, or none when nil; call after `configure`. An episode's line is its

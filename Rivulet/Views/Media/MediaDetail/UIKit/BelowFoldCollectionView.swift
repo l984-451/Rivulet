@@ -497,7 +497,8 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             let poster = innerCV.dequeueReusableCell(withReuseIdentifier: PosterCell.reuseID, for: ip) as! PosterCell
             if ip.item < tiles.count {
                 poster.configure(item: tiles[ip.item])
-                poster.setCaption(MediaRowMetrics.showsPosterTitles ? PosterCaption.text(for: tiles[ip.item]) : nil)
+                poster.setCaption(MediaRowMetrics.showsPosterTitles ? PosterCaption.text(for: tiles[ip.item]) : nil,
+                                  year: PosterCaption.year(for: tiles[ip.item]))
             }
             return poster
         }

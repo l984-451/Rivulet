@@ -167,7 +167,11 @@ enum MediaRowMetrics {
     }
 
     /// Room under a tile for its title line (`PosterCaption`).
-    static let posterCaptionHeight: CGFloat = 36
+    static let posterTitleLineHeight: CGFloat = 36
+    /// Room under a tile for its caption: the title line, plus the year line when that is on.
+    static var posterCaptionHeight: CGFloat { posterTitleLineHeight + (showsPosterYears ? posterYearLineHeight : 0) }
+    /// The year line's share of the caption (`PosterCaption`).
+    static let posterYearLineHeight: CGFloat = 28
     /// Settings → Appearance → Titles Under Posters: every poster row and grid.
     static let posterTitlesKey = "showPosterTitles"
     static let posterTitlesDefault = false
@@ -176,6 +180,15 @@ enum MediaRowMetrics {
     }
     /// Extra row height for the title line, 0 while the setting is off.
     static var posterCaptionSpace: CGFloat { showsPosterTitles ? posterCaptionHeight : 0 }
+    /// Continue Watching's caption is the title line alone, with or without years.
+    static var posterTitleLineSpace: CGFloat { showsPosterTitles ? posterTitleLineHeight : 0 }
+
+    /// Settings → Appearance → Year Under Titles: a movie's or show's year beneath its title.
+    static let posterYearsKey = "showPosterYears"
+    static let posterYearsDefault = false
+    static var showsPosterYears: Bool {
+        showsPosterTitles && ((UserDefaults.standard.object(forKey: posterYearsKey) as? Bool) ?? posterYearsDefault)
+    }
 
     /// Library poster grid: artwork top to the next row's artwork top (Apple's 55 between 390-tall tiles).
     static var posterGridPitch: CGFloat { poster.art.height + 55 }

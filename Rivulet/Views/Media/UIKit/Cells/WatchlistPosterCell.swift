@@ -115,7 +115,7 @@ final class WatchlistPosterCell: UICollectionViewCell {
     }
 
     /// The title line (`PosterCaption.set`); call after `configure`.
-    func setCaption(_ text: String?) { caption.set(text) }
+    func setCaption(_ text: String?, year: Int? = nil) { caption.set(text, year: year) }
 
     func configure(item: PlexWatchlistItem) {
         // `film` for movies, `tv` for shows.

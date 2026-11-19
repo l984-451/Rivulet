@@ -179,6 +179,10 @@ enum SettingsDescriptorStore {
             icon: "textformat",
             description: "Shows the title under posters."
         ),
+        "posterYears": SettingDescriptor(
+            icon: "calendar",
+            description: "Shows a movie's or show's year under its title."
+        ),
         "detailRating": SettingDescriptor(
             icon: "star.leadinghalf.filled",
             description: "Choose the one rating shown at the top of a movie or show's details. If a title doesn't have the rating you choose, Rotten Tomatoes is shown instead."

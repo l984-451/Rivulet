@@ -329,7 +329,8 @@ final class PersonDetailViewController: UIViewController {
             if indexPath.item < entries.count {
                 let item = entries[indexPath.item].item
                 poster.configure(item: item)
-                poster.setCaption(MediaRowMetrics.showsPosterTitles ? PosterCaption.text(for: item) : nil)
+                poster.setCaption(MediaRowMetrics.showsPosterTitles ? PosterCaption.text(for: item) : nil,
+                                  year: PosterCaption.year(for: item))
             }
             return poster
         }

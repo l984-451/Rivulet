@@ -520,6 +520,8 @@ enum SettingsContent {
                 get: { !SettingsStore.bool("skipPreviewCarousel", default: false) },
                 set: { SettingsStore.setBool("skipPreviewCarousel", !$0) })),
             toggle("posterTitles", "Titles Under Posters", key: MediaRowMetrics.posterTitlesKey, default: MediaRowMetrics.posterTitlesDefault),
+            toggle("posterYears", "Year Under Titles", key: MediaRowMetrics.posterYearsKey, default: MediaRowMetrics.posterYearsDefault,
+                   enabledWhen: { MediaRowMetrics.showsPosterTitles }),
 
             // Titles drop whatever their caption already says ("Home Hero" under
             // HOME reads as "Home Home Hero"), the way Apple TV Settings puts a

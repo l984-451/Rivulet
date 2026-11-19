@@ -1218,6 +1218,8 @@ final class AetherPlayer: PlayerProtocol {
         options.audioShaping = Self.audioShaping()
         // Read ahead as far as the engine's disk budget allows; live sizes its own window.
         if !isLive { options.forwardBufferSegments = .max }
+        // Reopening the same title within the session plays from the segments already fetched.
+        options.retainsSessionCacheAfterStop = true
         // New content, so the previous item's aspect ratio describes nothing.
         // Reset HERE rather than when `currentItem` goes nil: the engine also
         // swaps its player for SAME-content reasons (audio track switch,

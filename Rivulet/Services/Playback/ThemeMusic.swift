@@ -35,7 +35,7 @@ final class ThemeMusic {
     nonisolated enum Screen: Equatable, Sendable {
         /// No page of a show is on top.
         case noShow
-        /// A show's page is up, under something full screen (a player).
+        /// A show's page is up, under something that covers it (a player, a person's page).
         case covered
         case show(MediaItemRef)
     }
@@ -44,6 +44,7 @@ final class ThemeMusic {
     nonisolated struct Layer: Sendable {
         var isPage: Bool
         var show: MediaItemRef?
+        /// Covers the page under it: a full-screen presentation, or another opaque page.
         var isFullScreen: Bool
     }
 
@@ -69,13 +70,17 @@ final class ThemeMusic {
 
     // MARK: State
 
-    /// The show this visit's tune belongs to. Stays set after the tune has ended or been
-    /// silenced, so it plays once per visit and not again on the season and episode pages.
-    private var served: MediaItemRef?
+    /// The shows whose tune has had its turn. A show stays here while any of its pages is
+    /// still presented, even under another title's page, so its tune plays once per visit:
+    /// not again on its season and episode pages, nor on the way back from a related title.
+    private var served: Set<MediaItemRef> = []
+    /// The show whose page was on top at the last look.
+    private var onTop: MediaItemRef?
     private var lookup: Task<Void, Never>?
     private var player: AVPlayer?
     private var endObservers: [NSObjectProtocol] = []
     private var failureObservation: NSKeyValueObservation?
+    private var soundingObservation: NSKeyValueObservation?
     private var fadeTimer: Timer?
     private var poll: Timer?
     private var resignObserver: NSObjectProtocol?
@@ -103,23 +108,31 @@ final class ThemeMusic {
     /// A page appeared, left or changed: work out again which show's tune is wanted.
     /// Cheap and idempotent; the lookup and the player start happen later, off this call.
     func refresh() {
-        let screen = ThemeMusicSettings.isEnabled ? Self.screen(for: Self.layersOnScreen()) : .noShow
-        switch screen {
+        let layers = ThemeMusicSettings.isEnabled ? Self.layersOnScreen() : []
+        // A show is forgotten when its last page has left, not when another title covers it.
+        served.formIntersection(layers.compactMap(\.show))
+        switch Self.screen(for: layers) {
         case .noShow:
+            onTop = nil
             leave()
         case .covered:
             silence()
         case .show(let show):
-            guard show != served else { return }
-            silence()
-            served = show
-            start(show)
+            guard show != onTop else { return }
+            onTop = show
+            if served.insert(show).inserted {
+                silence()
+                start(show)
+            } else {
+                // Back on a show that has had its tune: fade out whatever the page above played.
+                leave()
+            }
         }
     }
 
     /// Something else is about to make sound (a video, a channel, a song). Synchronous: the
-    /// player is released before this returns. The visit is kept, so the tune does not come
-    /// back when the video closes.
+    /// player is released before this returns. The show keeps its turn, so the tune does not
+    /// come back when the video closes.
     func stopForVideo() {
         silence()
     }
@@ -185,20 +198,30 @@ final class ThemeMusic {
             Task { @MainActor in self?.ended(generation) }
         }
 
+        // The file is remote and takes a moment to open: fade in from when sound really starts.
+        soundingObservation = player.observe(\.timeControlStatus, options: [.new]) { [weak self] player, _ in
+            guard player.timeControlStatus == .playing else { return }
+            Task { @MainActor [weak self] in
+                guard let self, generation == self.generation else { return }
+                self.soundingObservation?.invalidate()
+                self.soundingObservation = nil
+                self.fade(to: ThemeMusicSettings.volume, over: Self.fadeInSeconds)
+            }
+        }
+
         startPoll()
         player.play()
-        fade(to: ThemeMusicSettings.volume, over: Self.fadeInSeconds)
     }
 
     // MARK: Stopping
 
-    /// The tune finished or failed: let go of the player, keep the visit.
+    /// The tune finished or failed: let go of the player. The show keeps its turn.
     private func ended(_ generation: Int) {
         guard generation == self.generation else { return }
         silence()
     }
 
-    /// Hard stop, synchronous. Keeps `served`.
+    /// Hard stop, synchronous. The show keeps its turn.
     private func silence() {
         generation += 1
         lookup?.cancel()
@@ -207,10 +230,9 @@ final class ThemeMusic {
         releasePlayer()
     }
 
-    /// The last page of the show went away: fade out, then let go, and forget the visit.
+    /// No page of the sounding show is on top any more: fade out, then let go.
     private func leave() {
-        guard served != nil || player != nil || lookup != nil else { return }
-        served = nil
+        guard player != nil || lookup != nil else { return }
         generation += 1
         lookup?.cancel()
         lookup = nil
@@ -231,6 +253,8 @@ final class ThemeMusic {
         endObservers = []
         failureObservation?.invalidate()
         failureObservation = nil
+        soundingObservation?.invalidate()
+        soundingObservation = nil
         player?.pause()
         player?.replaceCurrentItem(with: nil)
         player = nil
@@ -283,8 +307,12 @@ final class ThemeMusic {
             if let page = controller as? ThemeMusicPage {
                 layers.append(Layer(isPage: true, show: page.themeMusicShow, isFullScreen: false))
             } else {
-                layers.append(Layer(isPage: false, show: nil,
-                                    isFullScreen: controller.modalPresentationStyle == .fullScreen))
+                // A person page and a collection or playlist page are opaque pages of something
+                // else: over-full-screen, but they cover a show's page as a player does.
+                let covers = controller.modalPresentationStyle == .fullScreen
+                    || controller is PersonDetailViewController
+                    || controller is PlexHomeViewController
+                layers.append(Layer(isPage: false, show: nil, isFullScreen: covers))
             }
             current = controller.presentedViewController
         }

@@ -155,6 +155,10 @@ struct WhatsNewView: View {
     // MARK: - Changelog Data
 
     static let changelogs: [(version: String, features: [String])] = [
+        ("1.3.1 (131)", [
+            "Plex titles play the original file again instead of a server conversion",
+            "With the autoplay countdown off, episodes end like movies, with no Up Next",
+        ]),
         ("1.3.1 (130)", [
             "Added a Titles Under Posters option",
             "Added Stereo downmixing option",

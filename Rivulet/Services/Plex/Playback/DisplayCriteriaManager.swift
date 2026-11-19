@@ -239,6 +239,23 @@ final class DisplayCriteriaManager {
 
     // MARK: - Convenience Methods
 
+    /// The first variant of an HLS master playlist, as the panel needs it.
+    struct HLSVariantMode: Equatable {
+        var frameRate: Float
+        var width: Int32
+        var height: Int32
+        var isDolbyVision: Bool
+        var isHDR10: Bool
+        var isHLG: Bool
+    }
+
+    /// Asks for the panel mode an HLS stream's master playlist describes.
+    func configure(forMasterPlaylist master: String) {
+        guard let mode = HLSVariantMode(masterPlaylist: master) else { return }
+        configureWithFormatDescription(frameRate: mode.frameRate, width: mode.width, height: mode.height,
+                                       isDolbyVision: mode.isDolbyVision, isHDR10: mode.isHDR10, isHLG: mode.isHLG)
+    }
+
     /// Configure display criteria from Plex video stream metadata
     /// Uses format description from Plex metadata (instant, no network request)
     /// This is the preferred method as it adds zero latency to playback start
@@ -348,5 +365,29 @@ final class DisplayCriteriaManager {
         #endif
 
         return window
+    }
+}
+
+extension DisplayCriteriaManager.HLSVariantMode {
+    /// Nil without FRAME-RATE: a guessed rate would switch the panel wrongly.
+    init?(masterPlaylist: String) {
+        guard let line = masterPlaylist.split(separator: "\n").first(where: { $0.hasPrefix("#EXT-X-STREAM-INF:") }),
+              let frameRate = Self.attribute("FRAME-RATE", in: line).flatMap(Float.init) else { return nil }
+        let size = Self.attribute("RESOLUTION", in: line)?.split(separator: "x").compactMap { Int32($0) } ?? []
+        let range = Self.attribute("VIDEO-RANGE", in: line)
+        let codecs = (Self.attribute("CODECS", in: line) ?? "") + "," + (Self.attribute("SUPPLEMENTAL-CODECS", in: line) ?? "")
+        let dolbyVision = codecs.contains("dvh1") || codecs.contains("dvhe")
+        self.frameRate = frameRate
+        width = size.first ?? 1920
+        height = size.count == 2 ? size[1] : 1080
+        isDolbyVision = range == "PQ" && dolbyVision
+        isHDR10 = range == "PQ" && !dolbyVision
+        isHLG = range == "HLG"
+    }
+
+    private static func attribute(_ name: String, in line: Substring) -> String? {
+        let pattern = "(?<![A-Z-])\(name)=(\"([^\"]*)\"|[^,]*)"
+        guard let match = line.range(of: pattern, options: .regularExpression) else { return nil }
+        return String(line[match].dropFirst(name.count + 1)).trimmingCharacters(in: CharacterSet(charactersIn: "\""))
     }
 }

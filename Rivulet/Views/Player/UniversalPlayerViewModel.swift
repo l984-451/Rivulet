@@ -606,6 +606,8 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     /// Plex transcode session ID, extracted from HLS stream URL for cleanup on stop
     private var plexSessionId: String?
     private var transcodeStartWatch: Task<Void, Never>?
+    /// The master playlist the last HLS preflight found ready, for the panel mode (#677).
+    private var preflightMaster: String?
     /// The current AVPlayer item has played since it loaded.
     private var avItemHasPlayed = false
     /// The Plex stream whose transcode subtitle feeds the caption overlay (hls route).
@@ -2325,6 +2327,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
             }
 
             await chapterImages.value
+            await prepareDisplay()
             guard stops == stopCount, generation == itemGeneration, !Task.isCancelled else { throw CancellationError() }
             try loadAVPlayer(url: hlsURL, headers: streamHeaders, initialTime: startTime)
 
@@ -3324,6 +3327,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         let stops = stopCount, generation = itemGeneration
         try Task.checkCancellation()
         await loadChapterThumbnailsForHLS()
+        await prepareDisplay()
         guard stops == stopCount, generation == itemGeneration, !Task.isCancelled else { throw CancellationError() }
         try loadAVPlayer(url: hls.url, headers: hls.headers, initialTime: resumeTime)
         if resumeTime > 0 {
@@ -3331,6 +3335,15 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         }
         guard stops == stopCount, generation == itemGeneration, !Task.isCancelled else { throw CancellationError() }
         stallTracker.noteSeekOrLoad(at: Date())
+    }
+
+    /// A bare AVPlayer never asks for the panel's mode, and on 4K SDR with Match Dynamic Range it then
+    /// plays an HDR stream as an empty track (#677). The playlist's own mode goes first, then the switch settles.
+    /// Read from the playlist: on a PMS HEVC encode without CODECS the asset's own criteria did not switch the panel.
+    private func prepareDisplay() async {
+        guard let master = preflightMaster else { return }
+        DisplayCriteriaManager.shared.configure(forMasterPlaylist: master)
+        await DisplayCriteriaManager.shared.waitForDisplaySwitchIfNeeded()
     }
 
     /// Callers move to HLS, whose track ids are Plex stream ids, so the engine-indexed lists go too.
@@ -3974,6 +3987,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         await prepareHLSRelay(for: url)
         let url = avPlayerURL(url)
         serverRefusal = nil
+        preflightMaster = nil
         if let decision = await PlexNetworkManager.shared.startTranscodeDecision(hlsURL: url, headers: headers) {
             diagnostics.step("transcode_decision", detail: decision.verdict)
             if let refusal = decision.refusal {
@@ -4012,6 +4026,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                             if hasHeader && hasVariants {
                                 // This is a master playlist - follow a variant to check for segments
                                 if let variantReady = await checkVariantPlaylist(masterContent: content, baseURL: url, headers: headers), variantReady {
+                                    preflightMaster = content
                                     diagnostics.recordPreflightAttempt(attempt, outcome: "ready (variant has segments)")
                                     return true
                                 } else {

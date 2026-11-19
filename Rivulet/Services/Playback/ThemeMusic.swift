@@ -188,14 +188,14 @@ final class ThemeMusic {
         endObservers = [AVPlayerItem.didPlayToEndTimeNotification,
                         AVPlayerItem.failedToPlayToEndTimeNotification].map { name in
             center.addObserver(forName: name, object: item, queue: .main) { [weak self] _ in
-                Task { @MainActor in self?.ended(generation) }
+                Task { @MainActor [weak self] in self?.ended(generation) }
             }
         }
         // A tune that cannot play is dropped for this visit; no retry, and nothing is logged
         // (the URL and the player's error both carry the server's token).
         failureObservation = item.observe(\.status) { [weak self] item, _ in
             guard item.status == .failed else { return }
-            Task { @MainActor in self?.ended(generation) }
+            Task { @MainActor [weak self] in self?.ended(generation) }
         }
 
         // The file is remote and takes a moment to open: fade in from when sound really starts.

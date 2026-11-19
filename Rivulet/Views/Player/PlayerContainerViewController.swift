@@ -574,6 +574,9 @@ class PlayerContainerViewController: UIViewController {
     /// Last-seen value of `viewModel.skipPillOwnsFocus`, so a change can
     /// trigger a focus re-resolution toward/away from the pill exactly once.
     private var lastSkipPillOwnsFocus = false
+    /// Last-seen "the pill is alone over the video", so its focus window
+    /// (`beginSkipPillFocusWindow`) starts once each time that becomes true.
+    private var lastSkipPillAlone = false
     /// The pause screen was up on the last chrome pass; its arrival sets the fade's clock.
     private var lastAmbient = false
 
@@ -1355,6 +1358,13 @@ class PlayerContainerViewController: UIViewController {
             .combineLatest(vm.$skipCountdownSeconds, vm.$upNextCollapsed, vm.$skipPillDismissed)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.refreshSkipPill() }
+            .store(in: &cancellables)
+
+        // The pill's few seconds ran out: fade it and hand focus back to the content.
+        vm.$skipPillFocusExpired
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.applyChromeVisibility() }
             .store(in: &cancellables)
 
         // Post-video takes its own focus layer and hides the pill; keep the
@@ -2207,6 +2217,22 @@ class PlayerContainerViewController: UIViewController {
         scrubberProxy?.isFocusEnabled = !paneOpen
             && ((railVisible && !isLoading) || (proxyHasFocus && !isLoading && !ambient))
 
+        // The floating skip pill shows, holding focus, for a few seconds each
+        // time it is left alone over the video (the controls or the seek bar
+        // went away, or its marker began), then fades and the content takes
+        // focus back. Decided before the gates below, which read
+        // `skipPillOwnsFocus`.
+        let pillAlone = vm.skipPillFloatsAlone && !isLoading && !vm.showsSkipBar
+        let pillWindowBegan = pillAlone && !lastSkipPillAlone
+        if pillAlone != lastSkipPillAlone {
+            lastSkipPillAlone = pillAlone
+            if pillAlone {
+                vm.beginSkipPillFocusWindow()
+            } else {
+                vm.endSkipPillFocusWindow()
+            }
+        }
+
         // The content anchor holds focus whenever nothing else should. In the
         // error state it is hidden so it cannot occlude the error buttons.
         let failed = vm.playbackState.isFailed
@@ -2238,10 +2264,12 @@ class PlayerContainerViewController: UIViewController {
         }
 
         // The skip pill: over the video while the controls are hidden (unless Menu
-        // dismissed it), in the rail's tool row while they are up (#556).
+        // dismissed it, or its few seconds there are over), in the rail's tool
+        // row while they are up (#556).
         let skipAvailable = vm.showsSkipPill && !isLoading && !ambient && vm.postVideoState == .hidden
         let pillInRail = skipAvailable && railVisible && !paneOpen
-        let skipVisible = pillInRail || (skipAvailable && !chromeVisible && !vm.skipPillDismissed)
+        let skipVisible = pillInRail
+            || (skipAvailable && !chromeVisible && !vm.skipPillDismissed && !vm.skipPillWindowOver)
         let pillHomeChanged = pillInRail == (rail?.skipPillSlot.isHidden ?? !pillInRail)
 
         // Whether the pill owns focus. Re-resolved after the alpha write below.
@@ -2272,7 +2300,7 @@ class PlayerContainerViewController: UIViewController {
         captionOverlay?.controlsVisible = chromeVisible
         captionOverlay?.paneOpen = paneOpen
         guard targetsChanged || ownershipChanged || captionLiftChanged
-                || pillHomeChanged else {
+                || pillHomeChanged || pillWindowBegan else {
             if anchorNeedsFocusUpdate {
                 setNeedsFocusUpdate()
                 updateFocusIfNeeded()
@@ -2293,8 +2321,9 @@ class PlayerContainerViewController: UIViewController {
         }
         // Model alpha is now 1 for a visible pill, so the engine will accept it
         // as a focus target. Re-resolve toward/away from the pill (or off the
-        // anchor) exactly once.
-        if ownershipChanged || anchorNeedsFocusUpdate {
+        // anchor) exactly once. A new focus window asks too: the pill can come
+        // back from the seek bar or a load with ownership unchanged.
+        if ownershipChanged || anchorNeedsFocusUpdate || pillWindowBegan {
             setNeedsFocusUpdate()
             updateFocusIfNeeded()
         }

@@ -6050,7 +6050,9 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         guard postVideoState == .hidden else { return }
 
         // Movies: no Up Next, just mark watched. A playlist's next entry follows any type.
-        guard playQueue != nil || isEpisode else {
+        // Countdown Off with Credits not Up Next: the episode ends like a movie (#653).
+        let endsWithoutUpNext = autoplayCountdownSetting == 0 && !CreditsBehavior.current().showsUpNextAtCredits
+        guard playQueue != nil || (isEpisode && !endsWithoutUpNext) else {
             if reportsWatched { await markCurrentAsWatched() }
             return
         }

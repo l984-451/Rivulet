@@ -200,6 +200,9 @@ final class ShelfRowCell: UICollectionViewCell {
         // land at arbitrary offsets, and didUpdateFocus drives pitch-aligned
         // offsets instead. Programmatic offsets still work when disabled.
         rowCollectionView.isScrollEnabled = false
+        // The flow layout insets from contentInset and nothing reads margins. Without this, every
+        // safe-area change during Home's vertical scroll re-derives margins and invalidates the row's layout.
+        rowCollectionView.insetsLayoutMarginsFromSafeArea = false
         // No per-row focus memory: entering a row should land on the tile in
         // the same SCREEN column you came from (the engine's geometric pick),
         // like ATV+ — not on whatever tile this row last had focused.
@@ -451,6 +454,9 @@ final class ShelfRowCell: UICollectionViewCell {
         let visible = rowCollectionView.indexPathsForVisibleItems.sorted { $0.item < $1.item }
 
         let visibleBounds = window.bounds.insetBy(dx: -80, dy: -80)
+        // One screen update puts every tile the caller un-hid on the render server; later captures
+        // read that state instead of each waiting for a screen update of its own.
+        var needsScreenUpdate = afterScreenUpdates
         return visible
             .compactMap { indexPath -> PreviewEntrySnapshot? in
                 let targetIndex: Int
@@ -464,8 +470,10 @@ final class ShelfRowCell: UICollectionViewCell {
                       let cell = rowCollectionView.cellForItem(at: indexPath),
                       cell.convert(cell.bounds, to: window).intersects(visibleBounds)
                 else { return nil }
-                return PreviewEntrySnapshot.capture(
-                    cell, itemIndex: targetIndex, in: window, afterScreenUpdates: afterScreenUpdates)
+                let snapshot = PreviewEntrySnapshot.capture(
+                    cell, itemIndex: targetIndex, in: window, afterScreenUpdates: needsScreenUpdate)
+                if snapshot != nil { needsScreenUpdate = false }
+                return snapshot
             }
     }
 

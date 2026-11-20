@@ -203,12 +203,21 @@ final class PreviewCardView: UICollectionViewCell {
         // Cancel any in-flight animations by reading the current
         // presentation alpha and committing it as the model value,
         // then issuing the new animation from there.
-        let currentVignetteAlpha = vignetteContainer.layer.presentation()?.opacity ?? Float(vignetteContainer.alpha)
-        let currentChromeAlpha = chromeView.layer.presentation()?.opacity ?? Float(chromeView.chromeAlpha)
+        // Only while a fade is attached: with none, presentation() still holds the last commit,
+        // which would put back a value set earlier in this transaction (the outgoing card,
+        // zeroed at the end of a page) and set the chrome's alpha again for nothing.
+        let vignetteAnimating = vignetteContainer.layer.animationKeys()?.isEmpty == false
+        let chromeAnimating = chromeView.layer.animationKeys()?.isEmpty == false
+        let currentVignetteAlpha: CGFloat = vignetteAnimating
+            ? CGFloat(vignetteContainer.layer.presentation()?.opacity ?? Float(vignetteContainer.alpha))
+            : vignetteContainer.alpha
+        let currentChromeAlpha: CGFloat = chromeAnimating
+            ? CGFloat(chromeView.layer.presentation()?.opacity ?? Float(chromeView.chromeAlpha))
+            : chromeView.chromeAlpha
         vignetteContainer.layer.removeAllAnimations()
         chromeView.layer.removeAllAnimations()
-        vignetteContainer.alpha = CGFloat(currentVignetteAlpha)
-        chromeView.chromeAlpha = CGFloat(currentChromeAlpha)
+        vignetteContainer.alpha = currentVignetteAlpha
+        chromeView.chromeAlpha = currentChromeAlpha
 
         if !current {
             // Snap to invisible; the travel-driven fade already ran (setPagingFade).

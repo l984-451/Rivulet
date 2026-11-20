@@ -62,7 +62,6 @@ actor ImageCacheManager: NSObject {
 
     // MARK: - Configuration
 
-    private let cacheDirectoryName = "PlexImageCache"
     private let metadataFileName = "image_cache_metadata.json"
     private let maxMemoryCacheCount = 100
     private let maxKeyCacheCount = 2048
@@ -90,6 +89,9 @@ actor ImageCacheManager: NSObject {
             return existing
         }
         let config = URLSessionConfiguration.default
+        // This cache keeps its own copy on disk. The system URL cache only stored a second one and
+        // wrote image URLs, which can carry a server token, into Caches/Cache.db.
+        config.urlCache = nil
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 60
         let newSession = URLSession(configuration: config, delegate: self, delegateQueue: nil)
@@ -113,10 +115,9 @@ actor ImageCacheManager: NSObject {
 
     // MARK: - Cache Directory
 
-    private var cacheDirectory: URL? {
-        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)
-            .first?.appendingPathComponent(cacheDirectoryName)
-    }
+    /// Resolved once: it was looked up again on every load.
+    private let cacheDirectory: URL? = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)
+        .first?.appendingPathComponent("PlexImageCache")
 
     // MARK: - Initialization
 

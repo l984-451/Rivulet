@@ -519,9 +519,12 @@ final class EpisodeCell: UIView {
         let apply = { [self] in
             // Apple brightens the text under a focused episode, and widens and lifts the platter
             // when the description itself is focused.
-            let secondary = UIColor.white.withAlphaComponent(thumbFocused || descFocused ? 0.75 : 0.5)
-            [episodeLabel, summaryLabel, dateLabel, ratingBadge].forEach { $0.textColor = secondary }
-            ratingBadge.layer.borderColor = secondary.cgColor
+            // Measured on device: the summary only lifts a little; the date goes white with the description.
+            let secondary = UIColor.white.withAlphaComponent(thumbFocused || descFocused ? 0.6 : 0.5)
+            let footer = descFocused ? UIColor.white : secondary
+            [episodeLabel, summaryLabel].forEach { $0.textColor = secondary }
+            [dateLabel, ratingBadge].forEach { $0.textColor = footer }
+            ratingBadge.layer.borderColor = footer.cgColor
             if layout == .stacked && splitFocus {
                 glassLeading.constant = descFocused ? -18 : 0
                 glassTrailing.constant = descFocused ? 18 : 0

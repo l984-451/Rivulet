@@ -4685,6 +4685,13 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     func updateSwipeScrubPosition(by seconds: TimeInterval) {
         if !isScrubbing {
             startSwipeScrubbing()
+        } else if scrubSpeed != 0 {
+            // A swipe mid-shuttle takes over from the shuttle, as a wheel tick
+            // does (`handleWheelScrub`), so the playhead stops where the finger
+            // stops instead of the timer carrying it on.
+            stopScrubTimer()
+            scrubSpeed = 0
+            scrubStartTime = nil
         }
         scrubTime = max(0, min(duration, scrubTime + seconds))
         loadThumbnail(for: scrubTime)

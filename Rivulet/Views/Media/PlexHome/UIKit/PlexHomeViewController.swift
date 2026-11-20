@@ -3777,10 +3777,8 @@ final class PlexHomeViewController: UIViewController {
             .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
-                if MediaRowMetrics.showsPosterTitles != self.lastShowsPosterTitles
-                    || MediaRowMetrics.showsPosterGenre != self.lastShowsPosterGenre {
+                if MediaRowMetrics.showsPosterTitles != self.lastShowsPosterTitles {
                     self.lastShowsPosterTitles = MediaRowMetrics.showsPosterTitles
-                    self.lastShowsPosterGenre = MediaRowMetrics.showsPosterGenre
                     self.reloadForPosterTitles()
                 }
                 self.backdropView.isHidden = !self.showHomeHero
@@ -4060,8 +4058,6 @@ final class PlexHomeViewController: UIViewController {
     }
 
     private var lastShowsPosterTitles = MediaRowMetrics.showsPosterTitles
-    /// Genre on Posters redraws every tile the same way the titles do.
-    private var lastShowsPosterGenre = MediaRowMetrics.showsPosterGenre
 
     /// Row heights and tile captions both read the setting, so re-run the layout and every cell.
     private func reloadForPosterTitles() {

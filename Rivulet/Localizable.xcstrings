@@ -4765,16 +4765,6 @@
         }
       }
     },
-    "Genre on Posters" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Genre auf Postern"
-          }
-        }
-      }
-    },
     "iCloud" : {
       "localizations" : {
         "de" : {
@@ -4994,16 +4984,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Conversion par le serveur"
-          }
-        }
-      }
-    },
-    "Shows at the bottom of a poster whether it is a movie or a TV show, and its genre." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zeigt unten im Poster, ob es ein Film oder eine TV-Sendung ist, und das Genre."
           }
         }
       }

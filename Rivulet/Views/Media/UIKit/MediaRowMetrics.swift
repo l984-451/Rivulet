@@ -174,12 +174,6 @@ enum MediaRowMetrics {
     static var showsPosterTitles: Bool {
         (UserDefaults.standard.object(forKey: posterTitlesKey) as? Bool) ?? posterTitlesDefault
     }
-    /// Settings → Appearance → Genre on Posters: "Movie · Action" on a movie's or show's artwork.
-    static let posterGenreKey = "showPosterGenre"
-    static let posterGenreDefault = false
-    static var showsPosterGenre: Bool {
-        (UserDefaults.standard.object(forKey: posterGenreKey) as? Bool) ?? posterGenreDefault
-    }
     /// Extra row height for the title line, 0 while the setting is off.
     static var posterCaptionSpace: CGFloat { showsPosterTitles ? posterCaptionHeight : 0 }
 

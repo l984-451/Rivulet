@@ -30,9 +30,10 @@ final class PosterCell: UICollectionViewCell {
     /// The title on the failure card, so an item with no artwork is still named.
     private let failureTitle = UILabel()
     private let progressInfoBar = MediaProgressInfoBar()
-    /// "Movie · Action" at the bottom of a movie's or show's artwork (Settings → Genre on Posters),
-    /// on the info bar's blur band, as the Apple TV app labels its posters.
+    /// "Movie · Action" at the bottom of a focused movie's or show's artwork, over a dark fade, as the
+    /// Apple TV app labels its posters (compared on device, tvOS 27).
     private let genreLabel = UILabel()
+    private let genreScrim = GenreScrimView()
 
     /// Apple-style watched glyph, bottom-left (the progress bar's slot).
     private let watchedGlyph = WatchedGlyphView()
@@ -149,10 +150,21 @@ final class PosterCell: UICollectionViewCell {
         progressInfoBar.isHidden = true; bottomInfoBlur?.isHidden = true
         overlayContainer.addSubview(progressInfoBar)
 
-        // Above the blur band, which `ensureBottomInfoBlur` slides in below the info bar.
+        // The fade under the line: the bottom 40% of the artwork, clear to black, as Apple's.
+        genreScrim.translatesAutoresizingMaskIntoConstraints = false
+        genreScrim.isUserInteractionEnabled = false
+        genreScrim.isHidden = true
+        overlayContainer.addSubview(genreScrim)
+        NSLayoutConstraint.activate([
+            genreScrim.leadingAnchor.constraint(equalTo: overlayContainer.leadingAnchor),
+            genreScrim.trailingAnchor.constraint(equalTo: overlayContainer.trailingAnchor),
+            genreScrim.bottomAnchor.constraint(equalTo: overlayContainer.bottomAnchor),
+            genreScrim.heightAnchor.constraint(equalTo: overlayContainer.heightAnchor, multiplier: 0.4)
+        ])
+
         genreLabel.translatesAutoresizingMaskIntoConstraints = false
-        genreLabel.font = .systemFont(ofSize: 20, weight: .semibold)
-        genreLabel.textColor = UIColor.white.withAlphaComponent(0.9)
+        genreLabel.font = .systemFont(ofSize: 20, weight: .regular)
+        genreLabel.textColor = .white
         genreLabel.lineBreakMode = .byTruncatingTail
         genreLabel.textAlignment = .center
         genreLabel.isHidden = true
@@ -162,7 +174,7 @@ final class PosterCell: UICollectionViewCell {
             genreLabel.centerXAnchor.constraint(equalTo: overlayContainer.centerXAnchor),
             genreLabel.leadingAnchor.constraint(greaterThanOrEqualTo: overlayContainer.leadingAnchor, constant: 14),
             genreLabel.trailingAnchor.constraint(lessThanOrEqualTo: overlayContainer.trailingAnchor, constant: -14),
-            genreLabel.bottomAnchor.constraint(equalTo: overlayContainer.bottomAnchor, constant: -14)
+            genreLabel.bottomAnchor.constraint(equalTo: overlayContainer.bottomAnchor, constant: -19)
         ])
 
         // Unwatched count then edition badge: top-trailing, 10pt inset. Hidden badges collapse.
@@ -345,23 +357,21 @@ final class PosterCell: UICollectionViewCell {
         revealTrailingBadges(isFocused)
     }
 
-    /// The genre line shares the info bar's band, so an in-progress title keeps its progress instead.
+    /// The genre line sits where the info bar does, so an in-progress title keeps its progress instead.
     private func configureGenreLine(item: MediaItem) {
-        let text = MediaRowMetrics.showsPosterGenre && progressInfoBar.isHidden ? Self.genreLine(for: item) : nil
+        let text = progressInfoBar.isHidden ? Self.genreLine(for: item) : nil
         genreLabel.text = text
         genreLabel.isHidden = text == nil
-        if text != nil { ensureBottomInfoBlur().isHidden = false }
-        // A reconfigured cell skips prepareForReuse: an in-progress band must not keep the line's hidden alpha.
-        if text == nil { bottomInfoBlur?.alpha = 1 }
+        genreScrim.isHidden = text == nil
         revealGenreLine(isFocused)
     }
 
-    /// The genre line and its band show while the poster holds focus, as on the Apple TV app; at rest
-    /// the artwork is bare. A band under an in-progress info bar stays put.
+    /// The genre line and its fade show while the poster holds focus, as on the Apple TV app; at rest
+    /// the artwork is bare.
     private func revealGenreLine(_ shown: Bool) {
-        guard genreLabel.text != nil else { return }
-        genreLabel.alpha = shown ? 1 : 0
-        bottomInfoBlur?.alpha = shown ? 1 : 0
+        let alpha: CGFloat = shown && genreLabel.text != nil ? 1 : 0
+        genreLabel.alpha = alpha
+        genreScrim.alpha = alpha
     }
 
     /// "Movie · Action" or "TV Show · Drama": the kind, then the server's first genre. nil for episodes,
@@ -432,8 +442,7 @@ final class PosterCell: UICollectionViewCell {
         progressInfoBar.reset()
         genreLabel.isHidden = true
         genreLabel.text = nil
-        genreLabel.alpha = 1
-        bottomInfoBlur?.alpha = 1
+        genreScrim.isHidden = true
         unwatchedBadge.text = nil
         sourceBadge.text = nil
         editionBadge.text = nil
@@ -789,4 +798,18 @@ extension PosterCell: PreviewSourceTile {
     var previewArtworkView: UIView { overlayContainer }
     var previewCornerRadius: CGFloat { cornerRadius }
     var previewArtworkLoaded: Bool { hasArtwork }
+}
+
+/// A clear-to-black fade, the backing of a poster's genre line.
+private final class GenreScrimView: UIView {
+    override class var layerClass: AnyClass { CAGradientLayer.self }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        let gradient = layer as! CAGradientLayer
+        gradient.colors = [UIColor.black.withAlphaComponent(0).cgColor, UIColor.black.withAlphaComponent(0.7).cgColor]
+        gradient.locations = [0, 1]
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
 }

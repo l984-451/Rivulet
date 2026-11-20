@@ -49,16 +49,17 @@ struct IOSRootView: View {
                     IOSPlexHomeView().environment(\.launchHeroReady) { splashGate.heroIsReady() }
                 }
             }
-            Tab("Library", systemImage: "rectangle.stack", value: "library") {
-                IOSPlexLibrarySplitView(selection: $librarySelection, column: $libraryColumn, path: $libraryPath)
-                    // A server or profile switch drops the split: its pages hold the old one's items.
-                    .id(browse.sessionGeneration)
-                    .environment(\.plexZoomNamespace, libraryZoom)
-            }
-            // The sidebar lists each library itself, so the list tab would repeat it.
-            .defaultVisibility(.hidden, for: .sidebar)
             // iPhone flattens sections into the tab bar, so libraries live only in the iPad sidebar.
             TabSection("Library") {
+                // First in the section, so the iPad top bar's Library opens the list, not the last page picked.
+                Tab("Library", systemImage: "rectangle.stack", value: "library") {
+                    IOSPlexLibrarySplitView(selection: $librarySelection, column: $libraryColumn, path: $libraryPath)
+                        // A server or profile switch drops the split: its pages hold the old one's items.
+                        .id(browse.sessionGeneration)
+                        .environment(\.plexZoomNamespace, libraryZoom)
+                }
+                // The sidebar lists each library itself, so the list tab would repeat it.
+                .defaultVisibility(.hidden, for: .sidebar)
                 if showsSidebarLibraries {
                     Tab("Downloads", systemImage: "arrow.down.circle", value: "downloads") {
                         sidebarStack("downloads") { IOSDownloadsView(showsAccount: true) }

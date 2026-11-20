@@ -641,7 +641,12 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             ]
             guard let url = components.url else { throw PlexAPIError.invalidURL }
             let container: PlexMediaContainerWrapper = try await request(url, headers: plexHeaders(authToken: authToken))
-            items += container.MediaContainer.Metadata ?? []
+            // The section is named only on the container (PMS 1.43), so the hidden-library filter saw none.
+            items += (container.MediaContainer.Metadata ?? []).map { item in
+                var item = item
+                if item.librarySectionID == nil, item.librarySectionKey == nil { item.librarySectionID = Int(sectionId) }
+                return item
+            }
         }
         return items
     }

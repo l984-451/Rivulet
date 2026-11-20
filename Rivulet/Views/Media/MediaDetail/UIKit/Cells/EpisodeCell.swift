@@ -121,7 +121,9 @@ final class EpisodeCell: UIView {
     private var descFocused = false
     /// A stacked card's text top; Apple drops the text 30 while the art is focused, 20 while the text is.
     private var textTop: NSLayoutConstraint?
-    private static let textRestOffset: CGFloat = -15
+    private static let textRestOffset: CGFloat = -21
+    /// Apple's secondary text, measured on device: 0.53 at rest and on the focused description, 0.6 under focused art.
+    private static let secondaryText = UIColor.white.withAlphaComponent(0.53)
     /// Liquid-glass focus highlight behind the metadata (ATV+ uses glass, not a
     /// white outline). Effect is nil until focused.
     private let descriptionGlass = UIVisualEffectView(effect: nil)
@@ -250,7 +252,7 @@ final class EpisodeCell: UIView {
 
         episodeLabel.translatesAutoresizingMaskIntoConstraints = false
         episodeLabel.font = .systemFont(ofSize: 21, weight: .medium)
-        episodeLabel.textColor = UIColor.white.withAlphaComponent(0.5)
+        episodeLabel.textColor = Self.secondaryText
         descriptionBlock.addSubview(episodeLabel)
 
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -261,7 +263,7 @@ final class EpisodeCell: UIView {
 
         summaryLabel.translatesAutoresizingMaskIntoConstraints = false
         summaryLabel.font = .systemFont(ofSize: 23, weight: .medium)
-        summaryLabel.textColor = UIColor.white.withAlphaComponent(0.5)
+        summaryLabel.textColor = Self.secondaryText
         summaryLabel.numberOfLines = layout == .sideBySide ? 3 : 4
         descriptionBlock.addSubview(summaryLabel)
 
@@ -272,17 +274,17 @@ final class EpisodeCell: UIView {
         descriptionBlock.addSubview(footerRow)
 
         dateLabel.font = .systemFont(ofSize: 23, weight: .medium)
-        dateLabel.textColor = UIColor.white.withAlphaComponent(0.5)
+        dateLabel.textColor = Self.secondaryText
         footerRow.addArrangedSubview(dateLabel)
 
         // Apple's outlined rating box: 67 x 22 for "TV-MA", in the date's gray.
         ratingBadge.font = .systemFont(ofSize: 16, weight: .semibold)
-        ratingBadge.textColor = UIColor.white.withAlphaComponent(0.5)
+        ratingBadge.textColor = Self.secondaryText
         ratingBadge.insets = UIEdgeInsets(top: 1.5, left: 6, bottom: 1.5, right: 6)
         ratingBadge.layer.cornerRadius = 4
         ratingBadge.layer.cornerCurve = .continuous
         ratingBadge.layer.borderWidth = 1.5
-        ratingBadge.layer.borderColor = UIColor.white.withAlphaComponent(0.5).cgColor
+        ratingBadge.layer.borderColor = Self.secondaryText.cgColor
         ratingBadge.clipsToBounds = true
         footerRow.addArrangedSubview(ratingBadge)
 
@@ -290,6 +292,9 @@ final class EpisodeCell: UIView {
 
         // Apple's text sits 18 in from the card under an episode, as its artwork padding does.
         let inset: CGFloat = layout == .stacked ? 18 : 20
+        // Apple's platter, measured: 23.5 above the EPISODE caps and 20 below the footer at rest.
+        let topPad: CGFloat = layout == .stacked ? 18 : 12
+        let bottomPad: CGFloat = layout == .stacked ? 18 : 14
         let episodeLeading = episodeLabel.leadingAnchor.constraint(equalTo: descriptionBlock.leadingAnchor, constant: inset)
         let titleLeading = titleLabel.leadingAnchor.constraint(equalTo: descriptionBlock.leadingAnchor, constant: inset)
         let summaryLeading = summaryLabel.leadingAnchor.constraint(equalTo: descriptionBlock.leadingAnchor, constant: inset)
@@ -357,7 +362,7 @@ final class EpisodeCell: UIView {
             descriptionBlock.trailingAnchor.constraint(equalTo: trailingAnchor),
             // Block HUGS its content (top-aligned): short descriptions sit right
             // under the title instead of vertical-centering in a fixed box.
-            episodeLabel.topAnchor.constraint(equalTo: descriptionBlock.topAnchor, constant: 12),
+            episodeLabel.topAnchor.constraint(equalTo: descriptionBlock.topAnchor, constant: topPad),
             episodeLeading,
             episodeLabel.trailingAnchor.constraint(equalTo: descriptionBlock.trailingAnchor, constant: -20),
 
@@ -365,14 +370,14 @@ final class EpisodeCell: UIView {
             titleLeading,
             titleLabel.trailingAnchor.constraint(equalTo: descriptionBlock.trailingAnchor, constant: -20),
 
-            summaryLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 2),
+            summaryLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor),
             summaryLeading,
             summaryLabel.trailingAnchor.constraint(equalTo: descriptionBlock.trailingAnchor, constant: -20),
 
             footerRow.topAnchor.constraint(equalTo: summaryLabel.bottomAnchor, constant: 5),
             footerLeading,
             footerRow.trailingAnchor.constraint(lessThanOrEqualTo: descriptionBlock.trailingAnchor, constant: -20),
-            descriptionBlock.bottomAnchor.constraint(equalTo: footerRow.bottomAnchor, constant: 14),
+            descriptionBlock.bottomAnchor.constraint(equalTo: footerRow.bottomAnchor, constant: bottomPad),
         ])
     }
 
@@ -517,18 +522,16 @@ final class EpisodeCell: UIView {
     /// a faint tint for an episode's focused thumb, clear otherwise.
     private func updateDescriptionGlass(_ coordinator: UIFocusAnimationCoordinator?) {
         let apply = { [self] in
-            // Apple brightens the text under a focused episode, and widens and lifts the platter
-            // when the description itself is focused.
-            // Measured on device: the summary only lifts a little; the date goes white with the description.
-            let secondary = UIColor.white.withAlphaComponent(thumbFocused || descFocused ? 0.6 : 0.5)
-            let footer = descFocused ? UIColor.white : secondary
+            // Apple brightens the text under focused art; a focused description lifts only its date and rating.
+            let secondary = thumbFocused ? UIColor.white.withAlphaComponent(0.6) : Self.secondaryText
+            let footer = descFocused ? UIColor.white.withAlphaComponent(0.75) : secondary
             [episodeLabel, summaryLabel].forEach { $0.textColor = secondary }
             [dateLabel, ratingBadge].forEach { $0.textColor = footer }
             ratingBadge.layer.borderColor = footer.cgColor
             if layout == .stacked && splitFocus {
-                glassLeading.constant = descFocused ? -18 : 0
-                glassTrailing.constant = descFocused ? 18 : 0
-                descriptionBlock.transform = descFocused ? CGAffineTransform(scaleX: 1.04, y: 1.04) : .identity
+                // Measured on Apple's 4K capture: the platter is the card's width and the whole block
+                // scales 1.085, so the text stays about 17 from the platter's edge.
+                descriptionBlock.transform = descFocused ? CGAffineTransform(scaleX: 1.085, y: 1.085) : .identity
                 descriptionBlock.layoutIfNeeded()
             }
             if descFocused {
@@ -592,7 +595,7 @@ final class EpisodeCell: UIView {
         playbackStatus.showsFocused = false
         textTop?.constant = Self.textRestOffset
         descriptionBlock.transform = .identity
-        let secondary = UIColor.white.withAlphaComponent(0.5)
+        let secondary = Self.secondaryText
         [episodeLabel, summaryLabel, dateLabel, ratingBadge].forEach { $0.textColor = secondary }
         ratingBadge.layer.borderColor = secondary.cgColor
         descriptionBlock.isFocusEligible = false
@@ -613,8 +616,8 @@ final class EpisodeCell: UIView {
     /// Moves a stacked card's text clear of the grown artwork, as Apple's lockup does (VideosUI 26.5 0x4df010).
     private func updateTextDrop(_ coordinator: UIFocusAnimationCoordinator) {
         guard let textTop else { return }
-        // Measured against Apple on device: our artwork grows less, so these sit below Apple's 30 and 20.
-        let drop: CGFloat = thumbFocused ? 16 : descFocused ? 12 : 0
+        // Apple drops 30 and 20; our artwork grows less, so the focused art's text drops 16 (measured on device).
+        let drop: CGFloat = thumbFocused ? 16 : descFocused ? 20 : 0
         guard textTop.constant != Self.textRestOffset + drop else { return }
         textTop.constant = Self.textRestOffset + drop
         coordinator.addCoordinatedAnimations({ self.layoutIfNeeded() }, completion: nil)

@@ -270,13 +270,14 @@ final class EpisodeCell: UIView {
         dateLabel.textColor = UIColor.white.withAlphaComponent(0.5)
         footerRow.addArrangedSubview(dateLabel)
 
-        ratingBadge.font = .systemFont(ofSize: 12, weight: .bold)
-        ratingBadge.textColor = UIColor.white.withAlphaComponent(0.86)
-        ratingBadge.insets = UIEdgeInsets(top: 1, left: 5, bottom: 1, right: 5)
-        ratingBadge.layer.cornerRadius = 3
+        // Apple's outlined rating box: 67 x 22 for "TV-MA", in the date's gray.
+        ratingBadge.font = .systemFont(ofSize: 16, weight: .semibold)
+        ratingBadge.textColor = UIColor.white.withAlphaComponent(0.5)
+        ratingBadge.insets = UIEdgeInsets(top: 1.5, left: 6, bottom: 1.5, right: 6)
+        ratingBadge.layer.cornerRadius = 4
         ratingBadge.layer.cornerCurve = .continuous
-        ratingBadge.layer.borderWidth = 1
-        ratingBadge.layer.borderColor = UIColor.white.withAlphaComponent(0.55).cgColor
+        ratingBadge.layer.borderWidth = 1.5
+        ratingBadge.layer.borderColor = UIColor.white.withAlphaComponent(0.5).cgColor
         ratingBadge.clipsToBounds = true
         footerRow.addArrangedSubview(ratingBadge)
 

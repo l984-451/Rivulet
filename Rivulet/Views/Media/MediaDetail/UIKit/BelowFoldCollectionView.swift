@@ -55,7 +55,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     /// Spacing between episode cards (and season dividers).
     static let episodeGap: CGFloat = MediaRowMetrics.tileGap
     /// The thumb frame plus the text block below it.
-    private static let episodeHeight: CGFloat = EpisodeCell.thumbHeight + 190
+    private static let episodeHeight: CGFloat = EpisodeCell.thumbHeight + EpisodeCell.textBlockHeight
     private static let trailerWidth: CGFloat = EpisodeCell.cardWidth
     // The trailer frame: 410 x 278 artwork plus the focus reserve, title inside.
     private static let trailerHeight: CGFloat = EpisodeCell.trailerThumbHeight

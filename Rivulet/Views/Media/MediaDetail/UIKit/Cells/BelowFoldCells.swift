@@ -61,7 +61,7 @@ final class EpisodeCollectionCell: UICollectionViewCell {
 
     /// Search's row tile: the rail's card with its description, as tall as the rail's.
     static let searchTile = MediaRowMetrics.Tile(
-        art: CGSize(width: EpisodeCell.cardWidth, height: EpisodeCell.thumbHeight + 190), growth: .zero)
+        art: CGSize(width: EpisodeCell.cardWidth, height: EpisodeCell.thumbHeight + EpisodeCell.textBlockHeight), growth: .zero)
 
     /// Trailers render with the SAME episode card so the two rows match exactly.
     func configure(trailer: BelowFoldTrailer) {

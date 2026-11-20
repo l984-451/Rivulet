@@ -517,8 +517,19 @@ final class EpisodeCell: UIView {
     /// a faint tint for an episode's focused thumb, clear otherwise.
     private func updateDescriptionGlass(_ coordinator: UIFocusAnimationCoordinator?) {
         let apply = { [self] in
+            // Apple brightens the text under a focused episode, and widens and lifts the platter
+            // when the description itself is focused.
+            let secondary = UIColor.white.withAlphaComponent(thumbFocused || descFocused ? 0.75 : 0.5)
+            [episodeLabel, summaryLabel, dateLabel, ratingBadge].forEach { $0.textColor = secondary }
+            ratingBadge.layer.borderColor = secondary.cgColor
+            if layout == .stacked && splitFocus {
+                glassLeading.constant = descFocused ? -18 : 0
+                glassTrailing.constant = descFocused ? 18 : 0
+                descriptionBlock.transform = descFocused ? CGAffineTransform(scaleX: 1.04, y: 1.04) : .identity
+                descriptionBlock.layoutIfNeeded()
+            }
             if descFocused {
-                descriptionGlass.backgroundColor = UIColor.white.withAlphaComponent(0.18)
+                descriptionGlass.backgroundColor = UIColor.white.withAlphaComponent(0.26)
                 descriptionGlass.effect = Self.frostedEffect()
             } else if thumbFocused {
                 if splitFocus {
@@ -577,6 +588,10 @@ final class EpisodeCell: UIView {
         descFocused = false
         playbackStatus.showsFocused = false
         textTop?.constant = Self.textRestOffset
+        descriptionBlock.transform = .identity
+        let secondary = UIColor.white.withAlphaComponent(0.5)
+        [episodeLabel, summaryLabel, dateLabel, ratingBadge].forEach { $0.textColor = secondary }
+        ratingBadge.layer.borderColor = secondary.cgColor
         descriptionBlock.isFocusEligible = false
         descriptionFocusGuide.isEnabled = splitFocus && layout == .stacked
         descriptionGlass.backgroundColor = .clear
@@ -595,7 +610,8 @@ final class EpisodeCell: UIView {
     /// Moves a stacked card's text clear of the grown artwork, as Apple's lockup does (VideosUI 26.5 0x4df010).
     private func updateTextDrop(_ coordinator: UIFocusAnimationCoordinator) {
         guard let textTop else { return }
-        let drop: CGFloat = thumbFocused ? 30 : descFocused ? 20 : 0
+        // Measured against Apple on device: our artwork grows less, so these sit below Apple's 30 and 20.
+        let drop: CGFloat = thumbFocused ? 16 : descFocused ? 12 : 0
         guard textTop.constant != Self.textRestOffset + drop else { return }
         textTop.constant = Self.textRestOffset + drop
         coordinator.addCoordinatedAnimations({ self.layoutIfNeeded() }, completion: nil)

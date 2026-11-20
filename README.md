@@ -16,6 +16,8 @@ A native Apple TV app for Plex, Jellyfin, Emby, and Live TV.
   <img src="https://img.shields.io/badge/Join_the-TestFlight_Beta-0D96F6?style=for-the-badge&logo=apple&logoColor=white" alt="Join the TestFlight Beta">
 </a>
 
+<sub>The public TestFlight link is capped at 2,200 testers. The App Store release will be updated more frequently going forward.</sub>
+
 </div>
 
 ---

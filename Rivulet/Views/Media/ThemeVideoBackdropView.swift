@@ -35,5 +35,10 @@ final class ThemeVideoBackdropView: UIView {
     }
 
     func setActive(_ active: Bool) { backdrop.isActive = active }
-    func setSuspended(_ suspended: Bool) { backdrop.isSuspended = suspended }
+    func setSuspended(_ suspended: Bool) {
+        // The hero calls this on every scroll frame, and each set refreshes the backdrop: skip the
+        // calls that change nothing (a cover change is still caught by the 300 ms poll).
+        guard backdrop.isSuspended != suspended else { return }
+        backdrop.isSuspended = suspended
+    }
 }

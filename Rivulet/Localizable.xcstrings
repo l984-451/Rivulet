@@ -5033,6 +5033,9 @@
         }
       }
     },
+    "Recording in Progress" : {
+
+    },
     "Rivulet is free and open source. A tip helps keep it going." : {
       "localizations" : {
         "de" : {
@@ -15744,6 +15747,9 @@
           }
         }
       }
+    },
+    "Watch Live" : {
+
     },
     "watchTogether.left" : {
       "extractionState" : "extracted_with_value",

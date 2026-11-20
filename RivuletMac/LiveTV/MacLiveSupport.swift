@@ -14,6 +14,8 @@ final class MacLiveTuner: ObservableObject {
         let url: URL
         let headers: [String: String]
         let forceEngineDemux: Bool
+        /// Where the recording in progress on the channel starts, when the session can play from it.
+        let recordingStart: LiveRecordingStart?
     }
 
     @Published private(set) var notice: String?
@@ -27,12 +29,15 @@ final class MacLiveTuner: ObservableObject {
         watchTask?.cancel()
         watchTask = store.beganWatching(channel)
         let url: URL
+        let recordingStart: LiveRecordingStart?
         do {
-            guard let resolved = try await store.resolveStreamURL(for: channel) else {
+            let resolved = try await store.resolveStreamURLAndRecordingStart(for: channel)
+            guard let resolvedURL = resolved.url else {
                 notice = String(localized: "This channel has no stream.")
                 return nil
             }
-            url = resolved
+            url = resolvedURL
+            recordingStart = resolved.recordingStart
         } catch {
             guard !isCancellationError(error) else { return nil }
             notice = error is PlexLiveTuneError
@@ -44,7 +49,7 @@ final class MacLiveTuner: ObservableObject {
         guard !Task.isCancelled else { PlexLiveTimelineKeepalive.release(url); return nil }
         keepalive.start(url: url)
         return Stream(url: url, headers: LiveTVClientIdentity.streamHeaders(for: channel),
-                      forceEngineDemux: url.path.hasPrefix("/livetv/sessions/"))
+                      forceEngineDemux: url.path.hasPrefix("/livetv/sessions/"), recordingStart: recordingStart)
     }
 
     /// Call when the engine could not load `stream`.

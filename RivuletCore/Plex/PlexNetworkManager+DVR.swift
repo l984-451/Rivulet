@@ -270,10 +270,13 @@ extension PlexNetworkManager {
         }
     }
 
-    private static func grab(from operation: [String: Any]) -> PlexScheduledGrab? {
+    static func grab(from operation: [String: Any]) -> PlexScheduledGrab? {
         guard let id = string(operation["id"]) ?? string(operation["key"]).map(lastPathComponent) else { return nil }
         let metadata = array(operation["Metadata"]).first ?? array(operation["Video"]).first ?? [:]
-        let media = array(metadata["Media"]).first ?? [:]
+        // A programme that airs repeatedly lists every airing; `mediaIndex` names the grabbed one.
+        let airings = array(metadata["Media"])
+        let media = int(operation["mediaIndex"]).flatMap { airings.indices.contains($0) ? airings[$0] : nil }
+            ?? airings.first ?? [:]
         func date(_ value: Any?) -> Date? {
             guard let seconds = int(value), seconds > 0 else { return nil }
             return Date(timeIntervalSince1970: TimeInterval(seconds))

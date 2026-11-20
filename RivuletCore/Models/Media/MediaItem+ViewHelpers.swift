@@ -45,6 +45,17 @@ extension MediaItem {
         return String(localized: "\(totalMinutes)m")
     }
 
+    /// Time left at the resume point, in `durationFormatted`'s form; nil without a runtime or progress.
+    var remainingFormatted: String? {
+        guard let runtime, watchProgress != nil else { return nil }
+        let minutes = max(1, Int(((runtime - userState.viewOffset) / 60).rounded()))
+        if minutes >= 60 {
+            let h = minutes / 60, m = minutes % 60
+            return m > 0 ? String(localized: "\(h)h \(m)m") : String(localized: "\(h)h")
+        }
+        return String(localized: "\(minutes)m")
+    }
+
     /// "S01E03"-style label for episodes; nil for non-episodes.
     var episodeString: String? {
         guard kind == .episode,

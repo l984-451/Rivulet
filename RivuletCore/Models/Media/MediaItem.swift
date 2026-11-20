@@ -60,8 +60,8 @@ nonisolated struct MediaItem: Identifiable, Hashable, Sendable, Codable {
     let genres: [String]?
     /// External ids keyed lowercase ("tmdb", "imdb", "tvdb", Plex's own as "plex"); nil when the list had none.
     let externalIDs: [String: String]?
-    /// The library the item sits in, when the list said (Plex `librarySectionID`).
-    let libraryID: String?
+    /// The library the item sits in, when the list said (Plex `librarySectionID`, Jellyfin and Emby title matches).
+    var libraryID: String?
 
     init(
         ref: MediaItemRef,

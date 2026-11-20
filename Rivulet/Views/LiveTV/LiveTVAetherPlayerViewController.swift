@@ -30,6 +30,12 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
     private var aetherPlayer: AetherPlayer?
 
+    /// How far this session's edge trails live: nonzero only after a join at
+    /// the start of a recording in progress (#444), which then plays at 1x.
+    private var liveLag: TimeInterval = 0
+    /// The next join is Go Live from such a session: no question, the edge.
+    private var joinsLiveWithoutAsking = false
+
     /// Engine render surface — the only correct way to display Aether video.
     private let engineSurfaceView = AetherPlayerView()
 
@@ -541,9 +547,10 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             // other sources pass straight through.
             joinTelemetry = LiveJoinTelemetry()
             let resolved: URL?
+            let recordingStart: LiveRecordingStart?
             do {
-                resolved = try await LiveResolveTiming.$begin.withValue(joinTelemetry?.phaseHook) {
-                    try await LiveTVDataStore.shared.resolveStreamURL(for: channel)
+                (resolved, recordingStart) = try await LiveResolveTiming.$begin.withValue(joinTelemetry?.phaseHook) {
+                    try await LiveTVDataStore.shared.resolveStreamURLAndRecordingStart(for: channel)
                 }
             } catch {
                 if Task.isCancelled { finishJoinTelemetry { $0.abandoned() }; return }
@@ -570,11 +577,20 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             joinTelemetry?.resolveFinished(url: url, route: route)
             startLiveSessionKeepAlive(for: url)
             if channel.sourceType != .plex { startEarlyBusyCheck(for: url) }
+            let asksForStart = !joinsLiveWithoutAsking
+            joinsLiveWithoutAsking = false
+            var fromStart: LiveRecordingStart?
+            if asksForStart, let recordingStart, await askStartsFromBeginning(recordingStart.recording) {
+                fromStart = recordingStart
+            }
+            if Task.isCancelled { finishJoinTelemetry { $0.abandoned() }; return }
+            liveLag = fromStart.map { Date().timeIntervalSince($0.firstSegmentAired) } ?? 0
             do {
                 try await aether.loadLive(
-                    url: url,
+                    url: fromStart?.url ?? url,
                     headers: LiveTVClientIdentity.streamHeaders(for: channel),
-                    forceEngineDemux: forceEngineDemux
+                    forceEngineDemux: forceEngineDemux,
+                    joinsAtRecordingStart: fromStart != nil
                 )
                 busyCheckTask?.cancel()  // the source opened, so it had a connection
                 if Task.isCancelled { finishJoinTelemetry { $0.abandoned() }; return }
@@ -756,6 +772,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     }
 
     private func teardownPlaybackSession(keepingPlayer: Bool = false) {
+        liveLag = 0
         endScrub()
         resetTouchScrub()
         // The fetch belongs to the outgoing player.
@@ -977,7 +994,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// programmes the window reaches into.
     private func windowTimelineLayout(now: Date, windowSeconds: Double, behind: Double) -> LiveTimelineLayout? {
         let store = LiveTVDataStore.shared
-        let onAir = store.getCurrentProgram(for: channel)
+        let onAir = store.program(for: channel, at: now) ?? store.getCurrentProgram(for: channel)
         let earlier = onAir.map {
             store.getPrograms(for: channel,
                               startDate: now.addingTimeInterval(-LiveTimelineLayout.maximumLookback),
@@ -992,7 +1009,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         let shift = aetherPlayer?.liveTimeshift ?? AetherPlayer.LiveTimeshift.idle
         let hasRewindWindow = shift.seekableRange != nil
         let behind = hasRewindWindow ? max(0, shift.behindLiveSeconds) : 0
-        let now = Date()
+        // A session joined at a recording's start runs behind live by `liveLag`.
+        let now = Date().addingTimeInterval(-liveLag)
         let onScreenAt = now.addingTimeInterval(-behind)
         // Scrubbing: the clock time Play would resume at, and the programme
         // airing then, which is what the bar and title describe. Skips still
@@ -1008,8 +1026,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
         // Not the engine's `isAtLiveEdge` (one segment): streams drift that
         // far on their own, and Go Live bounced in and out, shifting the rail.
-        let isBehindLive = hasRewindWindow
-            && Self.isBehindLive(behindSeconds: behind, wasBehind: showsBehindLive)
+        let isBehindLive = liveLag > 0 || (hasRewindWindow
+            && Self.isBehindLive(behindSeconds: behind, wasBehind: showsBehindLive))
         showsBehindLive = isBehindLive
 
         // Programme progress bar: the show's air window, the playhead at the
@@ -1049,7 +1067,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         }
         updateScrubberFocus()
 
-        timeshiftBadge.update(behindLiveSeconds: behind, isLive: !isBehindLive, isPaused: isUserPaused)
+        timeshiftBadge.update(behindLiveSeconds: behind + liveLag, isLive: !isBehindLive, isPaused: isUserPaused)
         railView.setGoLiveAvailable(isBehindLive)
         railView.setRecordState(
             available: store.canRecord(channel) && current != nil,
@@ -1893,12 +1911,30 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
     // MARK: - Recording
 
+    /// Start from Beginning or Watch Live, for a recording in progress (#444).
+    /// Menu answers Watch Live.
+    private func askStartsFromBeginning(_ recording: LiveTVScheduledRecording) async -> Bool {
+        let question = LiveStartQuestion(recording: recording)
+        let alert = UIAlertController(title: String(localized: "Recording in Progress"),
+                                      message: recording.title, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: String(localized: "Start from Beginning"), style: .default) { _ in
+            question.answer(startsFromBeginning: true)
+        })
+        alert.addAction(UIAlertAction(title: String(localized: "Watch Live"), style: .cancel) { _ in
+            question.answer(startsFromBeginning: false)
+        })
+        let startsFromBeginning = await question.ask { present(alert, animated: true) }
+        // Cancelled while asking (Back, background): the alert is still up.
+        if alert.presentingViewController != nil, !alert.isBeingDismissed { alert.dismiss(animated: false) }
+        return startsFromBeginning
+    }
+
     /// The programme on screen right now (behind live, that is an earlier one).
     private func programOnScreen() -> UnifiedProgram? {
         let store = LiveTVDataStore.shared
         let shift = aetherPlayer?.liveTimeshift ?? AetherPlayer.LiveTimeshift.idle
         let behind = shift.seekableRange == nil ? 0 : max(0, shift.behindLiveSeconds)
-        return store.program(for: channel, at: Date().addingTimeInterval(-behind))
+        return store.program(for: channel, at: Date().addingTimeInterval(-behind - liveLag))
             ?? store.getCurrentProgram(for: channel)
     }
 
@@ -2097,6 +2133,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     // MARK: - Remote handling
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        guard presentedViewController == nil else { super.pressesBegan(presses, with: event); return }
         if activePanel?.isPane == true { restartAutoHide() }
         for press in presses {
             switch press.type {
@@ -2142,6 +2179,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         // Menu is fully consumed at began; an unswallowed ended phase bubbles
         // to the system and peels an extra layer. Same for a Play/Pause taken
         // at began: its ended phase must not reach the system as a second one.
+        guard presentedViewController == nil else { super.pressesEnded(presses, with: event); return }
         for press in presses where press.type == .menu { return }
         for press in presses where press.type == .playPause && isHandlingPlayPausePress {
             isHandlingPlayPausePress = false
@@ -2452,6 +2490,15 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
     private func goLive() {
         guard let aether = aetherPlayer else { return }
+        if liveLag > 0 {
+            // A session joined at a recording's start only reaches its own edge; live is a new join.
+            joinsLiveWithoutAsking = true
+            cancelRetune()
+            teardownPlaybackSession(keepingPlayer: true)
+            updateRailContent()
+            startPlayback()
+            return
+        }
         endScrub()
         windowSeeker.cancelPending()
         if isUserPaused { resumePlayback() }

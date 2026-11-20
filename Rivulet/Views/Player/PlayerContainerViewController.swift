@@ -69,6 +69,17 @@ class PlayerContainerViewController: UIViewController {
     private var insightsTriviaCache: TitleTrivia?
     private var suppressedTriviaIDsCache: Set<String> = []
     private var panGestureRecognizer: UIPanGestureRecognizer?
+    // The swipe-to-scrub pan's per-touch state (see `handlePanGesture`).
+    private var swipeAxisLock = SwipeScrubAxisLock()
+    private var swipeScrubEntered = false
+    private var swipeScrubLastX: CGFloat = 0
+    /// A gated Up/Down swipe or a click took this touch, so it never scrubs.
+    private var swipeTouchSpent = false
+    private var swipeTouchBeganAt: CFTimeInterval = .infinity
+    /// This scrub's counts for its diagnostics line.
+    private var swipeScrubTravel: Double = 0
+    private var swipeScrubPeakSpeed: Double = 0
+    private var swipeScrubNetSeconds: Double = 0
     private var touchSurfaceTapGesture: UITapGestureRecognizer?
 
     /// Opaque black plate that covers the whole player while it fades out on
@@ -90,6 +101,8 @@ class PlayerContainerViewController: UIViewController {
     private var contentAnchor: ContentFocusAnchorView?
     /// Touch twin for the content state's Up/Down (see `setupContentAnchor`).
     private var contentSwipeBinding: DirectionalInputBinding?
+    /// Touch twin for the floating skip pill's Up/Down (see `skipPillVertical`).
+    private var skipPillSwipeBinding: DirectionalInputBinding?
     /// Tap-vs-hold for a content-state Left/Right press, the same detector the
     /// scrubber proxy uses, so both focus regimes behave identically.
     private let contentPressDetector = DirectionalPressDetector()
@@ -218,15 +231,29 @@ class PlayerContainerViewController: UIViewController {
                     Task { await vm.skipActiveMarker() }
                 }
             }
-            // Up/Down while the pill owns focus (chrome hidden) surfaces the
-            // controls; while the chrome is up, let the engine move focus back
-            // to the rail on Down (return false → not consumed).
-            pill.onDirectionalPress = { [weak self] _ in
-                guard let vm = self?.viewModel else { return false }
+            // Up/Down while the pill owns focus bring the controls up (`skipPillVertical`);
+            // with the chrome up the engine moves focus.
+            pill.onDirectionalPress = { [weak self] type in
+                guard let self, let vm = self.viewModel else { return false }
                 if vm.showControls { return false }
-                vm.showControlsTemporarily()
+                self.skipPillVertical(up: type == .upArrow)
                 return true
             }
+            // The press's touch twin, on the same predicate; never mid-scrub, click or ring jog.
+            skipPillSwipeBinding = DirectionalInputBinding(
+                gatedSwipesOn: pill,
+                directions: [.up, .down],
+                shouldHandle: { [weak self, weak pill] _ in
+                    guard let self, let vm = self.viewModel, pill?.isFocused == true else { return false }
+                    return !vm.showControls && !self.swipeScrubEntered
+                        && !RemoteInputHandler.isClickpadDown && !RemoteInputHandler.isRingJogging
+                },
+                onSwipe: { [weak self] direction in
+                    guard let self else { return }
+                    self.swipeTouchSpent = true
+                    self.skipPillVertical(up: direction == .up)
+                }
+            )
 
             [chromeScrim, dim, railView, bar, proxy, pill].forEach {
                 view.addSubview($0)
@@ -738,14 +765,20 @@ class PlayerContainerViewController: UIViewController {
 
         // Up/Down's touch twin (the iPhone Remote sends no arrow presses).
         // Not while the clickpad is down: a click jolts the touch into a fake swipe.
+        // Nor in a ring jog or a swipe-scrub; a swipe that acts here spends the touch.
         contentSwipeBinding = DirectionalInputBinding(
             gatedSwipesOn: anchor,
             directions: [.up, .down],
             shouldHandle: { [weak self] direction in
-                guard let self, !RemoteInputHandler.isClickpadDown else { return false }
+                guard let self, !RemoteInputHandler.isClickpadDown,
+                      !RemoteInputHandler.isRingJogging, !self.swipeScrubEntered else { return false }
                 return self.contentOwnsPress(direction == .up ? .upArrow : .downArrow)
             },
-            onSwipe: { [weak self] direction in self?.handleContentVertical(up: direction == .up) }
+            onSwipe: { [weak self] direction in
+                guard let self else { return }
+                self.swipeTouchSpent = true
+                self.handleContentVertical(up: direction == .up)
+            }
         )
 
         contentPressDetector.onTap = { [weak self] forward in
@@ -828,6 +861,19 @@ class PlayerContainerViewController: UIViewController {
         updateFocusIfNeeded()
     }
 
+    /// Up/Down from the floating skip pill bring the controls up in one move:
+    /// Up keeps focus on the pill in its tool-row slot, Down lands on the scrubber.
+    private func skipPillVertical(up: Bool) {
+        guard let vm = viewModel else { return }
+        vm.showControlsTemporarily()
+        guard up, let skipPill else { focusScrubber(); return }
+        applyChromeVisibility()
+        rail?.setFocusLanding(skipPill)
+        vm.enterControlsFocus()
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
+    }
+
     /// Select acts on its release, like the tap gesture it replaces: acting on
     /// the down can move focus mid-press (hiding the chrome hands focus to the
     /// skip pill when a marker is up), and the release would then land on
@@ -886,6 +932,13 @@ class PlayerContainerViewController: UIViewController {
                 vm.showControlsTemporarily()
             }
         }
+        focusScrubber()
+    }
+
+    /// Puts focus on the scrubber with the controls up, starting the controls
+    /// focus mode, for Select from the content and Down from the skip pill.
+    private func focusScrubber() {
+        guard let vm = viewModel else { return }
         // The chrome sink runs a pass later; the proxy must be focusable now.
         applyChromeVisibility()
         guard scrubberProxy?.isFocusEnabled == true else { return }
@@ -1002,22 +1055,22 @@ class PlayerContainerViewController: UIViewController {
         let panRecognizer = UIPanGestureRecognizer(target: self, action: #selector(handlePanGesture(_:)))
         // Only recognize indirect touches (Siri Remote touchpad, not direct screen touches)
         panRecognizer.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
-        // A pan that begins cancels the focus engine's move, so the delegate
-        // lets it begin only on a clearly horizontal, actionable swipe.
+        // Observes alongside every recognizer, as Live TV's `LiveTimelineScrubPan`,
+        // and acts only once `SwipeScrubAxisLock` locks the touch horizontal.
+        panRecognizer.cancelsTouchesInView = false
         panRecognizer.delegate = self
         view.addGestureRecognizer(panRecognizer)
         panGestureRecognizer = panRecognizer
     }
 
-    /// True when a touch-surface swipe should drive the scrubber. Mirrors the
-    /// bail conditions in `handlePanGesture`, since beginning steals the gesture
-    /// from the focus engine. Only focus on a transport button blocks it.
+    /// True when a touch-surface swipe may drive the scrubber.
     private var panCanDriveScrub: Bool {
         guard let vm = viewModel else { return false }
         return !vm.playbackState.isFailed
             && vm.postVideoState == .hidden
             && descriptionOverlay == nil
             && !focusIsOnTransportButton
+            && pauseInsights == nil
     }
 
     /// Focus is parked on a transport button rather than the scrubber. While
@@ -1034,8 +1087,8 @@ class PlayerContainerViewController: UIViewController {
     /// Bare-tap on the Siri Remote touch surface (no force/click). Fires
     /// only on `.indirect` touches — the touchpad — and not on `.select`
     /// presses (those are the click and are routed to play/pause via the
-    /// micro-gamepad buttonA handler). Coexists with the pan recognizer:
-    /// if the user starts moving, pan takes over and tap doesn't fire.
+    /// micro-gamepad buttonA handler). Coexists with the scrub pan, which only
+    /// observes: a touch that moves fails the tap by its own movement tolerance.
     private func setupTouchSurfaceTapGesture() {
         let tap = UITapGestureRecognizer(target: self, action: #selector(handleTouchSurfaceTap))
         tap.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
@@ -1091,48 +1144,110 @@ class PlayerContainerViewController: UIViewController {
 
     private static let clockTimesKey = "playerShowsClockTimes"
 
+    /// Does nothing until `SwipeScrubAxisLock` decides the touch: horizontal scrubs,
+    /// vertical and undecided touches belong to the focus engine and the gated swipes.
     @objc private func handlePanGesture(_ gesture: UIPanGestureRecognizer) {
-        // Kept in sync with `panCanDriveScrub`, which stops the recognizer from
-        // beginning (and thus stealing the gesture) in these same states.
-        // A touch that turned into a ring jog belongs to the jog from then on.
-        // A scrub that stalls mid-touch says why once, when the touch ends (#632).
-        guard panCanDriveScrub, !RemoteInputHandler.isRingJogging else {
-            if gesture.state == .ended {
-                DiagLog.notice(.playback, "[scrub] swipe ended blocked: "
-                    + (RemoteInputHandler.isRingJogging ? "ring jog" : focusIsOnTransportButton ? "focus is on a control" : "player state"))
-            }
-            return
-        }
-
         // Swipe-to-scrub works whether playing or paused.
 
         let translation = gesture.translation(in: view)
         let velocity = gesture.velocity(in: view)
 
         switch gesture.state {
-        case .began:
+        case .began, .changed:
+            if gesture.state == .began {
+                swipeAxisLock.reset()
+                swipeScrubEntered = false
+                swipeTouchSpent = false
+                swipeTouchBeganAt = CACurrentMediaTime()
+            }
+            // A touch that turned into a ring jog belongs to the jog from then on.
+            guard !RemoteInputHandler.isRingJogging else { return }
+            // A click jolts the touch into a fake swipe, so it spends the touch.
+            if swipeTouchClicked { swipeTouchSpent = true }
+            guard !swipeTouchSpent else { return }
+            guard swipeAxisLock.axis == .undecided else {
+                guard swipeScrubEntered, panCanDriveScrub else { return }
+                // The playhead follows the finger; right = forward.
+                let dx = Double(translation.x - swipeScrubLastX)
+                let speed = abs(Double(velocity.x))
+                swipeScrubLastX = translation.x
+                let seekDelta = SwipeScrubTransfer.seconds(
+                    forTravel: dx, speed: speed, duration: viewModel?.duration ?? 0)
+                noteSwipeScrubSample(travel: dx, speed: speed, seconds: seekDelta)
+                inputCoordinator.handle(action: .scrubRelative(seconds: seekDelta), source: .irPress)
+                return
+            }
+            let axis = swipeAxisLock.update(
+                translationX: Double(translation.x), translationY: Double(translation.y))
+            // Undecided or vertical: the focus engine's and the gated swipes'.
+            guard axis == .horizontal else { return }
+            guard panCanDriveScrub else {
+                DiagLog.notice(.playback, "[scrub] swipe did not start a scrub: "
+                    + (focusIsOnTransportButton ? "focus is on a control" : "player state"))
+                return
+            }
+            swipeScrubEntered = true
+            swipeScrubLastX = translation.x
+            swipeScrubTravel = 0
+            swipeScrubPeakSpeed = 0
+            swipeScrubNetSeconds = 0
             DiagLog.notice(.playback, "[scrub] swipe started a scrub")
-            inputCoordinator.handle(action: .scrubRelative(seconds: 0), source: .irPress)
-
-        case .changed:
-            // Proportional scrubbing: horizontal translation maps to seek time
-            // Sensitivity: ~1 second per 2 points of horizontal movement
-            // Positive translation.x = swipe right = forward
-            let seekDelta = translation.x * 0.5
-            inputCoordinator.handle(action: .scrubRelative(seconds: seekDelta), source: .irPress)
-            gesture.setTranslation(.zero, in: view)
+            // The travel that decided the lock counts, at the base rate.
+            let lockTravel = Double(translation.x)
+            let lockSeconds = SwipeScrubTransfer.baseSeconds(
+                forTravel: lockTravel, duration: viewModel?.duration ?? 0)
+            noteSwipeScrubSample(travel: lockTravel, speed: abs(Double(velocity.x)), seconds: lockSeconds)
+            inputCoordinator.handle(action: .scrubRelative(seconds: lockSeconds), source: .irPress)
 
         case .ended, .cancelled:
-            // If significant horizontal velocity, apply a final "flick" adjustment
-            if abs(velocity.x) > 500 {
-                let flickSeekDelta = velocity.x * 0.02  // Small multiplier for flick
-                inputCoordinator.handle(action: .scrubRelative(seconds: flickSeekDelta), source: .irPress)
+            if swipeScrubEntered {
+                // No post-lift flick; the lift sample may be jitter, so it is not applied.
+                let liftTravel = gesture.state == .ended ? Double(translation.x - swipeScrubLastX) : 0
+                logSwipeScrubEnd(blocked: swipeScrubBlockedReason, liftTravel: liftTravel)
+            } else if gesture.state == .ended, swipeAxisLock.axis != .horizontal,
+                      abs(translation.x) >= abs(translation.y) {
+                // A sideways touch that never became a scrub says why (#632).
+                DiagLog.notice(.playback, "[scrub] swipe did not start a scrub: "
+                    + (swipeScrubBlockedReason ?? "not 2:1 sideways past 24 pt")
+                    + ", t=\(Int(translation.x)),\(Int(translation.y))")
             }
-            // Don't auto-commit - wait for user to press play/select to confirm position
+            swipeScrubEntered = false
 
         default:
-            break
+            swipeScrubEntered = false
         }
+    }
+
+    /// The clickpad is down, or clicked down since the pan began on this touch.
+    private var swipeTouchClicked: Bool {
+        RemoteInputHandler.isClickpadDown || RemoteInputHandler.lastClickpadDownAt >= swipeTouchBeganAt
+    }
+
+    /// Adds one sent scrub update to this scrub's diagnostics counts.
+    private func noteSwipeScrubSample(travel: Double, speed: Double, seconds: Double) {
+        if travel.isFinite { swipeScrubTravel += abs(travel) }
+        if speed.isFinite { swipeScrubPeakSpeed = max(swipeScrubPeakSpeed, speed) }
+        if seconds.isFinite { swipeScrubNetSeconds += seconds }
+    }
+
+    /// One counts-only line per swipe-scrub, for tuning `SwipeScrubTransfer` (#632).
+    private func logSwipeScrubEnd(blocked: String?, liftTravel: Double) {
+        let runtimeMinutes = (viewModel?.duration ?? 0) / 60
+        let counts = String(
+            format: "travel=%.0fpt peak=%.0fpt/s net=%+.1fs runtime=%.0fmin lift=%+.0fpt",
+            swipeScrubTravel, swipeScrubPeakSpeed, swipeScrubNetSeconds,
+            runtimeMinutes.isFinite ? runtimeMinutes : 0, liftTravel.isFinite ? liftTravel : 0)
+        DiagLog.notice(.playback, "[scrub] swipe ended" + (blocked.map { " blocked: \($0);" } ?? ":") + " " + counts)
+    }
+
+    /// Why this touch cannot drive a scrub now, or nil if it can, for the
+    /// diagnostics lines (#632).
+    private var swipeScrubBlockedReason: String? {
+        if RemoteInputHandler.isRingJogging { return "ring jog" }
+        if swipeTouchClicked { return "clickpad down" }
+        if swipeTouchSpent { return "an Up or Down swipe took it" }
+        if !panCanDriveScrub { return focusIsOnTransportButton ? "focus is on a control" : "player state" }
+        return nil
     }
 
     private func dismissPlayer() {
@@ -2551,13 +2666,14 @@ final class SideScrimView: UIView {
 
 extension PlayerContainerViewController: UIGestureRecognizerDelegate {
 
-    /// Only let the swipe-to-scrub pan claim a clearly horizontal gesture it will
-    /// act on. Refusing here, not in the action, leaves vertical swipes to the engine.
+    /// Lets the scrub pan begin where a scrub could start; the axis is decided later.
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         guard let pan = gestureRecognizer as? UIPanGestureRecognizer,
               pan === panGestureRecognizer
         else { return true }
 
+        // Insights over the pause screen pages its cards sideways.
+        guard pauseInsights == nil else { return false }
         let velocity = pan.velocity(in: view)
         guard panCanDriveScrub else {
             return refuseScrub(focusIsOnTransportButton ? "focus is on a control" : "player state", velocity)
@@ -2566,14 +2682,15 @@ extension PlayerContainerViewController: UIGestureRecognizerDelegate {
         // Never while the clickpad is down: a click jolts the touch into a fake swipe.
         guard !RemoteInputHandler.isClickpadDown else { return refuseScrub("clickpad down", velocity) }
         guard !RemoteInputHandler.isRingJogging else { return refuseScrub("ring jog", velocity) }
-
-        // Decide on velocity: translation is still near zero at this point.
-        // A 2:1 horizontal bias leaves diagonal drift to the focus engine.
-        guard velocity != .zero else { return refuseScrub("no velocity yet", velocity) }
-        guard abs(velocity.x) > abs(velocity.y) * 2 else {
-            return refuseScrub("not 2:1 sideways, v=\(Int(velocity.x)),\(Int(velocity.y))", velocity)
-        }
         return true
+    }
+
+    /// The scrub pan never takes a swipe from the focus engine or the gated swipes.
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        gestureRecognizer === panGestureRecognizer || otherGestureRecognizer === panGestureRecognizer
     }
 
     /// A sideways swipe that did not start a scrub leaves a line for Send Diagnostics (#632).

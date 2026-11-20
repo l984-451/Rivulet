@@ -462,12 +462,16 @@ final class AetherPlayer: ObservableObject {
         StereoWithSubwoofer.isOn() ? AudioShaping(maxChannels: 2, lfeMixDB: StereoWithSubwoofer.lfeMixDB) : AudioShaping()
     }
 
-    func loadLive(url: URL, headers: [String: String]? = nil, forceEngineDemux: Bool = false) async throws {
+    /// `joinsAtRecordingStart` plays a Plex recording in progress from its first segment; a retry joins live.
+    func loadLive(url: URL, headers: [String: String]? = nil, forceEngineDemux: Bool = false,
+                  joinsAtRecordingStart: Bool = false) async throws {
         lastLoad = .live(url: url, headers: headers ?? [:], forceEngineDemux: forceEngineDemux)
-        try await performLiveLoad(url: url, headers: headers ?? [:], forceEngineDemux: forceEngineDemux)
+        try await performLiveLoad(url: url, headers: headers ?? [:], forceEngineDemux: forceEngineDemux,
+                                  joinsAtRecordingStart: joinsAtRecordingStart)
     }
 
-    private func performLiveLoad(url: URL, headers: [String: String], forceEngineDemux: Bool) async throws {
+    private func performLiveLoad(url: URL, headers: [String: String], forceEngineDemux: Bool,
+                                 joinsAtRecordingStart: Bool = false) async throws {
         beginLoad()
         let isNativeHLS = Self.isHLSURL(url) && !forceEngineDemux
         // Forced onto the engine demuxer AND a playlist: the Plex direct-play grant.
@@ -505,6 +509,11 @@ final class AetherPlayer: ObservableObject {
             if joinsWirelessAudio {
                 options.liveJoinStartsImmediately = false
                 options.autoplay = false
+            }
+            if joinsAtRecordingStart {
+                // #444: play from the recording's first segment; the window reaches back to it.
+                options.liveJoinsAtPlaylistStart = true
+                options.dvrWindowSeconds = 4 * 3600
             }
             return options
         }
@@ -652,6 +661,8 @@ final class AetherPlayer: ObservableObject {
         options.audioShaping = Self.audioShaping()
         // Read ahead as far as the engine's disk budget allows.
         options.forwardBufferSegments = .max
+        // Reopening the same title within the session plays from the segments already fetched.
+        options.retainsSessionCacheAfterStop = true
         // Engine takes it only for SDR below the screen's size and switches it off if it can't keep up.
         options.upscalesLowResolutionVideo = UserDefaults.standard.bool(forKey: Self.upscaleKey)
 

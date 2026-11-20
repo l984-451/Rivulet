@@ -849,9 +849,10 @@ final class AetherPlayer: PlayerProtocol {
 
     /// Live TV load. HLS sources go to AVPlayer directly (`nativeRemoteHLS`), anything else
     /// through the engine's remux. `forceEngineDemux` makes the engine open the playlist, the
-    /// fallback when a server rejects AVPlayer's request pattern.
+    /// fallback when a server rejects AVPlayer's request pattern. `joinsAtRecordingStart` plays a
+    /// Plex recording in progress from its first segment (`LiveRecordingStart`).
     func loadLive(url: URL, headers: [String: String]?, forceEngineDemux: Bool = false,
-                  role: LiveLoadRole = .fullscreen) async throws {
+                  joinsAtRecordingStart: Bool = false, role: LiveLoadRole = .fullscreen) async throws {
         finishAVCapture()
         dropFrameExtractor()
         if role == .fullscreen { startAVCapture(url: url) }
@@ -907,6 +908,11 @@ final class AetherPlayer: PlayerProtocol {
                 // Field-rate deinterlacing on a quarter-screen tile only
                 // doubles decoder output for nothing.
                 options.deinterlaceFieldRate = .frame
+            }
+            if joinsAtRecordingStart {
+                // #444: play from the recording's first segment; the window reaches back to it.
+                options.liveJoinsAtPlaylistStart = true
+                options.dvrWindowSeconds = 4 * 3600
             }
             if joinsWirelessAudio {
                 // AVPlayer's own start-up wait is what rides out the receiver's
@@ -1212,6 +1218,8 @@ final class AetherPlayer: PlayerProtocol {
         options.audioShaping = Self.audioShaping()
         // Read ahead as far as the engine's disk budget allows; live sizes its own window.
         if !isLive { options.forwardBufferSegments = .max }
+        // Reopening the same title within the session plays from the segments already fetched.
+        options.retainsSessionCacheAfterStop = true
         // New content, so the previous item's aspect ratio describes nothing.
         // Reset HERE rather than when `currentItem` goes nil: the engine also
         // swaps its player for SAME-content reasons (audio track switch,

@@ -16,6 +16,8 @@ A native Apple TV app for Plex, Jellyfin, Emby, and Live TV.
   <img src="https://img.shields.io/badge/Join_the-TestFlight_Beta-0D96F6?style=for-the-badge&logo=apple&logoColor=white" alt="Join the TestFlight Beta">
 </a>
 
+<sub>The public TestFlight link is capped at 2,200 testers. The App Store release will be updated more frequently going forward.</sub>
+
 </div>
 
 ---
@@ -156,6 +158,8 @@ Found a bug? [Open an issue](../../issues/new/choose) and pick the platform (tvO
 I welcome all contributions from any level of developer. I welcome contributions from LLMs too as long as they are checked and tested.
 
 **If you do contribute, please build and test on an actual Apple TV. The simulator is close, but does not mimic the Apple TV fully.**
+
+**Ask before opening a UI PR.** Rivulet's interface is deliberate. It mostly follows the Apple TV app, and where it departs from it, that is a choice I made on purpose. Before changing how a screen looks or behaves, open an issue or start a discussion so we can agree on the direction first. Bug fixes don't need this.
 
 By submitting a pull request, you agree to license your contribution under the same terms as Rivulet (PolyForm Noncommercial 1.0.0, see [LICENSE](LICENSE)).
 <br></br>

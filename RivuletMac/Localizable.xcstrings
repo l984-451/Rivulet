@@ -473,6 +473,9 @@
         }
       }
     },
+    "Recording in Progress" : {
+
+    },
     "Room Code" : {
       "localizations" : {
         "de" : {
@@ -610,6 +613,9 @@
           }
         }
       }
+    },
+    "Start from Beginning" : {
+
     },
     "Starting…" : {
       "localizations" : {
@@ -1066,6 +1072,9 @@
           }
         }
       }
+    },
+    "Watch Live" : {
+
     },
     "Watch Together" : {
       "localizations" : {

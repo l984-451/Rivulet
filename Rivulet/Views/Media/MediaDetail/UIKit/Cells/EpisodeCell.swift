@@ -87,8 +87,8 @@ final class EpisodeCell: UIView {
     private static let cornerRadius: CGFloat = 16
     /// The Apple TV app's episode artwork radius on tvOS 27 (VideosUI `EpisodeLockupLayout.borderRadii`).
     private static let artworkRadius: CGFloat = 20
-    /// The text under a stacked card: Apple's four summary lines end about 232 below the artwork.
-    static let textBlockHeight: CGFloat = 232
+    /// The text under a stacked card: four summary lines end about 232 below the artwork, plus Apple's 30 focus drop.
+    static let textBlockHeight: CGFloat = 262
     /// Apple's summary line pitch under an episode card.
     private static let summaryLineHeight: CGFloat = 30
 
@@ -119,6 +119,9 @@ final class EpisodeCell: UIView {
     private var splitFocus = false
     private var thumbFocused = false
     private var descFocused = false
+    /// A stacked card's text top; Apple drops the text 30 while the art is focused, 20 while the text is.
+    private var textTop: NSLayoutConstraint?
+    private static let textRestOffset: CGFloat = -15
     /// Liquid-glass focus highlight behind the metadata (ATV+ uses glass, not a
     /// white outline). Effect is nil until focused.
     private let descriptionGlass = UIVisualEffectView(effect: nil)
@@ -164,6 +167,7 @@ final class EpisodeCell: UIView {
             self.applyReachability(next: next)
             self.updateDescriptionGlass(coordinator)
             coordinator.addCoordinatedAnimations({ self.playbackStatus.showsFocused = focused }, completion: nil)
+            self.updateTextDrop(coordinator)
             self.notifyFocusKind()
         }
         addSubview(thumbnailCard)
@@ -212,6 +216,7 @@ final class EpisodeCell: UIView {
             self.descFocused = focused
             self.applyReachability(next: next)
             self.updateDescriptionGlass(coordinator)
+            self.updateTextDrop(coordinator)
             self.notifyFocusKind()
         }
         addSubview(descriptionBlock)
@@ -291,6 +296,9 @@ final class EpisodeCell: UIView {
         let footerLeading = footerRow.leadingAnchor.constraint(equalTo: descriptionBlock.leadingAnchor, constant: inset)
 
         let reserve = MediaRowMetrics.focusGrowth / 2
+        if layout == .stacked {
+            textTop = descriptionBlock.topAnchor.constraint(equalTo: thumbnailCard.bottomAnchor, constant: Self.textRestOffset)
+        }
         switch layout {
         case .stacked:
             NSLayoutConstraint.activate([
@@ -298,7 +306,7 @@ final class EpisodeCell: UIView {
                 thumbnailCard.trailingAnchor.constraint(equalTo: trailingAnchor, constant: reserve),
                 // The block's edge sits on the thumbnail's leading; its text is padded inside.
                 // Apple's EPISODE baseline sits 38 below the resting artwork.
-                descriptionBlock.topAnchor.constraint(equalTo: thumbnailCard.bottomAnchor, constant: -15),
+                textTop!,
                 descriptionBlock.leadingAnchor.constraint(equalTo: leadingAnchor),
             ])
         case .sideBySide:
@@ -426,6 +434,7 @@ final class EpisodeCell: UIView {
         thumbFocused = focused
         updateDescriptionGlass(coordinator)
         coordinator.addCoordinatedAnimations({ self.playbackStatus.showsFocused = focused }, completion: nil)
+        updateTextDrop(coordinator)
         let reserve = focused ? MediaRowMetrics.focusGrowth / 2 : 0
         glassLeading.constant = -reserve
         glassTrailing.constant = reserve
@@ -567,6 +576,7 @@ final class EpisodeCell: UIView {
         thumbFocused = false
         descFocused = false
         playbackStatus.showsFocused = false
+        textTop?.constant = Self.textRestOffset
         descriptionBlock.isFocusEligible = false
         descriptionFocusGuide.isEnabled = splitFocus && layout == .stacked
         descriptionGlass.backgroundColor = .clear
@@ -580,6 +590,15 @@ final class EpisodeCell: UIView {
         // larger between-season gap), not "S01E01".
         if let n = episode.episodeNumber { return String(localized: "Episode \(n)") }
         return episode.episodeString ?? String(localized: "Episode")
+    }
+
+    /// Moves a stacked card's text clear of the grown artwork, as Apple's lockup does (VideosUI 26.5 0x4df010).
+    private func updateTextDrop(_ coordinator: UIFocusAnimationCoordinator) {
+        guard let textTop else { return }
+        let drop: CGFloat = thumbFocused ? 30 : descFocused ? 20 : 0
+        guard textTop.constant != Self.textRestOffset + drop else { return }
+        textTop.constant = Self.textRestOffset + drop
+        coordinator.addCoordinatedAnimations({ self.layoutIfNeeded() }, completion: nil)
     }
 
     /// The summary on Apple's 30 pt line pitch.

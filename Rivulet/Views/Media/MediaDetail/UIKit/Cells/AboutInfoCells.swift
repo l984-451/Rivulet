@@ -11,7 +11,7 @@ import UIKit
 final class AboutCollectionCell: UICollectionViewCell {
     static let reuseID = "AboutCollectionCell"
 
-    private let header = sectionHeaderLabel(String(localized: "About"))
+    private let header = UILabel()
     // Both cards are focusable controls: select the synopsis → description popup;
     // select the advisory → content-rating popup.
     private let leftCard = AboutCardControl()
@@ -44,6 +44,9 @@ final class AboutCollectionCell: UICollectionViewCell {
     override init(frame: CGRect) {
         super.init(frame: frame)
 
+        header.text = String(localized: "About")
+        header.font = MediaRowMetrics.headerFont
+        header.textColor = MediaRowMetrics.pageHeaderColor
         header.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(header)
 
@@ -51,7 +54,6 @@ final class AboutCollectionCell: UICollectionViewCell {
             card.translatesAutoresizingMaskIntoConstraints = false
             contentView.addSubview(card)
         }
-        for card in [leftCard, rightCard, ratingsCard] { card.focusScale = 1.02 }
         leftCard.onSelect = { [weak self] in
             guard let self, let d = self.currentDetail, !(d.item.overview ?? "").isEmpty else { return }
             self.onSelectSynopsis?(d)
@@ -62,21 +64,19 @@ final class AboutCollectionCell: UICollectionViewCell {
         }
 
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.font = .systemFont(ofSize: 36, weight: .bold)
+        titleLabel.font = .systemFont(ofSize: 31, weight: .bold)
         titleLabel.textColor = .white
         titleLabel.numberOfLines = 1
         leftCard.addSubview(titleLabel)
 
         genresLabel.translatesAutoresizingMaskIntoConstraints = false
         genresLabel.font = .systemFont(ofSize: 23, weight: .medium)
-        genresLabel.textColor = UIColor.white.withAlphaComponent(0.6)
+        genresLabel.textColor = UIColor.white.withAlphaComponent(0.55)
         genresLabel.numberOfLines = 1
         leftCard.addSubview(genresLabel)
 
         synopsisLabel.translatesAutoresizingMaskIntoConstraints = false
-        synopsisLabel.font = .systemFont(ofSize: 25, weight: .semibold)
-        synopsisLabel.textColor = UIColor.white.withAlphaComponent(0.85)
-        synopsisLabel.numberOfLines = 6
+        synopsisLabel.numberOfLines = Self.synopsisLines
         leftCard.addSubview(synopsisLabel)
 
         // Advisory vertical stack.
@@ -133,9 +133,10 @@ final class AboutCollectionCell: UICollectionViewCell {
             header.topAnchor.constraint(equalTo: contentView.topAnchor),
             header.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
 
-            leftCard.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 14),
+            leftCard.topAnchor.constraint(equalTo: header.bottomAnchor,
+                                          constant: MediaRowMetrics.headerBaselineToArt + MediaRowMetrics.headerFont.descender),
             leftCard.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            leftCard.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            leftCard.heightAnchor.constraint(equalToConstant: Self.cardHeight),
             leftCard.widthAnchor.constraint(equalToConstant: Self.wideCard),
 
             rightCard.topAnchor.constraint(equalTo: leftCard.topAnchor),
@@ -148,25 +149,26 @@ final class AboutCollectionCell: UICollectionViewCell {
             ratingsCard.bottomAnchor.constraint(equalTo: leftCard.bottomAnchor),
             ratingsCard.widthAnchor.constraint(equalToConstant: Self.wideCard),
             ratingsGrid.topAnchor.constraint(equalTo: ratingsCard.topAnchor, constant: 22),
-            ratingsGrid.leadingAnchor.constraint(equalTo: ratingsCard.leadingAnchor, constant: 24),
-            ratingsGrid.trailingAnchor.constraint(equalTo: ratingsCard.trailingAnchor, constant: -24),
+            ratingsGrid.leadingAnchor.constraint(equalTo: ratingsCard.leadingAnchor, constant: Self.cardPad),
+            ratingsGrid.trailingAnchor.constraint(equalTo: ratingsCard.trailingAnchor, constant: -Self.cardPad),
             ratingsGrid.bottomAnchor.constraint(equalTo: ratingsCard.bottomAnchor, constant: -22),
 
-            titleLabel.topAnchor.constraint(equalTo: leftCard.topAnchor, constant: 22),
-            titleLabel.leadingAnchor.constraint(equalTo: leftCard.leadingAnchor, constant: 24),
-            titleLabel.trailingAnchor.constraint(equalTo: leftCard.trailingAnchor, constant: -24),
+            // Apple's baselines: title 48 below the card top, genres 28 under it, synopsis 60 under that.
+            titleLabel.firstBaselineAnchor.constraint(equalTo: leftCard.topAnchor, constant: 48),
+            titleLabel.leadingAnchor.constraint(equalTo: leftCard.leadingAnchor, constant: Self.cardPad),
+            titleLabel.trailingAnchor.constraint(equalTo: leftCard.trailingAnchor, constant: -Self.cardPad),
 
-            genresLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 4),
+            genresLabel.firstBaselineAnchor.constraint(equalTo: titleLabel.lastBaselineAnchor, constant: 28),
             genresLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             genresLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
 
-            synopsisLabel.topAnchor.constraint(equalTo: genresLabel.bottomAnchor, constant: 14),
+            synopsisLabel.firstBaselineAnchor.constraint(equalTo: genresLabel.lastBaselineAnchor, constant: 60),
             synopsisLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             synopsisLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
 
             advisoryStack.topAnchor.constraint(equalTo: rightCard.topAnchor, constant: 22),
-            advisoryStack.leadingAnchor.constraint(equalTo: rightCard.leadingAnchor, constant: 24),
-            advisoryStack.trailingAnchor.constraint(equalTo: rightCard.trailingAnchor, constant: -24),
+            advisoryStack.leadingAnchor.constraint(equalTo: rightCard.leadingAnchor, constant: Self.cardPad),
+            advisoryStack.trailingAnchor.constraint(equalTo: rightCard.trailingAnchor, constant: -Self.cardPad),
             advisoryStack.bottomAnchor.constraint(lessThanOrEqualTo: rightCard.bottomAnchor, constant: -22),
 
             sealRow.widthAnchor.constraint(equalTo: advisoryStack.widthAnchor),
@@ -181,18 +183,59 @@ final class AboutCollectionCell: UICollectionViewCell {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    // Synopsis, advisory and ratings split the full row 2:1:2, so Common Sense
-    // sits centred (Apple's cards are 2 and 1 grid columns, left-aligned).
-    private static let cardsWidth = 1920 - 2 * MediaRowMetrics.rowLeading - 2 * MediaRowMetrics.tileGap
-    private static let wideCard = (cardsWidth * 2 / 5).rounded(.down)
-    private static let narrowCard = (cardsWidth / 5).rounded(.down)
+    // Apple's cards are 2 and 1 columns of the six-column grid (560 and 260), left-aligned, 300 tall.
+    // The ratings card is ours and takes two columns after them.
+    private static let narrowCard = MediaRowMetrics.gridWidth(columns: 6)
+    private static let wideCard = 2 * narrowCard + MediaRowMetrics.tileGap
+    private static let cardHeight: CGFloat = 300
+    private static let cardPad: CGFloat = 22
+    private static let synopsisLines = 5
+    private static let synopsisFont = UIFont.systemFont(ofSize: 25, weight: .medium)
+
+    /// Header, its gap to the cards, and the cards.
+    static var height: CGFloat {
+        MediaRowMetrics.headerFont.lineHeight.rounded(.up)
+            + MediaRowMetrics.headerBaselineToArt + MediaRowMetrics.headerFont.descender + cardHeight
+    }
+
+    /// The overview in Apple's 25 pt on a 32 pt pitch. Past five lines it is cut at a word and
+    /// ends in a grey "MORE" (a label has no custom truncation token).
+    private static func synopsis(_ text: String) -> NSAttributedString {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = 32 - synopsisFont.lineHeight
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: synopsisFont, .foregroundColor: UIColor.white, .paragraphStyle: paragraph]
+        let width = wideCard - 2 * cardPad
+        let limit = CGFloat(synopsisLines) * 32
+        func fits(_ s: NSAttributedString) -> Bool {
+            s.boundingRect(with: CGSize(width: width, height: .greatestFiniteMagnitude),
+                           options: .usesLineFragmentOrigin, context: nil).height <= limit
+        }
+        let full = NSAttributedString(string: text, attributes: attributes)
+        guard !fits(full) else { return full }
+        let words = text.split(whereSeparator: \.isWhitespace)
+        let more = String(localized: "More").uppercased()
+        func cut(_ count: Int) -> NSAttributedString {
+            let s = NSMutableAttributedString(string: words[..<count].joined(separator: " ") + "... ", attributes: attributes)
+            var grey = attributes
+            grey[.foregroundColor] = UIColor.white.withAlphaComponent(0.4)
+            s.append(NSAttributedString(string: more, attributes: grey))
+            return s
+        }
+        var low = 0, high = words.count
+        while high - low > 1 {
+            let mid = (low + high) / 2
+            if fits(cut(mid)) { low = mid } else { high = mid }
+        }
+        return cut(low)
+    }
 
     func configure(detail: MediaItemDetail) {
         currentDetail = detail
         titleLabel.text = detail.item.title
         genresLabel.text = detail.genres.prefix(3).joined(separator: ", ")
         genresLabel.isHidden = detail.genres.isEmpty
-        synopsisLabel.text = detail.item.overview
+        synopsisLabel.attributedText = Self.synopsis(detail.item.overview ?? "")
 
         let advisory = detail.contentAdvisory
         if let a = advisory, a.hasAny {
@@ -521,6 +564,7 @@ final class InfoColumnView: UIView {
             card.restAlpha = 0
             card.layer.cornerRadius = 24
             card.focusScale = 1.054
+            card.focusAlpha = 0.28
             card.onSelect = { [weak self] in self?.onSelect?() }
             rowStack.translatesAutoresizingMaskIntoConstraints = false
             card.addSubview(rowStack)
@@ -580,16 +624,6 @@ final class InfoColumnView: UIView {
         ])
         return box
     }
-}
-
-// MARK: - Shared
-
-private func sectionHeaderLabel(_ text: String) -> UILabel {
-    let l = UILabel()
-    l.font = .systemFont(ofSize: 30, weight: .semibold)
-    l.textColor = .white
-    l.text = text
-    return l
 }
 
 // MARK: - Ratings grid
@@ -694,9 +728,11 @@ final class AboutCardControl: UIControl {
         return 1.134 - t * (1.134 - 1.073)
     }
     /// Fill alpha when not focused. 0 = no card at rest (the footer columns).
-    var restAlpha: CGFloat = 0.06 {
+    var restAlpha: CGFloat = 0.09 {
         didSet { backgroundColor = UIColor(white: 1, alpha: restAlpha) }
     }
+    /// Fill alpha while focused (Apple's About cards about 0.25, the footer columns about 0.28).
+    var focusAlpha: CGFloat = 0.25
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -729,7 +765,7 @@ final class AboutCardControl: UIControl {
         let focused = (context.nextFocusedView === self)
         coordinator.addCoordinatedAnimations { [weak self] in
             guard let self else { return }
-            self.backgroundColor = UIColor(white: 1, alpha: focused ? 0.14 : self.restAlpha)
+            self.backgroundColor = UIColor(white: 1, alpha: focused ? self.focusAlpha : self.restAlpha)
             let s = self.scale(forWidth: self.bounds.width)
             self.transform = focused ? CGAffineTransform(scaleX: s, y: s) : .identity
         }

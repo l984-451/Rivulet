@@ -29,7 +29,7 @@ final class ExtrasShelfView: UIView, UICollectionViewDataSource, UICollectionVie
         let title = UILabel()
         title.translatesAutoresizingMaskIntoConstraints = false
         title.font = MediaRowMetrics.headerFont
-        title.textColor = MediaRowMetrics.headerColor
+        title.textColor = MediaRowMetrics.pageHeaderColor
         title.text = String(localized: "Extras")
         addSubview(title)
 

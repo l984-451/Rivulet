@@ -18,6 +18,8 @@ final class MediaDetailChromeView: UIView {
     /// Sizes shared with the home hero's buttons. The pill width is a floor; long titles grow past it.
     private static let actionButtonHeight: CGFloat = HeroPillButton.buttonHeight
     private static let actionPillWidth: CGFloat = HeroPillButton.pillWidth
+    /// The glyph's box: the 30 pt hero box drew 19.5 x 22, Apple's is 23 x 26.
+    private static let playGlyphSize: CGFloat = 35.5
     private static let playProgressTrackWidth: CGFloat = 50
     private static let playProgressTrackHeight: CGFloat = 8
     /// Apple's description cap: wider on an episode.
@@ -26,6 +28,18 @@ final class MediaDetailChromeView: UIView {
     private static let captionFont = UIFont.systemFont(ofSize: 25, weight: .medium)
     private static let descriptionFont = UIFont.systemFont(ofSize: 23, weight: .medium)
     private static let rolesLabelAlpha: CGFloat = 0.6
+    private static let descriptionAlpha: CGFloat = 0.5
+    /// Apple's line pitches: 30 for the synopsis, 32.5 for the Starring block.
+    private static let descriptionLineHeight: CGFloat = 30
+    private static let castLineHeight: CGFloat = 32.5
+
+    private static func paragraphStyle(lineHeight: CGFloat) -> NSParagraphStyle {
+        let p = NSMutableParagraphStyle()
+        p.minimumLineHeight = lineHeight
+        p.maximumLineHeight = lineHeight
+        p.lineBreakMode = .byTruncatingTail
+        return p
+    }
 
     // MARK: - Public surface
 
@@ -168,7 +182,7 @@ final class MediaDetailChromeView: UIView {
         let l = UILabel()
         l.translatesAutoresizingMaskIntoConstraints = false
         l.font = MediaDetailChromeView.descriptionFont
-        l.textColor = UIColor.white.withAlphaComponent(0.85)
+        l.textColor = UIColor.white.withAlphaComponent(MediaDetailChromeView.descriptionAlpha)
         l.numberOfLines = 4
         l.lineBreakMode = .byTruncatingTail
         return l
@@ -241,6 +255,9 @@ final class MediaDetailChromeView: UIView {
         metadataBlock.addArrangedSubview(genreRow)
         metadataBlock.addArrangedSubview(descriptionLabel)
         metadataBlock.addArrangedSubview(qualityRow)
+        // Measured: genre to synopsis 35 and synopsis to date 34.5 against 32 and 30 at 18.
+        metadataBlock.setCustomSpacing(21, after: genreRow)
+        metadataBlock.setCustomSpacing(22.5, after: descriptionLabel)
         chromeStack.addArrangedSubview(metadataBlock)
 
         // Apple's rhythm: 18 between the text rows, 32 above the buttons.
@@ -615,6 +632,8 @@ final class MediaDetailChromeView: UIView {
             let attr = NSMutableAttributedString(string: String(localized: "Starring "), attributes: [
                 .foregroundColor: UIColor.white.withAlphaComponent(Self.rolesLabelAlpha)])
             attr.append(NSAttributedString(string: topCast.joined(separator: ", ")))
+            attr.addAttribute(.paragraphStyle, value: Self.paragraphStyle(lineHeight: Self.castLineHeight),
+                              range: NSRange(location: 0, length: attr.length))
             castLabel.attributedText = attr
         } else {
             castLabel.attributedText = nil
@@ -623,12 +642,14 @@ final class MediaDetailChromeView: UIView {
     }
 
     private func renderDescription(item: MediaItem, detail: MediaItemDetail) {
-        let color = UIColor.white.withAlphaComponent(0.85)
+        let color = UIColor.white.withAlphaComponent(Self.descriptionAlpha)
+        let style = Self.paragraphStyle(lineHeight: Self.descriptionLineHeight)
         func prefixed(_ prefix: String, _ body: String) {
             let attr = NSMutableAttributedString(string: prefix, attributes: [
-                .font: UIFont.systemFont(ofSize: 23, weight: .bold), .foregroundColor: color])
+                .font: UIFont.systemFont(ofSize: 23, weight: .bold), .foregroundColor: color,
+                .paragraphStyle: style])
             attr.append(NSAttributedString(string: body, attributes: [
-                .font: Self.descriptionFont, .foregroundColor: color]))
+                .font: Self.descriptionFont, .foregroundColor: color, .paragraphStyle: style]))
             descriptionLabel.attributedText = attr
         }
         if let episode = episodeDescription {
@@ -637,9 +658,8 @@ final class MediaDetailChromeView: UIView {
                   let overview = detail.item.overview, !overview.isEmpty {
             prefixed(String(localized: "S\(s), E\(e): "), overview)   // episode page
         } else if let overview = detail.item.overview, !overview.isEmpty {
-            descriptionLabel.attributedText = nil
-            descriptionLabel.text = overview
-            descriptionLabel.font = Self.descriptionFont
+            descriptionLabel.attributedText = NSAttributedString(string: overview, attributes: [
+                .font: Self.descriptionFont, .foregroundColor: color, .paragraphStyle: style])
         }
     }
 
@@ -1048,7 +1068,8 @@ final class MediaDetailChromeView: UIView {
         pill.layer.cornerRadius = Self.actionButtonHeight / 2
         pill.layer.cornerCurve = .continuous
 
-        let playIcon = UIImageView(image: UIImage(systemName: "play.fill"))
+        let playIcon = UIImageView(image: UIImage(systemName: "play.fill")?.withConfiguration(
+            UIImage.SymbolConfiguration(pointSize: Self.playGlyphSize, weight: .semibold)))
         playIcon.translatesAutoresizingMaskIntoConstraints = false
         playIcon.tintColor = .white
         playIcon.contentMode = .scaleAspectFit
@@ -1087,8 +1108,8 @@ final class MediaDetailChromeView: UIView {
         pill.addSubview(contentStack)
 
         NSLayoutConstraint.activate(Self.pillConstraints(pill, content: contentStack) + [
-            playIcon.widthAnchor.constraint(equalToConstant: 24),
-            playIcon.heightAnchor.constraint(equalToConstant: 24),
+            playIcon.widthAnchor.constraint(equalToConstant: Self.playGlyphSize),
+            playIcon.heightAnchor.constraint(equalToConstant: Self.playGlyphSize),
 
             progressTrack.heightAnchor.constraint(equalToConstant: Self.playProgressTrackHeight),
             progressTrack.widthAnchor.constraint(equalToConstant: Self.playProgressTrackWidth),

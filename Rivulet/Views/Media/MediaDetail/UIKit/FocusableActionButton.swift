@@ -24,14 +24,23 @@ final class FocusableActionButton: UIControl {
 
     /// `.pill` inverts to white with black content; `.glass` keeps content white, for large targets like the bio panel.
     enum FocusStyle { case pill, glass }
-    var focusStyle: FocusStyle = .pill
+    var focusStyle: FocusStyle = .pill {
+        didSet {
+            guard focusStyle == .glass else { return }
+            materialBackground.effect = UIGlassEffect(style: .regular)
+            materialBackground.alpha = 1
+            backgroundColor = glassRestingFill
+        }
+    }
 
-    private let restingFill = UIColor.white.withAlphaComponent(0.15)
-    private let glassRestingFill = UIColor.white.withAlphaComponent(0.06)
+    // The hero's resting glass: dark and level over dark art, where white over regular glass lightened it.
+    private let restingFill = HeroPillButton.restingFill
+    // Over the regular glass this measures about 0.78 of its alpha: 0.245 reads 0.19, as Apple's search cards do.
+    private let glassRestingFill = UIColor.white.withAlphaComponent(0.245)
 
     /// Real Liquid Glass material, behind the color fill. Shows through at
     /// rest, fades out on focus (matches HeroPillButton/HeroCircleButton).
-    private let materialBackground = UIVisualEffectView(effect: UIGlassEffect(style: .regular))
+    private let materialBackground = UIVisualEffectView(effect: HeroPillButton.restingGlass())
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -40,6 +49,7 @@ final class FocusableActionButton: UIControl {
 
         materialBackground.translatesAutoresizingMaskIntoConstraints = false
         materialBackground.isUserInteractionEnabled = false
+        materialBackground.alpha = HeroPillButton.restingGlassAlpha
         insertSubview(materialBackground, at: 0)
         NSLayoutConstraint.activate([
             materialBackground.topAnchor.constraint(equalTo: topAnchor),
@@ -147,12 +157,12 @@ final class FocusableActionButton: UIControl {
         let focused = context.nextFocusedView === self
         if focusStyle == .glass {
             // Glass: content stays white; soften the fill, add a hairline border,
-            // gentle 1.02 scale (the app's glass-row convention). No invert.
+            // 1.055 scale, as the Apple TV app's search cards. No invert.
             coordinator.addCoordinatedAnimations { [weak self] in
                 guard let self else { return }
-                self.transform = focused ? CGAffineTransform(scaleX: 1.02, y: 1.02) : .identity
+                self.transform = focused ? CGAffineTransform(scaleX: 1.055, y: 1.055) : .identity
                 self.backgroundColor = focused
-                    ? UIColor.white.withAlphaComponent(0.18)
+                    ? UIColor.white.withAlphaComponent(0.32)
                     : self.glassRestingFill
                 self.materialBackground.alpha = focused ? 0 : 1
                 self.layer.borderWidth = 1
@@ -166,8 +176,8 @@ final class FocusableActionButton: UIControl {
             guard let self else { return }
             self.transform = focused
                 ? CGAffineTransform(scaleX: HeroPillButton.focusScale, y: HeroPillButton.focusScale) : .identity
-            self.backgroundColor = focused ? .white : self.restingFill
-            self.materialBackground.alpha = focused ? 0 : 1
+            self.backgroundColor = focused ? HeroPillButton.focusedFill : self.restingFill
+            self.materialBackground.alpha = focused ? 0 : HeroPillButton.restingGlassAlpha
             for v in self.invertOnFocus {
                 if let iv = v as? UIImageView { iv.tintColor = focused ? .black : .white }
                 if let lb = v as? UILabel { lb.textColor = focused ? .black : .white }

@@ -307,7 +307,7 @@ final class BelowFoldSectionHeader: UICollectionReusableView {
         super.init(frame: frame)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.font = MediaRowMetrics.headerFont
-        titleLabel.textColor = MediaRowMetrics.headerColor
+        titleLabel.textColor = MediaRowMetrics.pageHeaderColor
         addSubview(titleLabel)
         baselineConstraint = titleLabel.lastBaselineAnchor.constraint(equalTo: bottomAnchor, constant: -Self.cardBaseline)
         NSLayoutConstraint.activate([

@@ -250,12 +250,12 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
                     // Primary on a title with no extras or related: same peek,
                     // less the header gap, so the strip is the cast row.
                     topInset: isPrimary ? max(0, peek - 16) : 0,
-                    // The header stays put; the circles rest 41.5 below its baseline.
-                    headerTopInset: 46,
+                    // The header reserves its own height, so the circles rest 41.5 below its baseline.
+                    headerTopInset: 0,
                     headerHeight: 72,
                     headerBaseline: BelowFoldSectionHeader.castBaseline
                 )
-            case .about: return self.fullWidthSection(height: 370, topInset: isPrimary ? peek : 0)
+            case .about: return self.fullWidthSection(height: AboutCollectionCell.height, topInset: isPrimary ? peek : 0)
             case .info:
                 // Sized to its rows, so a short title leaves no empty band below them.
                 let columnsWidth = env.container.contentSize.width - Self.rowLeading - Self.rowTrailing

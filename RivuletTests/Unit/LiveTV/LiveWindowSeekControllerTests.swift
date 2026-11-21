@@ -17,6 +17,8 @@ final class LiveWindowSeekControllerTests: XCTestCase {
         var plays = 0
         var paused = false
         var seekDelay: Duration = .zero
+        /// Where a seek leaves the playhead, when it lands on a new axis (a recording reload).
+        var landsAt: TimeInterval?
 
         // Weak, as the app's own closures are: a seek still landing when a test
         // ends must not reach back into a freed fake.
@@ -29,7 +31,7 @@ final class LiveWindowSeekControllerTests: XCTestCase {
                     self.seeks.append(target)
                     let delay = self.seekDelay
                     if delay > .zero { try? await Task.sleep(for: delay) }
-                    self.position = target
+                    self.position = self.landsAt ?? target
                 },
                 seekToLiveEdge: { [weak self] in
                     guard let self else { return }
@@ -76,6 +78,37 @@ final class LiveWindowSeekControllerTests: XCTestCase {
         XCTAssertFalse(controller.isBehindLive(in: try XCTUnwrap(controller.window)))
     }
 
+    /// Start from Beginning: the engine holds 200...2000 but the recording's head is 600 s on.
+    func testReachLetsASkipPastTheWindowAndStopsAtTheHead() async throws {
+        let fake = FakePlayer()
+        let controller = LiveWindowSeekController()
+        var player = fake.makePlayer()
+        player.reach = { (0, 580) }
+        controller.attach(player)
+
+        controller.step(by: 300)
+        XCTAssertEqual(controller.pendingRequest, .position(2_300))
+        try await settle()
+        XCTAssertEqual(fake.seeks, [2_300])
+
+        controller.step(by: 600)
+        XCTAssertEqual(controller.pendingRequest, .liveEdge)
+    }
+
+    func testReachGoesBackBeforeTheWindowOnlyAsFarAsItReaches() async throws {
+        let fake = FakePlayer()
+        fake.position = 210
+        let controller = LiveWindowSeekController()
+        var player = fake.makePlayer()
+        player.reach = { (50, 0) }
+        controller.attach(player)
+
+        controller.step(by: -30)
+        XCTAssertEqual(controller.pendingRequest, .position(180))
+        controller.step(by: -100)
+        XCTAssertEqual(controller.pendingRequest, .position(150))
+    }
+
     func testSeekNeverResumesAPausedViewer() async throws {
         let fake = FakePlayer()
         fake.paused = true
@@ -104,6 +137,27 @@ final class LiveWindowSeekControllerTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(1_300))
         // The landing worker drained the newer target, measured from the press.
         XCTAssertEqual(fake.seeks, [1_990, 1_980])
+    }
+
+    func testPressesWhileASeekLandsApplyFromWhereItLanded() async throws {
+        let fake = FakePlayer()
+        fake.seekDelay = .milliseconds(800)
+        // A recording reload: the seek lands at 300 on a new axis.
+        fake.landsAt = 300
+        let controller = LiveWindowSeekController()
+        controller.attach(fake.makePlayer())
+
+        controller.step(by: -100)
+        try await settle()
+        XCTAssertTrue(controller.isLanding)
+        fake.window = LiveSeekableWindow(lowerBound: 10, upperBound: 400)
+        controller.step(by: -10)
+        controller.step(by: -10)
+        try await Task.sleep(for: .milliseconds(800))
+        fake.landsAt = nil
+        try await settle()
+        XCTAssertEqual(fake.seeks, [1_900, 280])
+        XCTAssertEqual(fake.edgeSeeks, 0)
     }
 
     func testNoWindowCannotBeSeeked() {

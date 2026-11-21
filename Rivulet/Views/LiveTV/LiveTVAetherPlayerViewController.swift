@@ -35,6 +35,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private var liveLag: TimeInterval = 0
     /// The next join is Go Live from such a session: no question, the edge.
     private var joinsLiveWithoutAsking = false
+    /// The recording this session plays from (Start from Beginning), and where it was loaded.
+    private var recordingStart: LiveRecordingStart?
 
     /// Engine render surface — the only correct way to display Aether video.
     private let engineSurfaceView = AetherPlayerView()
@@ -430,10 +432,14 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 return LiveSeekableWindow(lowerBound: range.lowerBound, upperBound: shift.edgeTime)
             },
             position: { [weak aether] in aether?.liveTimeshift.playhead ?? 0 },
-            seek: { [weak aether] in await aether?.seekLive(to: $0) },
-            seekToLiveEdge: { [weak aether] in await aether?.seekToLiveEdge() },
+            seek: { [weak self] in await self?.seekLive(to: $0) },
+            seekToLiveEdge: { [weak self] in await self?.seekToLiveEdge() },
             play: { [weak aether] in aether?.play() },
-            isUserPaused: { [weak self] in self?.isUserPaused ?? false }
+            isUserPaused: { [weak self] in self?.isUserPaused ?? false },
+            reach: { [weak self] in
+                guard let self, let start = self.recordingStart else { return (0, 0) }
+                return start.reach(lag: self.liveLag)
+            }
         ))
         windowSeeker.onChange = { [weak self] in self?.stagedSeekChanged() }
         checkStreamChoices()
@@ -584,7 +590,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 fromStart = recordingStart
             }
             if Task.isCancelled { finishJoinTelemetry { $0.abandoned() }; return }
-            liveLag = fromStart.map { Date().timeIntervalSince($0.firstSegmentAired) } ?? 0
+            self.recordingStart = fromStart
+            liveLag = fromStart?.lag(at: Date()) ?? 0
             do {
                 try await aether.loadLive(
                     url: fromStart?.url ?? url,
@@ -773,6 +780,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
     private func teardownPlaybackSession(keepingPlayer: Bool = false) {
         liveLag = 0
+        recordingStart = nil
         endScrub()
         resetTouchScrub()
         // The fetch belongs to the outgoing player.
@@ -2360,7 +2368,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         // Paused with a window to move in, Left/Right scrub instead: the bar
         // and a frame from the engine show where Play will pick up, and
         // nothing moves until then (the Apple TV app's pause-and-scrub).
-        if isUserPaused, let aether = aetherPlayer, lastResortPlayer == nil,
+        if isUserPaused, liveLag == 0, let aether = aetherPlayer, lastResortPlayer == nil,
            aether.liveTimeshift.seekableRange != nil {
             moveScrub(by: seconds, on: aether)
             return
@@ -2488,8 +2496,69 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         skip(by: InputConfig.tapSeekDelta(forward: forward))
     }
 
+    /// A seek on the session axis. The engine fetches a recording's backlog at 1x, so a target
+    /// past what it holds (or before where this join began) reloads the recording there.
+    private func seekLive(to target: Double) async {
+        guard let aether = aetherPlayer else { return }
+        let shift = aether.liveTimeshift
+        if let start = recordingStart, liveLag > 0, let range = shift.seekableRange,
+           let offset = start.rejoinOffset(
+               forSessionPosition: target,
+               in: LiveSeekableWindow(lowerBound: range.lowerBound, upperBound: shift.edgeTime),
+               edgeWall: Date().addingTimeInterval(-liveLag)) {
+            await reloadRecording(start.joining(atOffset: offset), on: aether)
+            return
+        }
+        await aether.seekLive(to: target)
+    }
+
+    /// Loads the same recorder session from a later (or earlier) offset. The tune and its
+    /// keepalive stay, so a skip costs one playlist fetch, not a re-tune.
+    private func reloadRecording(_ start: LiveRecordingStart, on aether: AetherPlayer) async {
+        recordingStart = start
+        liveLag = start.lag(at: Date())
+        do {
+            try await aether.loadLive(url: start.url, headers: LiveTVClientIdentity.streamHeaders(for: channel),
+                                      forceEngineDemux: true, joinsAtRecordingStart: true)
+            if !isUserPaused { aether.play() }
+        } catch {
+            if !isFallbackInFlight { advanceFallback(after: error) }
+        }
+        updateRailContent()
+    }
+
+    /// The controller's far end. Behind a recording's head, live is the recording's head.
+    private func seekToLiveEdge() async {
+        guard let aether = aetherPlayer else { return }
+        if liveLag > 0, let start = recordingStart {
+            await reloadAtLive(start, on: aether)
+        } else {
+            await aether.seekToLiveEdge()
+        }
+    }
+
+    /// The same recorder session joined at its head, which is live: no re-tune.
+    private func reloadAtLive(_ start: LiveRecordingStart, on aether: AetherPlayer) async {
+        let head = start.joining(atOffset: Date().timeIntervalSince(start.firstSegmentAired) - LiveRecordingStart.headMargin)
+        recordingStart = nil
+        liveLag = 0
+        windowSeeker.cancelPending()
+        do {
+            try await aether.loadLive(url: head.url, headers: LiveTVClientIdentity.streamHeaders(for: channel),
+                                      forceEngineDemux: true, joinsAtRecordingStart: false)
+            if !isUserPaused { aether.play() }
+        } catch {
+            if !isFallbackInFlight { advanceFallback(after: error) }
+        }
+        updateRailContent()
+    }
+
     private func goLive() {
         guard let aether = aetherPlayer else { return }
+        if liveLag > 0, let start = recordingStart {
+            Task { await reloadAtLive(start, on: aether) }
+            return
+        }
         if liveLag > 0 {
             // A session joined at a recording's start only reaches its own edge; live is a new join.
             joinsLiveWithoutAsking = true

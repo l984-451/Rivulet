@@ -15,13 +15,21 @@ nonisolated struct LiveRecordingStart: Sendable, Equatable {
     /// When that first segment aired. A session joined there trails live by
     /// the time since, which the player adds to its own "behind live".
     let firstSegmentAired: Date
+    /// Seconds after the first segment that `url` begins at: 0 for the start, more after a skip forward.
+    var offset: TimeInterval = 0
+
+    /// A skip stops this far short of the recording's head; past it the join is live.
+    static let headMargin: TimeInterval = 20
 
     /// `url` asked from offset 0, or nil when it is not a Plex session playlist.
-    @MainActor static func playlistFromStart(_ url: URL) -> URL? {
+    @MainActor static func playlistFromStart(_ url: URL) -> URL? { playlist(url, offset: 0) }
+
+    /// `url` asked from `offset` seconds after the recording's first segment.
+    @MainActor static func playlist(_ url: URL, offset: TimeInterval) -> URL? {
         guard url.path.hasPrefix("/livetv/sessions/"), url.pathExtension == "m3u8",
               var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
         var items = (components.queryItems ?? []).filter { $0.name != "offset" }
-        items.insert(URLQueryItem(name: "offset", value: "0"), at: 0)
+        items.insert(URLQueryItem(name: "offset", value: String(Int(max(0, offset)))), at: 0)
         components.queryItems = items
         return PlexLiveTVChannel.finalizedLiveURL(components)
     }
@@ -33,6 +41,37 @@ nonisolated struct LiveRecordingStart: Sendable, Equatable {
         let offset = URLComponents(url: url, resolvingAgainstBaseURL: false)?
             .queryItems?.first { $0.name == "offset" }?.value.flatMap(Double.init) ?? 0
         return date.addingTimeInterval(-max(0, offset))
+    }
+
+    /// How far the session's edge trails live when it starts at `date`.
+    func lag(at date: Date) -> TimeInterval {
+        date.timeIntervalSince(firstSegmentAired.addingTimeInterval(offset))
+    }
+
+    /// The same recording joined `offset` seconds in, for a skip past what the session fetched.
+    @MainActor func joining(atOffset offset: TimeInterval) -> LiveRecordingStart {
+        let offset = max(0, offset)
+        return LiveRecordingStart(recording: recording, url: Self.playlist(url, offset: offset) ?? url,
+                                  firstSegmentAired: firstSegmentAired, offset: offset)
+    }
+
+    /// How far a skip may go past the session's window: back to the recording's start and
+    /// forward to `headMargin` short of its head. The engine fetches the backlog at 1x, so
+    /// its own window reaches neither.
+    func reach(lag: TimeInterval) -> (before: TimeInterval, after: TimeInterval) {
+        (offset, max(0, lag - Self.headMargin))
+    }
+
+    /// Where a session position the engine cannot seek to lies in the recording, so the player
+    /// can rejoin there; nil when the engine's own seek covers it. `edgeWall` is the wall time
+    /// at the window's upper bound.
+    func rejoinOffset(forSessionPosition target: Double, in window: LiveSeekableWindow,
+                      edgeWall: Date) -> TimeInterval? {
+        let beyond = target > window.upperBound + 1
+        let before = offset > 0 && target < window.seekTarget(window.lowerBound)
+        guard beyond || before else { return nil }
+        let wall = edgeWall.addingTimeInterval(target - window.upperBound)
+        return max(0, wall.timeIntervalSince(firstSegmentAired))
     }
 
     /// The recording Plex is making on `channelId` at `date`.

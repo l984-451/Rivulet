@@ -31,6 +31,8 @@ struct IOSPlexHeroFeed: View {
                         IOSPlexHomeHero(items: heroItems, size: fullSize(proxy), bleed: proxy.safeAreaInsets,
                                         selection: $heroSelection,
                                         onPageShown: toldLaunch ? nil : { _ = shownHeroPages.insert($0) })
+                            // Details pushes with the system zoom, and pages record no frames as they slide.
+                            .environment(\.opensCustomZoom, false)
                     }
                     ForEach(banners) { IOSServerFailureBanner(failure: $0) }
                     ForEach(rows) { hub in

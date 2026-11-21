@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 
+import Combine
 import SwiftUI
 
 extension EnvironmentValues {
@@ -12,6 +13,9 @@ extension EnvironmentValues {
     @Entry var plexZoomNamespace: Namespace.ID? = nil
     /// Prefix for zoom source ids, so the same item in two rows (or the hero) has distinct sources.
     @Entry var plexZoomScope = ""
+    /// Tiles open their detail with the custom zoom (`IOSZoomDetailRoot.open`) instead of pushing it
+    /// with the system zoom. Set on Home's root page, and turned off again on its hero, which pushes.
+    @Entry var opensCustomZoom = false
 }
 
 extension View {
@@ -113,12 +117,44 @@ private struct IOSPlexZoomSource: ViewModifier {
     let item: MediaItem
     @Environment(\.plexZoomNamespace) private var namespace
     @Environment(\.plexZoomScope) private var scope
+    @Environment(\.opensCustomZoom) private var opensCustomZoom
+    @State private var isHidden = false
 
     func body(content: Content) -> some View {
-        if let namespace {
-            content.matchedTransitionSource(id: IOSPlexDetailRoute.sourceID(item, scope: scope), in: namespace)
+        let id = IOSPlexDetailRoute.sourceID(item, scope: scope)
+        if opensCustomZoom {
+            // Nothing pushes from these tiles, so the frame alone. `.global` is window coordinates
+            // on iOS, which is where the custom zoom draws.
+            content
+                .opacity(isHidden ? 0 : 1)
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { IOSZoomSourceFrames.record($0, for: id) }
+                // Each tile checks the id itself, so only the one whose zoom is up redraws.
+                .onReceive(IOSZoomSourceFrames.hidden) { hidden in
+                    if (hidden == id) != isHidden { isHidden.toggle() }
+                }
+        } else if let namespace {
+            content.matchedTransitionSource(id: id, in: namespace)
         } else {
             content
         }
     }
+}
+
+/// Where each custom-zoom source's artwork sits in the window, by zoom source id, so a tap can
+/// zoom from it. Only tiles under `opensCustomZoom` report.
+@MainActor
+enum IOSZoomSourceFrames {
+    private(set) static var frames: [String: CGRect] = [:]
+
+    /// Kept when a tile disappears: one that comes back unmoved (a tab switch, a pop) reports nothing new.
+    static func record(_ frame: CGRect, for id: String) { frames[id] = frame }
+
+    /// A server or profile switch. The switch rebuilds Home, so its tiles all report again.
+    static func removeAll() { frames = [:] }
+
+    /// The source whose tile is hidden while its card is out of the slot, as the system zoom hides
+    /// its source. A tile built while one is hidden reads it on subscribing.
+    static let hidden = CurrentValueSubject<String?, Never>(nil)
+
+    static func setHidden(_ id: String?) { hidden.send(id) }
 }

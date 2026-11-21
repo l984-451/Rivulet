@@ -46,7 +46,9 @@ struct IOSRootView: View {
         TabView(selection: $selectedTab) {
             Tab("Home", systemImage: "house", value: "home") {
                 tabStack(homeZoom) {
+                    // On the root page only, so pages pushed in Home's stack keep the system zoom.
                     IOSPlexHomeView().environment(\.launchHeroReady) { splashGate.heroIsReady() }
+                        .environment(\.opensCustomZoom, Self.usesCustomZoom)
                 }
             }
             // iPhone flattens sections into the tab bar, so libraries live only in the iPad sidebar.
@@ -98,9 +100,12 @@ struct IOSRootView: View {
         .sheet(isPresented: $showingWhatsNew) { IOSWhatsNewSheet(versions: whatsNewVersions) }
         .sheet(isPresented: $choosingProfile) { IOSProfilePickerSheet() }
         // Content is withheld until a profile is entered: ask who is watching,
-        // and nothing of the locked profile's keeps playing.
+        // and nothing of the locked profile's keeps playing or stays open.
         .onChange(of: profiles.needsProfileSelection, initial: true) { _, needed in
-            if needed { playback.close() }
+            if needed {
+                playback.close()
+                IOSCustomZoom.dismiss(animated: false)
+            }
             choosingProfile = needed
         }
         // Over the tab bar, sidebar and bars too, until its exit has played.
@@ -154,10 +159,17 @@ struct IOSRootView: View {
             if sidebar { unfoldLibraryTab() } else { foldSidebarTab() }
         }
         .onChange(of: browse.sessionGeneration) {
+            // A zoomed page holds the old server's or profile's item, like the stacks' pages.
+            IOSCustomZoom.dismiss(animated: false)
+            IOSZoomSourceFrames.removeAll()
             librarySelection = nil
             libraryColumn = .sidebar
             libraryPath = NavigationPath()
             sidebarPaths = [:]
+        }
+        // Signed out of every server: Home turns into the sign-in page, and a zoomed page goes too.
+        .onChange(of: browse.hasServers) { _, servers in
+            if !servers { IOSCustomZoom.dismiss(animated: false) }
         }
         .onChange(of: browse.libraries) { _, libraries in
             if !libraries.isEmpty, !browse.isLoadingOtherServers { dropOrphanedLibraryTab() }
@@ -318,6 +330,12 @@ struct IOSRootView: View {
             selectedTab = "library"
         }
     }
+
+    /// Home's rows open their detail with the custom zoom instead of the system one, to compare
+    /// the two. On unless the launch argument `-customZoom NO` turns it off, read once per launch.
+    /// A launch argument arrives as a string, which `bool(forKey:)` reads and `as? Bool` does not.
+    private static let usesCustomZoom = UserDefaults.standard.object(forKey: "customZoom") == nil
+        || UserDefaults.standard.bool(forKey: "customZoom")
 
     private func tabStack<Content: View>(
         _ namespace: Namespace.ID,

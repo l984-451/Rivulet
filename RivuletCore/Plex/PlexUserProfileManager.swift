@@ -71,12 +71,18 @@ class PlexUserProfileManager: ObservableObject {
     /// The Profile Picker choices, in Settings order.
     static let profilePickerChoices: [TimeInterval?] = [nil, 0, 30, 300, 600, 1800]
 
-    /// Call when Rivulet leaves the screen; kept across launches, so a cold launch is timed too.
+    /// Call when Rivulet leaves the screen.
     func noteLeftApp(at date: Date = Date()) {
         userDefaults.set(date.timeIntervalSince1970, forKey: leftAppAtKey)
     }
 
-    /// True when the profile picker is on and Rivulet has been away at least `profilePickerAfter`.
+    /// A cold launch asks whenever the profile picker is on: the timer covers coming back only.
+    var shouldAskWhoIsWatchingAtLaunch: Bool {
+        profilePickerAfter != nil
+    }
+
+    /// Coming back to Rivulet: true when the profile picker is on and Rivulet has been away at
+    /// least `profilePickerAfter`.
     func shouldAskWhoIsWatching(now: Date = Date()) -> Bool {
         guard let after = profilePickerAfter else { return false }
         let left = userDefaults.double(forKey: leftAppAtKey)

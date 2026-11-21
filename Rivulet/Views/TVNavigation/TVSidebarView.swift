@@ -282,7 +282,7 @@ struct TVSidebarView: View {
 
             // A saved profile with no stored token of its own: nothing may load
             // until plex.tv lets it in, so resolve it now instead of deferring.
-            let wantsPicker = profileManager.shouldAskWhoIsWatching() && !hasCheckedProfilePicker
+            let wantsPicker = profileManager.shouldAskWhoIsWatchingAtLaunch && !hasCheckedProfilePicker
             if wantsPicker || authManager.isContentWithheld {
                 // Block content immediately; profile data must load before the picker shows
                 isAwaitingProfileSelection = true
@@ -368,7 +368,7 @@ struct TVSidebarView: View {
             applyDebugLaunchTab()
             // Defer What's New check if profile picker needs to be shown first
             if authManager.isContentWithheld
-                || (profileManager.shouldAskWhoIsWatching() && authManager.selectedServerToken != nil) {
+                || (profileManager.shouldAskWhoIsWatchingAtLaunch && authManager.selectedServerToken != nil) {
                 return
             }
             checkAndShowWhatsNew()

@@ -13,27 +13,21 @@ enum IOSLibrarySelection: Hashable {
 }
 
 /// Library tab: the list as a split view's sidebar, so a regular-width iPhone (iPhone Duo
-/// open, Plus and Max in landscape) shows it beside the library. Compact collapses to a stack.
+/// open, Plus and Max in landscape) shows it beside the library. Compact collapses to a stack,
+/// and under iPad's top tab bar it is one stack with the list as a menu.
 struct IOSPlexLibrarySplitView: View {
     @Binding var selection: IOSLibrarySelection?
     @Binding var column: NavigationSplitViewColumn
     @Binding var path: NavigationPath
     @EnvironmentObject private var browse: BrowseStore
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.tabBarPlacement) private var tabBarPlacement
 
     var body: some View {
-        NavigationSplitView(preferredCompactColumn: $column) {
-            // A pick in the list starts the detail column over. A selection set from outside
-            // (the sidebar's library tab folding in at compact width) keeps its pushed pages.
-            IOSPlexLibrariesView(selection: Binding(get: { selection }, set: { picked in
-                if picked != selection { path = NavigationPath() }
-                selection = picked
-            }))
-        } detail: {
-            NavigationStack(path: $path) {
-                // A new selection is a new page: library grids keep their items in view state.
-                detail.id(selection).iosPlexDestinations()
-            }
+        Group {
+            // iPad's top tab bar shares its row only with a stack's bar, as on Home. A split view
+            // is set below it, its bar in a row of its own and the hero short of the top edge.
+            if tabBarPlacement == .topBar { topBarStack } else { splitView }
         }
         // Side by side, the detail column is never left empty.
         .onChange(of: [sizeClass == .regular, browse.shownLibraries.isEmpty], initial: true) {
@@ -47,14 +41,116 @@ struct IOSPlexLibrarySplitView: View {
         }
     }
 
+    private var splitView: some View {
+        NavigationSplitView(preferredCompactColumn: $column) {
+            IOSPlexLibrariesView(selection: pick)
+        } detail: {
+            NavigationStack(path: $path) {
+                // A new selection is a new page: library grids keep their items in view state.
+                detail.id(selection).iosPlexDestinations()
+            }
+        }
+    }
+
+    /// The list has no column here: its root page carries it as a menu, where the sidebar button sat.
+    private var topBarStack: some View {
+        NavigationStack(path: $path) {
+            detail.environment(\.iosLibraryChooser, pick).id(selection).iosPlexDestinations()
+        }
+    }
+
+    /// A pick in the list starts the detail over. A selection set from outside
+    /// (the sidebar's library tab folding in at compact width) keeps its pushed pages.
+    private var pick: Binding<IOSLibrarySelection?> {
+        Binding(get: { selection }, set: { picked in
+            if picked != selection { path = NavigationPath() }
+            selection = picked
+        })
+    }
+
     @ViewBuilder
     private var detail: some View {
         switch selection {
-        case .downloads: IOSDownloadsView()
-        case .favorites: IOSFavoritesView()
+        case .downloads: IOSDownloadsView().iosLibraryChooser()
+        case .favorites: IOSFavoritesView().iosLibraryChooser()
+        // Places the chooser itself, ahead of its page pill.
         case .library(let library): IOSLibraryPage(library: library)
-        case .playlists(let providerID): IOSPlexPlaylistsView(providerID: providerID)
-        case nil: ContentUnavailableView("Choose a Library", systemImage: "rectangle.stack")
+        case .playlists(let providerID): IOSPlexPlaylistsView(providerID: providerID).iosLibraryChooser()
+        case nil: ContentUnavailableView("Choose a Library", systemImage: "rectangle.stack").iosLibraryChooser()
+        }
+    }
+}
+
+extension EnvironmentValues {
+    /// The Library tab's selection, on its root page under iPad's top tab bar only.
+    @Entry var iosLibraryChooser: Binding<IOSLibrarySelection?>? = nil
+}
+
+extension View {
+    /// The Library tab's chooser at the leading edge, when `iosLibraryChooser` is set.
+    func iosLibraryChooser() -> some View { modifier(IOSLibraryChooserToolbar()) }
+}
+
+private struct IOSLibraryChooserToolbar: ViewModifier {
+    @Environment(\.iosLibraryChooser) private var selection
+
+    func body(content: Content) -> some View {
+        content.toolbar {
+            if let selection { IOSLibraryChooserItem(selection: selection) }
+        }
+    }
+}
+
+/// The Library tab's list as a menu: Downloads, then each server's libraries and playlists.
+struct IOSLibraryChooserItem: ToolbarContent {
+    @Binding var selection: IOSLibrarySelection?
+
+    var body: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) { IOSLibraryChooser(selection: $selection) }
+    }
+}
+
+private struct IOSLibraryChooser: View {
+    @Binding var selection: IOSLibrarySelection?
+    @EnvironmentObject private var browse: BrowseStore
+    @AppStorage(IOSLibrarySettingsView.showPlaylistsKey) private var showPlaylists = true
+    @AppStorage("showFavoritesTab") private var showFavorites = false
+
+    var body: some View {
+        Menu {
+            Picker("Libraries", selection: $selection) {
+                Section {
+                    Label("Downloads", systemImage: "arrow.down.circle").tag(IOSLibrarySelection.downloads)
+                    if showFavorites, browse.offersFavorites {
+                        Label("Favorites", systemImage: "heart").tag(IOSLibrarySelection.favorites)
+                    }
+                }
+                ForEach(browse.libraryGroups, id: \.id) { group in
+                    Section {
+                        ForEach(group.libraries) { library in
+                            Label(library.title, systemImage: library.iosIcon).tag(IOSLibrarySelection.library(library))
+                        }
+                        if showPlaylists, !browse.playlists(providerID: group.providerID).isEmpty {
+                            Label("Playlists", systemImage: "list.and.film")
+                                .tag(IOSLibrarySelection.playlists(providerID: group.providerID))
+                        }
+                    } header: {
+                        if let name = group.name { Text(name) }
+                    }
+                }
+            }
+        } label: {
+            Label("Libraries", systemImage: "sidebar.left")
+        }
+    }
+}
+
+private extension BrowseStore {
+    /// The shown libraries, one group per server, named once there are several.
+    var libraryGroups: [(id: String, providerID: String, name: String?, libraries: [MediaLibrary])] {
+        let ids = shownLibraries.reduce(into: [String]()) { if !$0.contains($1.providerID) { $0.append($1.providerID) } }
+        return ids.map { id in
+            (id, id, ids.count > 1 ? labels.badge(providerID: id) : nil, shownLibraries.filter { $0.providerID == id })
         }
     }
 }
@@ -91,7 +187,7 @@ struct IOSPlexLibrariesView: View {
                         status.frame(maxWidth: .infinity).listRowBackground(Color.clear)
                     } else {
                         // One section per server, under its name once there are several.
-                        ForEach(serverGroups, id: \.id) { group in
+                        ForEach(browse.libraryGroups, id: \.id) { group in
                             Section(group.name ?? "") {
                                 ForEach(group.libraries) { library in
                                     NavigationLink(value: IOSLibrarySelection.library(library)) {
@@ -124,14 +220,6 @@ struct IOSPlexLibrariesView: View {
 
     private var videoLibraries: [MediaLibrary] { browse.shownLibraries }
 
-    /// One section per server, under its name once there are several.
-    private var serverGroups: [(id: String, providerID: String, name: String?, libraries: [MediaLibrary])] {
-        let ids = videoLibraries.reduce(into: [String]()) { if !$0.contains($1.providerID) { $0.append($1.providerID) } }
-        return ids.map { id in
-            (id, id, ids.count > 1 ? browse.labels.badge(providerID: id) : nil, videoLibraries.filter { $0.providerID == id })
-        }
-    }
-
     @ViewBuilder
     private var status: some View {
         if browse.isLoadingContent {
@@ -154,6 +242,7 @@ struct IOSPlexLibraryView: View {
     @AppStorage private var pageRaw: String
     /// Same key as the tvOS library hero setting.
     @AppStorage("showLibraryHero") private var showHero = true
+    @Environment(\.iosLibraryChooser) private var chooser
     @State private var rows: [MediaHub] = []
 
     enum Page: String, CaseIterable {
@@ -192,6 +281,11 @@ struct IOSPlexLibraryView: View {
         }
         .iosPlexHeroChrome(hero: !heroItems.isEmpty, title: browse.labels.title(library.title, providerID: library.providerID))
         .toolbar {
+            // In one builder with the pill, so the chooser stays ahead of it, in its own glass.
+            if let chooser {
+                IOSLibraryChooserItem(selection: chooser)
+                ToolbarSpacer(.fixed, placement: .topBarLeading)
+            }
             // A pill beside Back naming the page; it opens the other.
             ToolbarItem(placement: .topBarLeading) {
                 Menu {

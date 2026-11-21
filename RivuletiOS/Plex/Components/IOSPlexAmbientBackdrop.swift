@@ -13,12 +13,17 @@ struct IOSPlexAmbientBackdrop: View {
     var body: some View {
         ZStack {
             Color(uiColor: .systemBackground)
-            if let url {
-                IOSPlexImage(url: url)
-                    .opacity(0.85)
-                    .id(url)
-                    .transition(.opacity)
+            // Only the art crossfades. The URL follows the width, so on the first layout or a
+            // rotation an animation over the whole wash also grew the frost in from the corner.
+            ZStack {
+                if let url {
+                    IOSPlexImage(url: url)
+                        .opacity(0.85)
+                        .id(url)
+                        .transition(.opacity)
+                }
             }
+            .animation(.easeInOut(duration: 0.6), value: url)
             Rectangle().fill(.regularMaterial)
             // Dark only: in light mode the frost alone keeps dark text readable.
             if colorScheme == .dark {
@@ -33,7 +38,6 @@ struct IOSPlexAmbientBackdrop: View {
                 )
             }
         }
-        .animation(.easeInOut(duration: 0.6), value: url)
         .ignoresSafeArea()
         .allowsHitTesting(false)
         .accessibilityHidden(true)

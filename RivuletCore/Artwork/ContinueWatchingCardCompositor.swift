@@ -6,8 +6,9 @@
 //  Rivulet
 //
 //  The Apple TV app's Up Next card shows ONE server-made image: the 16:9 still
-//  on top, a blurred continuation of it in the 48 pt below, under a black
-//  gradient. This builds the same image locally, once per still.
+//  on top, its last row stretched and blurred through the 48 pt below, under a
+//  gray shade. This builds the same image locally, once per still. Fitted to
+//  Apple's served images (mzstatic crop code KF.TVALC03 against `sr`).
 //
 
 import CoreGraphics
@@ -37,12 +38,12 @@ nonisolated enum ContinueWatchingCardCompositor {
         /// The blur fades in from this y to full strength at the seam.
         let blurStart: CGFloat
         let blurRadius: CGFloat
-        /// Black gradient over the whole card, top to bottom.
+        /// The `shade` gradient over the whole card, top to bottom.
         let gradientLocations: [CGFloat]
         let gradientAlphas: [CGFloat]
         /// Largest box the title logo may fill on the leading edge, centred on the still.
         let titleBox: CGRect
-        /// The title's lowest bottom edge: the blur ramp's start, clear of the status row.
+        /// The title's lowest bottom edge, clear of the status row.
         let titleFloor: CGFloat
 
         /// `cardHeight` is for a card whose art fills the whole card (iOS, Mac); the band is only kept clear.
@@ -54,12 +55,11 @@ nonisolated enum ContinueWatchingCardCompositor {
             card = CGSize(width: width, height: height)
             still = CGRect(x: 0, y: 0, width: width, height: fullBleed == nil ? stillHeight : height)
             band = CGRect(x: 0, y: stillHeight, width: width, height: bandHeight)
-            blurStart = stillHeight - 16
-            // Fitted to Apple's on-screen cards (tvOS 27): its band is one soft tone, no shapes.
-            blurRadius = 24
-            // Measured off Apple's served image: clear to the middle, 7% at the seam.
-            gradientLocations = [0, 0.5, (stillHeight - 35) / height, stillHeight / height, 1]
-            gradientAlphas = [0, 0, 0.03, 0.07, 0.19]
+            blurStart = stillHeight - 40
+            blurRadius = 8
+            // 40 pt above the seam to 25 pt below it, then held.
+            gradientLocations = [0, (stillHeight - 40) / height, (stillHeight + 25) / height, 1]
+            gradientAlphas = [0, 0, 0.6, 0.6]
             let titleSize = CGSize(width: (width * 0.4625).rounded(), height: (stillHeight * 0.5333).rounded())
             titleBox = CGRect(x: ContinueWatchingCardCompositor.padding,
                               y: ((stillHeight - titleSize.height) / 2).rounded(),
@@ -126,6 +126,8 @@ nonisolated enum ContinueWatchingCardCompositor {
     // MARK: - Render
 
     static let colorSpace = CGColorSpaceCreateDeviceRGB()
+    /// Apple's shade is gray 40, not black: it lightens a dark still's foot a little.
+    static let shade: CGFloat = 40 / 255
     private static let ciContext = CIContext(options: [.workingColorSpace: NSNull(), .cacheIntermediates: false])
 
     static func bitmap(width: Int, height: Int, alpha: CGImageAlphaInfo = .noneSkipLast) -> CGContext? {
@@ -154,24 +156,24 @@ nonisolated enum ContinueWatchingCardCompositor {
             base.restoreGState()
         }
         drawStill()
-        // The band stretches the still's last row down; a mirror brought bright shapes back into it.
+        // The band stretches the still's last row down, as Apple's does.
         if geometry.band.minY >= geometry.still.maxY,
            let edge = base.makeImage()?.cropping(to: CGRect(x: 0, y: Int(geometry.still.maxY * scale) - 1,
                                                              width: width, height: 1)) {
             base.draw(edge, in: geometry.band)
         }
 
-        let colors = geometry.gradientAlphas.map { CGColor(red: 0, green: 0, blue: 0, alpha: $0) } as CFArray
+        let colors = geometry.gradientAlphas.map { CGColor(red: shade, green: shade, blue: shade, alpha: $0) } as CFArray
         if let gradient = CGGradient(colorsSpace: colorSpace, colors: colors, locations: geometry.gradientLocations) {
             base.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: 0, y: geometry.card.height), options: [])
         }
         guard let sharp = base.makeImage() else { return nil }
 
         // The blurred copy fades in from nothing above the seam to all of it
-        // below, so the reflection never shows an edge. Core Image's origin is
+        // below, so the band never shows an edge. Core Image's origin is
         // bottom-left.
         let extent = CGRect(x: 0, y: 0, width: width, height: height)
-        let mask = CIFilter(name: "CILinearGradient", parameters: [
+        let mask = CIFilter(name: "CISmoothLinearGradient", parameters: [
             "inputPoint0": CIVector(x: 0, y: (geometry.card.height - geometry.blurStart) * scale),
             "inputColor0": CIColor.black,
             "inputPoint1": CIVector(x: 0, y: geometry.band.height * scale),

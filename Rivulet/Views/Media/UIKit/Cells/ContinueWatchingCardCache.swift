@@ -129,7 +129,7 @@ nonisolated extension ContinueWatchingCardCompositor {
     // MARK: - Disk
 
     /// Bump when `render`, `renderTitle` or `analyse` changes, so old files are not shown.
-    private static let diskVersion = 2
+    private static let diskVersion = 5
 
     // ponytail: pruned by age (30 days since built) at first use, add LRU if the folder grows large.
     private static let diskDirectory: URL? = {

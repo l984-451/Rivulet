@@ -24,9 +24,9 @@ final class ContinueWatchingCardCompositorTests: XCTestCase {
 
     func testGradientStopsSitOnTheSeamAndTheCardsMiddle() {
         let g = Compositor.Geometry(cardWidth: 320)
-        XCTAssertEqual(g.gradientAlphas, [0, 0, 0.03, 0.07, 0.19])
+        XCTAssertEqual(g.gradientAlphas, [0, 0, 0.6, 0.6])
         let ys = g.gradientLocations.map { $0 * g.card.height }
-        for (y, expected) in zip(ys, [0, 114, 145, 180, 228] as [CGFloat]) {
+        for (y, expected) in zip(ys, [0, 140, 205, 228] as [CGFloat]) {
             XCTAssertEqual(y, expected, accuracy: 0.001)
         }
     }
@@ -94,10 +94,11 @@ final class ContinueWatchingCardCompositorTests: XCTestCase {
         let white = still { $0.setFillColor(UIColor.white.cgColor); $0.fill(CGRect(x: 0, y: 0, width: 320, height: 180)) }
         let card = try XCTUnwrap(Compositor.render(still: white, geometry: g, scale: 1))
         XCTAssertEqual(pixel(card, x: 160, y: 40).r, 255, "clear above the first stop")
-        XCTAssertEqual(Double(pixel(card, x: 160, y: 145).r), 255 * 0.97, accuracy: 3)
-        // The band's blur spreads the stops: 0.93 and 0.81 drawn, 0.91 and 0.83 after it.
-        XCTAssertEqual(Double(pixel(card, x: 160, y: 180).r), 255 * 0.91, accuracy: 4)
-        XCTAssertEqual(Double(pixel(card, x: 160, y: 227).r), 255 * 0.83, accuracy: 4)
+        // Gray 40 over white: 255 - alpha * 215.
+        XCTAssertEqual(Double(pixel(card, x: 160, y: 145).r), 255 - 0.046 * 215, accuracy: 4)
+        XCTAssertEqual(Double(pixel(card, x: 160, y: 180).r), 255 - 0.369 * 215, accuracy: 4)
+        // 0.6 drawn; the band's blur reaches the lighter ramp above it.
+        XCTAssertEqual(Double(pixel(card, x: 160, y: 227).r), 255 - 0.57 * 215, accuracy: 4)
     }
 
     func testBandContinuesTheStillsLastRow() throws {

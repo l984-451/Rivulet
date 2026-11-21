@@ -4,6 +4,23 @@
 import UIKit
 
 extension UIImage {
+    nonisolated(unsafe) private static let legibleLogos: NSCache<NSURL, UIImage> = {
+        let cache = NSCache<NSURL, UIImage>()
+        cache.countLimit = 600
+        return cache
+    }()
+
+    /// A channel logo ready for a dark surface, from the image cache. The darkness check
+    /// draws the whole image, so it runs off the main thread, once per logo: done on the
+    /// main thread for every row scrolled in, it made the Live TV list stutter.
+    static func legibleChannelLogo(for url: URL, quality: ImageQuality = .logo) async -> UIImage? {
+        if let done = legibleLogos.object(forKey: url as NSURL) { return done }
+        guard let image = await ImageCacheManager.shared.image(for: url, quality: quality) else { return nil }
+        let legible = await Task.detached(priority: .userInitiated) { image.legibleChannelLogo }.value
+        legibleLogos.setObject(legible, forKey: url as NSURL)
+        return legible
+    }
+
     /// The logo to draw on a dark surface: a dark mark turns white, as it would vanish otherwise.
     var legibleChannelLogo: UIImage {
         guard let cgImage, Self.isDarkLogo(cgImage) else { return self }

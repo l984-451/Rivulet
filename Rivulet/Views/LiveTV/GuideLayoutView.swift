@@ -19,11 +19,32 @@ import UIKit
 struct GuideLayoutView: View {
     /// Optional source ID to filter channels. nil = show all sources.
     var sourceIdFilter: String?
+    /// Opened from the List layout: the channel to focus first, and where
+    /// Left from a row's first programme or Menu goes, with the tab and
+    /// channel to come back on. nil for the Guide layout itself.
+    var initialChannelId: String?
+    var onExit: ((_ group: String?, _ channelId: String?) -> Void)?
+    /// Laid over the playing channel (Right in the player): no backdrop of its own, so the
+    /// picture shows through, and Select hands the channel back instead of opening a player.
+    var overPlayer = false
+    var onSelectChannel: ((UnifiedChannel) -> Void)?
 
     @StateObject private var dataStore = LiveTVDataStore.shared
+    @ObservedObject private var channelLists = LiveChannelListStore.shared
 
     /// Selected category tab. nil = "All Channels"; otherwise an M3U group title.
     @State private var selectedGroup: String?
+
+    init(sourceIdFilter: String? = nil, initialGroup: String? = nil, initialChannelId: String? = nil,
+         onExit: ((_ group: String?, _ channelId: String?) -> Void)? = nil,
+         overPlayer: Bool = false, onSelectChannel: ((UnifiedChannel) -> Void)? = nil) {
+        self.sourceIdFilter = sourceIdFilter
+        self.initialChannelId = initialChannelId
+        self.onExit = onExit
+        self.overPlayer = overPlayer
+        self.onSelectChannel = onSelectChannel
+        _selectedGroup = State(initialValue: initialGroup)
+    }
 
     /// Channels for the current source, before category filtering.
     private var sourceChannels: [UnifiedChannel] {
@@ -64,19 +85,59 @@ struct GuideLayoutView: View {
             groups: LiveGroupOrder.titles(in: sourceChannels, sourceOrder: dataStore.sources.map(\.id)),
             sourceNames: dataStore.sources.map(\.displayName).filter { sourceTabs[$0] != nil },
             // Offered only when there are favourites, so no empty tab.
-            hasFavorites: !dataStore.favorites(in: sourceChannels).isEmpty)
+            hasFavorites: !dataStore.favorites(in: sourceChannels).isEmpty,
+            lists: ownLists.map { $0.tabTitle(taken: takenTabNames) },
+            pinnedGroups: pinnedGroupTitles)
     }
 
-    nonisolated static func tabTitles(groups: [String], sourceNames: [String], hasFavorites: Bool) -> [String] {
+    private var takenTabNames: Set<String> { Self.takenTabNames(sourceIdFilter: sourceIdFilter, store: dataStore) }
+
+    /// Tab titles a list must not reuse: the groups, the sources and Favorites. The List
+    /// layout asks this too, so both name a list's tab the same way.
+    static func takenTabNames(sourceIdFilter: String?, store: LiveTVDataStore) -> Set<String> {
+        let channels = sourceIdFilter.map { id in store.channels.filter { $0.sourceId == id } } ?? store.channels
+        var taken = Set(channels.compactMap { LiveGroupOrder.trimmed($0.groupTitle) })
+        taken.formUnion(store.sources.map(\.displayName))
+        taken.insert(favouritesTab)
+        return taken
+    }
+
+    /// The viewer's own lists with a channel here, each a tab after Favorites.
+    private var ownLists: [LiveChannelList] {
+        let present = Set(sourceChannels.map(\.id))
+        return channelLists.lists.filter { list in
+            list.isSmart ? !list.channels(in: sourceChannels, epg: dataStore.epg, versions: dataStore.lineupVersions).isEmpty
+                : list.channelIds.contains(where: present.contains)
+        }
+    }
+
+    /// Titles of the pinned groups here, in pin order: their tabs come next.
+    private var pinnedGroupTitles: [String] {
+        var titleByKey: [String: String] = [:]
+        for channel in sourceChannels {
+            guard let title = LiveGroupOrder.trimmed(channel.groupTitle) else { continue }
+            titleByKey[LiveCategoryList.pinKey(sourceId: channel.sourceId, title: title)] = title
+        }
+        return channelLists.pinnedCategoryKeys.compactMap { titleByKey[$0] }
+    }
+
+    /// Favorites, the viewer's own lists and pinned groups lead; then sources,
+    /// then the rest of the groups in the source's order. A list wins a name
+    /// it shares with a group.
+    nonisolated static func tabTitles(groups: [String], sourceNames: [String], hasFavorites: Bool,
+                                      lists: [String] = [], pinnedGroups pinnedTitles: [String] = []) -> [String] {
         var seen: Set<String> = []
         let sources = sourceNames.filter { seen.insert($0).inserted }
         let named = Set(groups.filter { !$0.isEmpty })
         let pinned = pinnedGroups.filter { hasFavorites || named.contains($0) }
+        var leadSeen = Set(pinned)
+        let own = lists.filter { !$0.isEmpty && leadSeen.insert($0).inserted }
+        let pins = pinnedTitles.filter { named.contains($0) && leadSeen.insert($0).inserted }
         var restSeen: Set<String> = []
         let rest = groups.filter {
-            !$0.isEmpty && !sources.contains($0) && !pinned.contains($0) && restSeen.insert($0).inserted
+            !$0.isEmpty && !sources.contains($0) && !leadSeen.contains($0) && restSeen.insert($0).inserted
         }
-        return pinned + sources.filter { !pinned.contains($0) } + rest
+        return pinned + own + pins + sources.filter { !leadSeen.contains($0) } + rest
     }
 
     /// Channels shown in the grid: source-filtered, then category-filtered.
@@ -92,6 +153,11 @@ struct GuideLayoutView: View {
         // every other tab inherits.
         if group == Self.favouritesTab {
             return dataStore.favorites(in: sourceChannels)
+        }
+        // One of the viewer's own lists: its channels, in its order.
+        let taken = takenTabNames
+        if let list = ownLists.first(where: { $0.tabTitle(taken: taken) == group }) {
+            return list.channels(in: sourceChannels, epg: dataStore.epg, versions: dataStore.lineupVersions)
         }
         if let ids = sourceTabs[group] {
             return sourceChannels.filter { ids.contains($0.sourceId) }
@@ -147,7 +213,13 @@ struct GuideLayoutView: View {
                 // No custom base: when the focused programme has no artwork the
                 // stock system background (the same one Settings uses) shows
                 // through. When artwork exists, `ambiance` paints it on top.
-                ambiance
+                // Over the player the player draws the backdrop (`LiveGuideOverlay.backdrop`):
+                // the picture darkened under the title and a glass sheet under the grid.
+                if overPlayer {
+                    Color.clear
+                } else {
+                    ambiance
+                }
 
                 if channels.isEmpty {
                     ProgressView()
@@ -178,6 +250,12 @@ struct GuideLayoutView: View {
             if dataStore.channels.isEmpty { await dataStore.loadChannels() }
             if dataStore.epg.isEmpty {
                 await dataStore.loadEPG(startDate: timelineStart, hours: EPGTheme.initialGuideHours)
+            }
+            // Opened from the List: on the channel that was focused there.
+            if let id = initialChannelId, let channel = channels.first(where: { $0.id == id }) {
+                focusedChannel = channel
+                focusedProgram = dataStore.getCurrentProgram(for: channel)
+                gridFocusRequest = EPGFocusRequest(channelId: id, token: UUID())
             }
             seedFocus()
             await dataStore.refreshScheduledRecordings()
@@ -251,7 +329,8 @@ struct GuideLayoutView: View {
                 categoryActionTitle: dataStore.hasRecordingSources ? String(localized: "Recordings") : nil,
                 onCategoryAction: { presentRecordings() },
                 miniSession: miniSession,
-                onMiniPlayerSelect: { miniSession.map { selectChannel($0.channel) } }
+                onMiniPlayerSelect: { miniSession.map { selectChannel($0.channel) } },
+                onExit: onExit.map { exit in { exit(selectedGroup, focusedChannel?.id) } }
             )
         }
     }
@@ -403,6 +482,11 @@ struct GuideLayoutView: View {
     // MARK: - Selection
 
     private func selectChannel(_ channel: UnifiedChannel) {
+        // Over the player: the player switches to it in place.
+        if let onSelectChannel {
+            onSelectChannel(channel)
+            return
+        }
         // Live TV plays through Aether (same OSD as Aether VOD): HLS goes
         // straight to AVPlayer, everything else is remuxed by the engine.
         // Presented as a full-screen modal so it escapes the guide's

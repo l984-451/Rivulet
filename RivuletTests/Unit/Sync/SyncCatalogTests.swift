@@ -59,7 +59,7 @@ final class SyncCatalogTests: XCTestCase {
             "homeStreamingQuality", "awayStreamingQuality", "upscaleLowResolution", "audioSyncOffsetMs",
             "subtitleDelayByMedia", "subtitleHeightUnits", "downloadQuality", "iosShowPlaylists",
             "recentSearchItems", "iosRecentSearches", "lastSeenBuild", "setupComplete",
-            "liveTVRecentChannelIds", "liveTVViewings", "liveTVEventSlotChannelIds",
+            "liveTVRecentChannelIds", "liveTVEventSlotChannelIds",
             // The switch itself and its bookkeeping.
             SyncCatalog.enabledKey, SyncCatalog.stateKey, SyncCatalog.accountStateKey, SyncCatalog.accountPrintKey, SyncCatalog.heldKey,
         ]
@@ -77,6 +77,37 @@ final class SyncCatalogTests: XCTestCase {
         XCTAssertFalse(SyncCatalog.isSyncableChannelId("dispatcharr:dispatcharr:https://tv.example.com:abc"))
         XCTAssertFalse(SyncCatalog.isSyncableChannelId("x:user@host:1"))
         XCTAssertFalse(SyncCatalog.isSyncableChannelId("x:y:z?password=1"))
+    }
+
+    func test_channelListsAndPins_syncWithoutIdsThatStayHome() throws {
+        XCTAssertTrue(SyncCatalog.isSynced("liveTVChannelLists"))
+        XCTAssertTrue(SyncCatalog.isSynced("liveTVPinnedCategories"))
+        let plex = "plex:plex:http://192.168.1.5:32400:5"
+        let local: [[String: Any]] = [
+            ["id": "a", "name": "Mine", "channelIds": ["xtream:xtream:ab12:7", plex]],
+            ["id": "s", "name": "Dutch", "channelIds": [],
+             "rules": ["origins": ["NL"], "genres": [], "sourceIds": ["xtream:ab12", "plex:http://host"], "words": []]],
+        ]
+        let data = try JSONSerialization.data(withJSONObject: local)
+        let sent = try XCTUnwrap(SyncCatalog.outgoing("liveTVChannelLists", data) as? Data)
+        let sentText = String(decoding: sent, as: UTF8.self)
+        XCTAssertFalse(sentText.contains("192.168"))
+        XCTAssertFalse(sentText.contains("plex:http"))
+        XCTAssertTrue(sentText.contains("xtream:xtream:ab12:7"))
+        // Same lists, same bytes.
+        XCTAssertEqual(sent, SyncCatalog.outgoing("liveTVChannelLists", data) as? Data)
+
+        // Back from the cloud with a channel added elsewhere: this device keeps its own home ids.
+        var cloud = try XCTUnwrap(JSONSerialization.jsonObject(with: sent) as? [[String: Any]])
+        cloud[0]["channelIds"] = ["xtream:xtream:ab12:7", "xtream:xtream:ab12:9"]
+        let cloudData = try JSONSerialization.data(withJSONObject: cloud)
+        let kept = try XCTUnwrap(SyncCatalog.incoming("liveTVChannelLists", cloud: cloudData, local: data) as? Data)
+        let lists = try XCTUnwrap(JSONSerialization.jsonObject(with: kept) as? [[String: Any]])
+        XCTAssertEqual(lists[0]["channelIds"] as? [String], ["xtream:xtream:ab12:7", "xtream:xtream:ab12:9", plex])
+        XCTAssertEqual((lists[1]["rules"] as? [String: Any])?["sourceIds"] as? [String], ["xtream:ab12", "plex:http://host"])
+
+        let pins = SyncCatalog.outgoing("liveTVPinnedCategories", ["xtream:ab12|NEWS", "plex:http://host|News"])
+        XCTAssertEqual(pins as? [String], ["xtream:ab12|NEWS"])
     }
 
     func test_kvsKeyLimit() {

@@ -1,26 +1,74 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%@ (List)" : {
+
+    },
     "%@ joined" : {},
     "%@ left" : {},
     "%@ paused" : {},
     "%@ pressed play" : {},
     "%@ skipped" : {},
+    "Asia" : {
+
+    },
+    "Any" : {
+
+    },
+    "Africa" : {
+
+    },
+    "Add to List" : {
+
+    },
     "Buffering" : {},
+    "Choose at least one rule." : {
+
+    },
+    "Choices of one kind widen the list; different kinds narrow it." : {
+
+    },
     "Copy" : {},
     "Couldn't Join" : {},
     "Couldn't join that room." : {},
     "Couldn't reach Watch Together. Check your connection and try again." : {},
     "Couldn't start a room." : {},
+    "Delete Smart List?" : {
+
+    },
+    "Delete Smart List" : {
+
+    },
+    "Country or Language" : {
+
+    },
     "Different Version" : {},
     "Doesn't have this title" : {},
+    "Edit Smart List" : {
+
+    },
     "Enter the code from the person hosting." : {},
+    "Ex-Yugoslav" : {
+
+    },
     "Get a code to share. Playback pauses here until someone presses play." : {},
     "Host • %@" : {},
+    "Its channels stay where they are." : {
+
+    },
+    "International" : {
+
+    },
     "Join" : {},
     "Join Watch Together…" : {},
     "Join a Room" : {},
     "Leave Room" : {},
+    "List Name" : {
+
+    },
+    "List" : {
+
+    },
     "Loading" : {},
     "Aspect Ratio" : {
       "localizations" : {
@@ -104,6 +152,24 @@
         }
       }
     },
+    "New Smart List…" : {
+
+    },
+    "New Smart List" : {
+
+    },
+    "New List…" : {
+
+    },
+    "New List" : {
+
+    },
+    "Name Contains" : {
+
+    },
+    "Multilingual" : {
+
+    },
     "No room has that code. Rooms end when everyone leaves." : {},
     "None of your servers have %@." : {},
     "Not in Your Library" : {},
@@ -124,6 +190,9 @@
       }
     },
     "Only the host can control playback." : {},
+    "Original Version" : {
+
+    },
     "Photos from %@" : {
       "localizations" : {
         "de" : {
@@ -169,6 +238,9 @@
     "Recording in Progress" : {
 
     },
+    "Rename List" : {
+
+    },
     "Room Code" : {},
     "Room codes have 6 letters and numbers." : {},
     "Rivulet is free and open source. A one-time tip helps keep it going." : {
@@ -192,6 +264,12 @@
           }
         }
       }
+    },
+    "Search Channels" : {
+
+    },
+    "Save" : {
+
     },
     "Server Can't Play This" : {
       "localizations" : {
@@ -269,6 +347,9 @@
           }
         }
       }
+    },
+    "Source" : {
+
     },
     "Start a Room" : {},
     "Start from Beginning" : {
@@ -720,6 +801,9 @@
           }
         }
       }
+    },
+    "Words, separated by commas" : {
+
     },
     "Your copy is %lld seconds longer than the room's, so it may not line up." : {},
     "Your copy is %lld seconds shorter than the room's, so it may not line up." : {},

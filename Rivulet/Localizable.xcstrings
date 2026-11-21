@@ -23,6 +23,9 @@
         }
       }
     },
+    "%@ (List)" : {
+
+    },
     "%@ + %lld more" : {
       "localizations" : {
         "de" : {
@@ -909,6 +912,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld ch."
+          }
+        }
+      }
+    },
+    "%lld channels" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld channel"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld channels"
+                }
+              }
+            }
           }
         }
       }
@@ -2319,6 +2344,15 @@
         }
       }
     },
+    "Add to List…" : {
+
+    },
+    "Add to List" : {
+
+    },
+    "Add Rule…" : {
+
+    },
     "Adds a For You row to What's On, with channels picked from what you watch. It learns on this Apple TV only." : {
       "localizations" : {
         "de" : {
@@ -2483,6 +2517,9 @@
         }
       }
     },
+    "Africa" : {
+
+    },
     "Artwork" : {
       "localizations" : {
         "de" : {
@@ -2504,6 +2541,9 @@
           }
         }
       }
+    },
+    "Asia" : {
+
     },
     "Aspect Ratio" : {
       "localizations" : {
@@ -4764,6 +4804,66 @@
           }
         }
       }
+    },
+    "Word in the Channel Name" : {
+
+    },
+    "This removes the list from this Apple TV. Its channels stay where they are." : {
+
+    },
+    "The Guide lists every channel against the time. What's On shows rows of what is on now, with multiview, like the Apple TV app. List shows your categories beside their channels and what is on each." : {
+
+    },
+    "Source" : {
+
+    },
+    "Smart List" : {
+
+    },
+    "Rename List" : {
+
+    },
+    "Pin" : {
+
+    },
+    "Original Version" : {
+
+    },
+    "New Smart List…" : {
+
+    },
+    "New Smart List" : {
+
+    },
+    "New List…" : {
+
+    },
+    "New List" : {
+
+    },
+    "Name Contains…" : {
+
+    },
+    "Name Contains" : {
+
+    },
+    "Multilingual" : {
+
+    },
+    "List Name" : {
+
+    },
+    "List" : {
+
+    },
+    "International" : {
+
+    },
+    "Ex-Yugoslav" : {
+
+    },
+    "Country or Language" : {
+
     },
     "iCloud" : {
       "localizations" : {

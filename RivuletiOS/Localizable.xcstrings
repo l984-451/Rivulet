@@ -1,6 +1,21 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Asia" : {
+
+    },
+    "Any" : {
+
+    },
+    "Africa" : {
+
+    },
+    "Add to List" : {
+
+    },
+    "%@ (List)" : {
+
+    },
     "Aspect Ratio" : {
       "localizations" : {
         "de" : {
@@ -22,6 +37,33 @@
           }
         }
       }
+    },
+    "Its channels stay where they are." : {
+
+    },
+    "International" : {
+
+    },
+    "Ex-Yugoslav" : {
+
+    },
+    "Edit Smart List" : {
+
+    },
+    "Delete Smart List?" : {
+
+    },
+    "Delete Smart List" : {
+
+    },
+    "Country or Language" : {
+
+    },
+    "Choose at least one rule." : {
+
+    },
+    "Choices of one kind widen the list; different kinds narrow it." : {
+
     },
     "Leave a Tip" : {
       "localizations" : {
@@ -45,6 +87,12 @@
         }
       }
     },
+    "List Name" : {
+
+    },
+    "List" : {
+
+    },
     "Map" : {
       "localizations" : {
         "de" : {
@@ -61,6 +109,24 @@
         }
       }
     },
+    "New Smart List…" : {
+
+    },
+    "New Smart List" : {
+
+    },
+    "New List…" : {
+
+    },
+    "New List" : {
+
+    },
+    "Name Contains" : {
+
+    },
+    "Multilingual" : {
+
+    },
     "On This Day" : {
       "localizations" : {
         "de" : {
@@ -76,6 +142,9 @@
           }
         }
       }
+    },
+    "Original Version" : {
+
     },
     "Photos from %@" : {
       "localizations" : {
@@ -119,6 +188,9 @@
     "Recording in Progress" : {
 
     },
+    "Rename List" : {
+
+    },
     "Rivulet is free and open source. A tip helps keep it going." : {
       "localizations" : {
         "de" : {
@@ -140,6 +212,9 @@
           }
         }
       }
+    },
+    "Save" : {
+
     },
     "Server Can't Play This" : {
       "localizations" : {
@@ -661,6 +736,9 @@
           }
         }
       }
+    },
+    "Words, separated by commas" : {
+
     },
     "Your tip helps keep Rivulet going." : {
       "localizations" : {

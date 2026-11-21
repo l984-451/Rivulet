@@ -681,10 +681,10 @@ private final class IOSLiveGuideChannelView: UICollectionReusableView {
 
     func configure(channel: UnifiedChannel, nowTitle: String?, onTap: @escaping () -> Void) {
         self.onTap = onTap
-        nameLabel.text = channel.name
-        numberLabel.text = channel.channelNumber.map(String.init)
-        numberLabel.isHidden = channel.channelNumber == nil
-        accessibilityLabel = channel.numberAndName
+        nameLabel.text = channel.displayName
+        numberLabel.text = channel.displayNumber.map(String.init)
+        numberLabel.isHidden = channel.displayNumber == nil
+        accessibilityLabel = channel.displayNumberAndName
         accessibilityValue = nowTitle
 
         logoTask?.cancel()

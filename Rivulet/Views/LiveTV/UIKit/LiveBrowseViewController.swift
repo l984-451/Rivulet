@@ -282,7 +282,7 @@ final class LiveBrowseViewController: UIViewController {
     private func showInfo(for item: LiveCardItem) {
         let program = item.program
         let channel = item.channel
-        let channelLine = [channel?.channelNumber.map(String.init), channel?.name]
+        let channelLine = [channel?.displayNumber.map(String.init), channel?.displayName]
             .compactMap { $0 }
             .joined(separator: " · ")
 
@@ -292,7 +292,7 @@ final class LiveBrowseViewController: UIViewController {
             let isLive = program?.isLiveAiring == true
             eyebrowLabel.text = isLive ? String(localized: "LIVE") : String(localized: "ON NOW")
             eyebrowLabel.textColor = isLive ? .systemRed : UIColor.white.withAlphaComponent(0.8)
-            titleLabel.text = program?.displayTitle ?? channel?.name
+            titleLabel.text = program?.displayTitle ?? channel?.displayName
             if let program, !program.id.contains(":placeholder:") {
                 detail.append("\(program.startTime.formatted(Self.timeFormat)) – \(program.endTime.formatted(Self.timeFormat))")
             }
@@ -310,7 +310,7 @@ final class LiveBrowseViewController: UIViewController {
             if let recording {
                 detail.append("\(recording.startTime.formatted(.dateTime.weekday().hour().minute())) – \(recording.endTime.formatted(Self.timeFormat))")
             }
-            if let name = recording?.channelName ?? channel?.name { detail.append(name) }
+            if let name = recording?.channelName ?? channel?.displayName { detail.append(name) }
         }
         if let episode = program?.episodeNumber, !episode.isEmpty { detail.append(episode) }
         if let year = program?.year { detail.append(String(year)) }

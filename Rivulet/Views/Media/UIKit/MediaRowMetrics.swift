@@ -132,6 +132,9 @@ enum MediaRowMetrics {
     static let liveWidth: CGFloat = 406
     static let liveHeight: CGFloat = 228
     static let liveGap: CGFloat = 40
+    /// The Live TV card (`LiveCardCell`) as a tile, for rows laid out by tile: its frame is
+    /// `liveWidth` by `liveHeight`.
+    static let liveCard = Tile(art: CGSize(width: liveWidth - focusGrowth, height: liveHeight - focusGrowth), lockup: .card)
 
     // MARK: Row chrome (vertical)
 

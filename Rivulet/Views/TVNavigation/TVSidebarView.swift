@@ -641,6 +641,9 @@ struct TVSidebarView: View {
         case .playlists(let providerID):
             return PlexHomeViewController(mode: .playlists(providerID: providerID))
         case .search:
+            // Live TV alone: the channel search. The shell caches tab content,
+            // so signing in to a server takes effect on the next launch.
+            guard isSignedInToAnyServer else { return LiveSearchViewController() }
             let search = SearchContainerViewController()
             search.onNestedChange = { [nestedNavState] isNested in
                 nestedNavState.isNested = isNested

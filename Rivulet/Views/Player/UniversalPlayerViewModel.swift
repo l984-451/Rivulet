@@ -3347,10 +3347,13 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     }
 
     /// Callers move to HLS, whose track ids are Plex stream ids, so the engine-indexed lists go too.
+    /// The TV's mode is kept: `prepareDisplay` sets the transcode's own next. Released here, the TV was
+    /// still leaving HDR when the HDR transcode loaded, and AVPlayer dropped every variant (-12642).
+    /// `DisplayCriteriaManager.reset()` returns the TV to default when playback ends.
     private func releaseAetherPlayer() {
         guard let ap = aetherPlayer else { return }
         aetherCancellables.removeAll()
-        ap.stop()
+        ap.stop(resetDisplayCriteria: false)
         aetherPlayer = nil
         aetherSubtitleModel.update(cues: [])
         assTrack = nil

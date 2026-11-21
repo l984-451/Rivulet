@@ -2384,7 +2384,8 @@ class PlayerContainerViewController: UIViewController {
         captionOverlay?.controlsVisible = chromeVisible
         captionOverlay?.paneOpen = paneOpen
         // The clock toggle lasts while the controls are up; they come back on play time.
-        if !chromeVisible { progressBar?.setShowsClockTimes(false) }
+        // Reset as they appear, not as they fade, so the labels never change on their way out.
+        if chromeVisible, let bar = progressBar, bar.alpha < 0.01 { bar.setShowsClockTimes(false) }
         guard targetsChanged || ownershipChanged || captionLiftChanged
                 || pillHomeChanged else {
             if anchorNeedsFocusUpdate {

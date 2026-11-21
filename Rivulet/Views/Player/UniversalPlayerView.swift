@@ -558,7 +558,11 @@ private final class UniversalPlaybackInputTarget: PlaybackInputTarget {
                 speedBefore: speedBefore,
                 speedAfter: 0
             )
-            Task { await vm.commitScrub() }
+            // Select on a scrub lands there and plays, as AVKit's does: scrubbing needs a pause.
+            Task {
+                await vm.commitScrub()
+                if !vm.isPlaying { vm.resume() }
+            }
             onResetRemoteInput?()
             vm.showControlsTemporarily()
 

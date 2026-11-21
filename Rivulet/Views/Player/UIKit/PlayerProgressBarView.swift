@@ -361,6 +361,8 @@ final class PlayerProgressBarView: UIView {
         self.scrubTime = scrubTime
         self.isScrubbing = isScrubbing
         self.isWheelScrubbing = ring
+        // A scrub is about play time: the clock toggle ends with it.
+        if isScrubbing, showsClockTimes { setShowsClockTimes(false) }
         self.ghostProgress = ghostProgress
         self.labels = labels
         self.lastMarkers = markers

@@ -6,8 +6,8 @@
 //  Rivulet
 //
 //  The Apple TV app's Up Next card shows ONE server-made image: the 16:9 still
-//  on top, a mirrored, blurred continuation of it in the 48 pt below, under a
-//  black gradient. This builds the same image locally, once per still.
+//  on top, a blurred continuation of it in the 48 pt below, under a black
+//  gradient. This builds the same image locally, once per still.
 //
 
 import CoreGraphics
@@ -55,7 +55,8 @@ nonisolated enum ContinueWatchingCardCompositor {
             still = CGRect(x: 0, y: 0, width: width, height: fullBleed == nil ? stillHeight : height)
             band = CGRect(x: 0, y: stillHeight, width: width, height: bandHeight)
             blurStart = stillHeight - 16
-            blurRadius = 8
+            // Fitted to Apple's on-screen cards (tvOS 27): its band is one soft tone, no shapes.
+            blurRadius = 24
             // Measured off Apple's served image: clear to the middle, 7% at the seam.
             gradientLocations = [0, 0.5, (stillHeight - 35) / height, stillHeight / height, 1]
             gradientAlphas = [0, 0, 0.03, 0.07, 0.19]
@@ -153,13 +154,12 @@ nonisolated enum ContinueWatchingCardCompositor {
             base.restoreGState()
         }
         drawStill()
-        // The band is the still reflected about the seam.
-        base.saveGState()
-        base.clip(to: geometry.band)
-        base.translateBy(x: 0, y: 2 * geometry.still.maxY)
-        base.scaleBy(x: 1, y: -1)
-        drawStill()
-        base.restoreGState()
+        // The band stretches the still's last row down; a mirror brought bright shapes back into it.
+        if geometry.band.minY >= geometry.still.maxY,
+           let edge = base.makeImage()?.cropping(to: CGRect(x: 0, y: Int(geometry.still.maxY * scale) - 1,
+                                                             width: width, height: 1)) {
+            base.draw(edge, in: geometry.band)
+        }
 
         let colors = geometry.gradientAlphas.map { CGColor(red: 0, green: 0, blue: 0, alpha: $0) } as CFArray
         if let gradient = CGGradient(colorsSpace: colorSpace, colors: colors, locations: geometry.gradientLocations) {

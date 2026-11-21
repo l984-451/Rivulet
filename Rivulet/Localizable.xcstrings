@@ -2319,6 +2319,16 @@
         }
       }
     },
+    "Add User" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Benutzer hinzufügen"
+          }
+        }
+      }
+    },
     "Adds a For You row to What's On, with channels picked from what you watch. It learns on this Apple TV only." : {
       "localizations" : {
         "de" : {
@@ -4765,6 +4775,16 @@
         }
       }
     },
+    "Enter the username." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gib den Benutzernamen ein."
+          }
+        }
+      }
+    },
     "iCloud" : {
       "localizations" : {
         "de" : {
@@ -4854,6 +4874,16 @@
         }
       }
     },
+    "On a device signed in to Jellyfin as the user to add, open Settings, choose Quick Connect and enter this code." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffne auf einem Gerät, das als hinzuzufügender Benutzer bei Jellyfin angemeldet ist, die Einstellungen, wähle Quick Connect und gib diesen Code ein."
+          }
+        }
+      }
+    },
     "Playing away from home needs a Plex Pass or Remote Watch Pass." : {
       "localizations" : {
         "de" : {
@@ -4902,6 +4932,36 @@
     },
     "Recording in Progress" : {
 
+    },
+    "Remove a user you added from Rivulet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einen hinzugefügten Benutzer aus Rivulet entfernen."
+          }
+        }
+      }
+    },
+    "Remove this user from Rivulet. The user stays on the server." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diesen Benutzer aus Rivulet entfernen. Auf dem Server bleibt er erhalten."
+          }
+        }
+      }
+    },
+    "Remove User" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Benutzer entfernen"
+          }
+        }
+      }
     },
     "Rivulet is free and open source. A tip helps keep it going." : {
       "localizations" : {
@@ -4991,6 +5051,16 @@
         }
       }
     },
+    "Sign in another user of this server, for example a child's, and switch between users from the profile in the sidebar." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einen weiteren Benutzer dieses Servers anmelden, etwa für ein Kind, und über das Profil in der Seitenleiste zwischen den Benutzern wechseln."
+          }
+        }
+      }
+    },
     "Stereo with Subwoofer" : {},
     "Still Waiting on the Server" : {
       "localizations" : {
@@ -5010,6 +5080,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "En attente du serveur"
+          }
+        }
+      }
+    },
+    "Switch to this user. Each user has their own Continue Watching, watched state and favorites." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zu diesem Benutzer wechseln. Jeder Benutzer hat sein eigenes „Weiter ansehen“, eigene Gesehen-Markierungen und Favoriten."
           }
         }
       }

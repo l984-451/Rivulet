@@ -34,6 +34,21 @@ struct OtherServerKind {
     /// What a failed sign-in tells the user.
     let failureMessage: (Error) -> String
     let quickConnectFailureMessage: (Error) -> String
+    /// Every signed-in user of the server, the active one first (`EmbySession.users`, `JellyfinSession.users`).
+    let users: () -> [ServerUser]
+    /// Username, password: another user of the signed-in server, kept beside the active one.
+    let addUser: (String, String) async throws -> Void
+    /// `addUser` by a code approved on a device signed in as that user; nil where the server has none.
+    let addUserWithQuickConnect: (((String) -> Void) async throws -> Void)?
+    /// Makes a kept user the active one. False when nothing changed.
+    let switchUser: (String) async -> Bool
+    let removeUser: (String) async -> Void
+
+    struct ServerUser: Identifiable, Equatable {
+        let id: String
+        let name: String
+        let isActive: Bool
+    }
 
     static let all: [OtherServerKind] = [.jellyfin, .emby]
 
@@ -53,7 +68,12 @@ struct OtherServerKind {
         quickConnect: { url, showCode in _ = try await JellyfinSession.signInWithQuickConnect(serverURL: url, showCode: showCode) },
         signOut: { await JellyfinSession.signOut(scope: $0) },
         failureMessage: JellyfinSession.failureMessage,
-        quickConnectFailureMessage: JellyfinSession.quickConnectFailureMessage
+        quickConnectFailureMessage: JellyfinSession.quickConnectFailureMessage,
+        users: { JellyfinSession.users.map { ServerUser(id: $0.userID, name: $0.userName, isActive: $0.userID == JellyfinSession.account?.userID) } },
+        addUser: { _ = try await JellyfinSession.addUser(username: $0, password: $1) },
+        addUserWithQuickConnect: { showCode in _ = try await JellyfinSession.addUserWithQuickConnect(showCode: showCode) },
+        switchUser: { await JellyfinSession.switchUser(to: $0) },
+        removeUser: { await JellyfinSession.removeUser($0) }
     )
 
     static let emby = OtherServerKind(
@@ -68,6 +88,11 @@ struct OtherServerKind {
         quickConnect: nil,
         signOut: { await EmbySession.signOut(scope: $0) },
         failureMessage: EmbySession.failureMessage,
-        quickConnectFailureMessage: EmbySession.failureMessage
+        quickConnectFailureMessage: EmbySession.failureMessage,
+        users: { EmbySession.users.map { ServerUser(id: $0.userID, name: $0.userName, isActive: $0.userID == EmbySession.account?.userID) } },
+        addUser: { _ = try await EmbySession.addUser(username: $0, password: $1) },
+        addUserWithQuickConnect: nil,
+        switchUser: { await EmbySession.switchUser(to: $0) },
+        removeUser: { await EmbySession.removeUser($0) }
     )
 }

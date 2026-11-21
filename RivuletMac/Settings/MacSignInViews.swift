@@ -203,6 +203,10 @@ struct MacServerSignInSheet: View {
     /// Bumped after a sign-in or sign-out, so the page re-reads the stored account.
     @State private var revision = 0
     @State private var confirmingSignOut = false
+    /// The signed-in page's Add User form is open.
+    @State private var addingUser = false
+    @State private var newUsername = ""
+    @State private var newPassword = ""
 
     private var name: String { server.kind.displayName }
 
@@ -225,7 +229,7 @@ struct MacServerSignInSheet: View {
             }
             .padding(12)
         }
-        .frame(width: 460, height: 420)
+        .frame(width: 460, height: 520)
         .alert("Couldn’t Sign In", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -245,10 +249,8 @@ struct MacServerSignInSheet: View {
         let synced = CloudSync.shared.isSynced(accountID: account.providerID)
         Section(name) {
             LabeledContent("Server", value: account.name)
-            if let user = server.userName(), !user.isEmpty {
-                LabeledContent("User", value: user)
-            }
         }
+        usersSection
         Section {
             Button("Sign Out…", role: .destructive) { confirmingSignOut = true }
                 .confirmationDialog("Sign out of \(name)?", isPresented: $confirmingSignOut, titleVisibility: .visible) {
@@ -265,6 +267,108 @@ struct MacServerSignInSheet: View {
                         Text("You can sign back in at any time.")
                     }
                 }
+        }
+    }
+
+    /// One row per signed-in user when there is more than one: clicking switches, the context menu
+    /// removes an added one. Add User signs another user of the same server in beside the active one.
+    @ViewBuilder private var usersSection: some View {
+        let users = server.users()
+        Section {
+            if users.count > 1 {
+                ForEach(users.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }) { user in
+                    Button {
+                        Task {
+                            await server.switchUser(user.id)
+                            revision += 1
+                        }
+                    } label: {
+                        HStack {
+                            Text(verbatim: user.name).foregroundStyle(.primary)
+                            Spacer()
+                            if user.isActive { Image(systemName: "checkmark").fontWeight(.semibold).foregroundStyle(.tint) }
+                        }
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        if !user.isActive {
+                            Button("Remove", role: .destructive) {
+                                Task {
+                                    await server.removeUser(user.id)
+                                    revision += 1
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if let user = server.userName(), !user.isEmpty {
+                LabeledContent("User", value: user)
+            }
+            if addingUser {
+                MacFormField("Username", text: $newUsername, prompt: "Required", kind: .username)
+                MacFormField("Password", text: $newPassword, prompt: "None", kind: .password)
+                HStack {
+                    Button("Cancel") { closeAddUser() }
+                    if server.addUserWithQuickConnect != nil {
+                        Button("Quick Connect", action: startAddUserQuickConnect)
+                    }
+                    Button("Sign In", action: addUser).keyboardShortcut(.defaultAction)
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            } else {
+                Button("Add User…") { addingUser = true }
+            }
+        } header: {
+            Text("Users")
+        } footer: {
+            Text("Add another user of this server, for example a child's, to switch between users here. Each user has their own Continue Watching, watched state and favorites.")
+        }
+    }
+
+    private func closeAddUser() {
+        addingUser = false
+        newUsername = ""
+        newPassword = ""
+    }
+
+    private func addUser() {
+        let user = newUsername.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !user.isEmpty else {
+            failure = String(localized: "Enter the username.")
+            return
+        }
+        isChecking = true
+        Task {
+            defer { isChecking = false }
+            do {
+                try await server.addUser(user, newPassword)
+                closeAddUser()
+                revision += 1
+            } catch {
+                failure = server.failureMessage(error)
+            }
+        }
+    }
+
+    private func startAddUserQuickConnect() {
+        guard let quickConnect = server.addUserWithQuickConnect else { return }
+        isChecking = true
+        quickConnectTask = Task {
+            defer {
+                isChecking = false
+                quickConnectCode = nil
+                quickConnectTask = nil
+            }
+            do {
+                try await quickConnect { quickConnectCode = $0 }
+                closeAddUser()
+                revision += 1
+            } catch where isCancellationError(error) {
+            } catch {
+                quickConnectCode = nil
+                failure = server.quickConnectFailureMessage(error)
+            }
         }
     }
 

@@ -284,7 +284,7 @@ struct IOSLibraryPage: View {
 
     var body: some View {
         if library.kind == .photos {
-            IOSPhotoLibraryView(library: library, showsAccount: showsAccount).iosLibraryChooser()
+            IOSPhotoLibraryView(library: library, showsAccount: showsAccount)
         } else {
             IOSPlexLibraryView(library: library, showsAccount: showsAccount)
         }

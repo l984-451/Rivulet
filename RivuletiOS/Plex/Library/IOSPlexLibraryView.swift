@@ -14,7 +14,7 @@ enum IOSLibrarySelection: Hashable {
 
 /// Library tab: the list as a split view's sidebar, so a regular-width iPhone (iPhone Duo
 /// open, Plus and Max in landscape) shows it beside the library. Compact collapses to a stack,
-/// and under iPad's top tab bar it is one stack with the list as a menu.
+/// and under iPad's top tab bar it is one stack, the list a menu on the bar's Library (`IOSLibraryMenu`).
 struct IOSPlexLibrarySplitView: View {
     @Binding var selection: IOSLibrarySelection?
     @Binding var column: NavigationSplitViewColumn
@@ -53,10 +53,10 @@ struct IOSPlexLibrarySplitView: View {
         }
     }
 
-    /// The list has no column here: its root page carries it as a menu, where the sidebar button sat.
+    /// The list has no column here: the top bar's Library opens it as a menu.
     private var topBarStack: some View {
         NavigationStack(path: $path) {
-            detail(topBar: true).environment(\.iosLibraryChooser, pick).id(selection).iosPlexDestinations()
+            detail(topBar: true).id(selection).iosPlexDestinations()
         }
     }
 
@@ -73,85 +73,78 @@ struct IOSPlexLibrarySplitView: View {
     @ViewBuilder
     private func detail(topBar: Bool) -> some View {
         switch selection {
-        case .downloads: IOSDownloadsView(showsAccount: topBar).iosLibraryChooser()
-        case .favorites: IOSFavoritesView(showsAccount: topBar).iosLibraryChooser()
-        // Places the chooser itself, ahead of its page pill.
+        case .downloads: IOSDownloadsView(showsAccount: topBar)
+        case .favorites: IOSFavoritesView(showsAccount: topBar)
         case .library(let library): IOSLibraryPage(library: library, showsAccount: topBar)
-        case .playlists(let providerID):
-            IOSPlexPlaylistsView(providerID: providerID, showsAccount: topBar).iosLibraryChooser()
+        case .playlists(let providerID): IOSPlexPlaylistsView(providerID: providerID, showsAccount: topBar)
         case nil where topBar:
             // No list beside it to say why nothing is open: sign in, loading, or what failed.
             ScrollView { IOSLibrariesStatus().containerRelativeFrame([.horizontal, .vertical]) }
                 .refreshable { await browse.refresh() }
                 .navigationTitle("Library")
                 .toolbar { IOSAccountToolbarItem() }
-                .iosLibraryChooser()
         case nil: ContentUnavailableView("Choose a Library", systemImage: "rectangle.stack")
         }
     }
 }
 
-extension EnvironmentValues {
-    /// The Library tab's selection, on its root page under iPad's top tab bar only.
-    @Entry var iosLibraryChooser: Binding<IOSLibrarySelection?>? = nil
-}
-
-extension View {
-    /// The Library tab's chooser at the leading edge, when `iosLibraryChooser` is set.
-    func iosLibraryChooser() -> some View { modifier(IOSLibraryChooserToolbar()) }
-}
-
-private struct IOSLibraryChooserToolbar: ViewModifier {
-    @Environment(\.iosLibraryChooser) private var selection
-
-    func body(content: Content) -> some View {
-        content.toolbar {
-            if let selection { IOSLibraryChooserItem(selection: selection) }
-        }
-    }
-}
-
-/// The Library tab's list as a menu: Downloads, then each server's libraries and playlists.
-struct IOSLibraryChooserItem: ToolbarContent {
-    @Binding var selection: IOSLibrarySelection?
-
-    var body: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) { IOSLibraryChooser(selection: $selection) }
-    }
-}
-
-private struct IOSLibraryChooser: View {
-    @Binding var selection: IOSLibrarySelection?
+/// The Library tab's list as a menu, hung from iPad's top tab bar: Downloads, then each
+/// server's libraries and playlists, the open one checked.
+struct IOSLibraryMenu: View {
+    let selection: IOSLibrarySelection?
+    let pick: (IOSLibrarySelection) -> Void
     @EnvironmentObject private var browse: BrowseStore
     @AppStorage(IOSLibrarySettingsView.showPlaylistsKey) private var showPlaylists = true
     @AppStorage("showFavoritesTab") private var showFavorites = false
 
     var body: some View {
-        Menu {
-            Picker("Libraries", selection: $selection) {
-                Section {
-                    Label("Downloads", systemImage: "arrow.down.circle").tag(IOSLibrarySelection.downloads)
-                    if showFavorites, browse.offersFavorites {
-                        Label("Favorites", systemImage: "heart").tag(IOSLibrarySelection.favorites)
-                    }
+        // As tall as its rows, scrolling only once they outgrow the screen.
+        ViewThatFits(in: .vertical) {
+            rows
+            ScrollView { rows }
+        }
+    }
+
+    private var rows: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            row(Text("Downloads"), icon: "arrow.down.circle", .downloads)
+            if showFavorites, browse.offersFavorites {
+                row(Text("Favorites"), icon: "heart", .favorites)
+            }
+            ForEach(browse.libraryGroups, id: \.id) { group in
+                Divider().padding(.vertical, 6)
+                if let name = group.name {
+                    Text(name).font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+                        .padding(.horizontal, 16).padding(.vertical, 4)
                 }
-                ForEach(browse.libraryGroups, id: \.id) { group in
-                    Section {
-                        ForEach(group.libraries) { library in
-                            Label(library.title, systemImage: library.iosIcon).tag(IOSLibrarySelection.library(library))
-                        }
-                        if showPlaylists, !browse.playlists(providerID: group.providerID).isEmpty {
-                            Label("Playlists", systemImage: "list.and.film")
-                                .tag(IOSLibrarySelection.playlists(providerID: group.providerID))
-                        }
-                    } header: {
-                        if let name = group.name { Text(name) }
-                    }
+                ForEach(group.libraries) { library in
+                    row(Text(verbatim: library.title), icon: library.iosIcon, .library(library))
+                }
+                if showPlaylists, !browse.playlists(providerID: group.providerID).isEmpty {
+                    row(Text("Playlists"), icon: "list.and.film", .playlists(providerID: group.providerID))
                 }
             }
-        } label: {
-            Label("Libraries", systemImage: "sidebar.left")
         }
+        .padding(.vertical, 8)
+        // As wide as the longest name, every row that wide.
+        .frame(minWidth: 250)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func row(_ title: Text, icon: String, _ value: IOSLibrarySelection) -> some View {
+        Button { pick(value) } label: {
+            HStack(spacing: 12) {
+                Image(systemName: icon).frame(width: 24)
+                title.lineLimit(1)
+                Spacer(minLength: 16)
+                if value == selection { Image(systemName: "checkmark").fontWeight(.semibold) }
+            }
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(value == selection ? .isSelected : [])
     }
 }
 
@@ -260,7 +253,6 @@ struct IOSPlexLibraryView: View {
     @AppStorage private var pageRaw: String
     /// Same key as the tvOS library hero setting.
     @AppStorage("showLibraryHero") private var showHero = true
-    @Environment(\.iosLibraryChooser) private var chooser
     @State private var rows: [MediaHub] = []
 
     enum Page: String, CaseIterable {
@@ -299,11 +291,6 @@ struct IOSPlexLibraryView: View {
         }
         .iosPlexHeroChrome(hero: !heroItems.isEmpty, title: browse.labels.title(library.title, providerID: library.providerID))
         .toolbar {
-            // In one builder with the pill, so the chooser stays ahead of it, in its own glass.
-            if let chooser {
-                IOSLibraryChooserItem(selection: chooser)
-                ToolbarSpacer(.fixed, placement: .topBarLeading)
-            }
             // A pill beside Back naming the page; it opens the other.
             ToolbarItem(placement: .topBarLeading) {
                 Menu {

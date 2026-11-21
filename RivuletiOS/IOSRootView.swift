@@ -30,6 +30,8 @@ struct IOSRootView: View {
     /// Where the tab view shows its tabs, as the tabs' content reports it (only content can
     /// read it): the iPad sidebar or the top bar. Nil until the first report.
     @State private var tabBarPlacement: TabBarPlacement?
+    /// The library menu on the top bar's Library item.
+    @State private var showingLibraryMenu = false
     @Namespace private var homeZoom
     @Namespace private var libraryZoom
     @Namespace private var sidebarZoom
@@ -47,7 +49,7 @@ struct IOSRootView: View {
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
+        TabView(selection: tabSelection) {
             Tab("Home", systemImage: "house", value: "home") {
                 tabStack(homeZoom) {
                     IOSPlexHomeView().environment(\.launchHeroReady) { splashGate.heroIsReady() }
@@ -93,6 +95,10 @@ struct IOSRootView: View {
                     }
                     .defaultVisibility(.hidden, for: .tabBar)
                 }
+            }
+            // The top bar shows the whole section as one Library item, so the menu hangs from it.
+            .popover(isPresented: $showingLibraryMenu) {
+                IOSLibraryMenu(selection: librarySelection, pick: pickLibrary).iosSessionObjects(plex)
             }
             Tab("Live TV", systemImage: "play.tv", value: "live-tv") {
                 NavigationStack { IOSLiveTVView() }
@@ -191,6 +197,27 @@ struct IOSRootView: View {
         }
         .onChange(of: playlistServers) { if !browse.isLoadingOtherServers { dropOrphanedLibraryTab() } }
         .onChange(of: showsFavorites) { if !browse.isLoadingOtherServers { dropOrphanedLibraryTab() } }
+    }
+
+    /// The tab view's selection. Only a tap in the tab bar or sidebar writes through it; the
+    /// root's own switches set `selectedTab`. Under the top bar, a tap on Library, from another
+    /// tab or on Library itself, also opens the library menu. That item is the whole section and
+    /// selects whichever of its tabs was picked last, so any of them counts.
+    private var tabSelection: Binding<String> {
+        Binding(get: { selectedTab }, set: { tab in
+            if tab == "library" || Self.isSidebarTab(tab), showsSidebarLibraries, tabBarPlacement == .topBar {
+                showingLibraryMenu = true
+            }
+            selectedTab = tab
+        })
+    }
+
+    /// A pick in the library menu starts the Library tab over, unless it is the library already open.
+    private func pickLibrary(_ picked: IOSLibrarySelection) {
+        if picked != librarySelection { libraryPath = NavigationPath() }
+        librarySelection = picked
+        selectedTab = "library"
+        showingLibraryMenu = false
     }
 
     /// A library gone from the server or hidden in Settings leaves the selection.

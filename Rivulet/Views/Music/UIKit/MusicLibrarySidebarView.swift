@@ -5,9 +5,9 @@
 //  MusicLibrarySidebarView.swift
 //  Rivulet
 //
-//  The Music library's category list. No panel behind it: rows on an 80pt
-//  pitch whose capsule spans x 40..370. Selection follows focus. Measured
-//  from Apple Music on tvOS 26.
+//  The Music library's category list. No panel behind it: rows on a 76pt
+//  pitch whose capsule spans x 54..374. Selection follows focus. Measured
+//  from Apple Music on tvOS 27.2.1.
 //
 
 import UIKit
@@ -40,8 +40,8 @@ final class MusicLibrarySidebarView: UIView, UICollectionViewDelegate {
         collectionView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         collectionView.backgroundColor = .clear
         collectionView.contentInsetAdjustmentBehavior = .never
-        // The first row's capsule starts 7pt into its 80pt row, below the shell's collapsed pill.
-        collectionView.contentInset = UIEdgeInsets(top: max(MusicMetrics.top, ShellPillMetrics.contentClearance) - 7, left: 0, bottom: 60, right: 0)
+        // The first row's capsule starts 5pt into its 76pt row, at the Library's content top.
+        collectionView.contentInset = UIEdgeInsets(top: MusicMetrics.libraryTop - 5, left: 0, bottom: 60, right: 0)
         // Entry from the grid resolves through the collection, which aims at the selected row.
         collectionView.remembersLastFocusedIndexPath = true
         collectionView.delegate = self
@@ -94,14 +94,14 @@ final class MusicLibrarySidebarView: UIView, UICollectionViewDelegate {
     private func makeLayout() -> UICollectionViewLayout {
         UICollectionViewCompositionalLayout { index, _ in
             // The header row holds the hairline and the "Genres" label between the two lists.
-            let height: CGFloat = Section(rawValue: index) == .genresHeader ? 136 : 80
+            let height: CGFloat = Section(rawValue: index) == .genresHeader ? 105 : 76
             let size = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1), heightDimension: .absolute(height))
             let group = NSCollectionLayoutGroup.vertical(layoutSize: size, subitems: [NSCollectionLayoutItem(layoutSize: size)])
             let section = NSCollectionLayoutSection(group: group)
-            // Rows are exactly the capsule's width, x 40..370: the shell's edge catcher sits at
+            // Rows are exactly the capsule's width, x 54..374: the shell's edge catcher sits at
             // x 0..2 and a row over it would stop Left from reaching it.
             section.contentInsetsReference = .none
-            section.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 40, bottom: 0, trailing: 30)
+            section.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 54, bottom: 0, trailing: 26)
             return section
         }
     }
@@ -158,7 +158,7 @@ final class MusicLibrarySidebarView: UIView, UICollectionViewDelegate {
 
 // MARK: - Row cell
 
-/// Idle: no background. Selected: a translucent 330x66 capsule. Focused: a
+/// Idle: no background. Selected: a translucent 320x66 capsule. Focused: a
 /// near-white capsule 4pt larger on each side, with dark content.
 @MainActor
 final class MusicSidebarRowCell: UICollectionViewCell {
@@ -169,7 +169,7 @@ final class MusicSidebarRowCell: UICollectionViewCell {
 
     private let capsule = UIView()
     private let glyph = UIImageView()
-    private let label = MusicChrome.label(size: 29, weight: .medium)
+    private let label = MusicChrome.label(size: 25, weight: .medium)
     private var showsFocus = false
 
     override init(frame: CGRect) {
@@ -202,9 +202,9 @@ final class MusicSidebarRowCell: UICollectionViewCell {
                                width: size.width, height: size.height)
         capsule.layer.cornerRadius = size.height / 2
         capsule.layer.shadowPath = UIBezierPath(roundedRect: capsule.bounds, cornerRadius: size.height / 2).cgPath
-        // Screen x: glyph centred on 81, label ink from 123; genre rows have no glyph and start at 61.
-        glyph.frame = CGRect(x: 21, y: 0, width: 40, height: bounds.height)
-        let labelX: CGFloat = glyph.image == nil ? 20 : 82
+        // Screen x: glyph centred on 81, label ink from 124; genre rows have no glyph and start at 69.
+        glyph.frame = CGRect(x: 7, y: 0, width: 40, height: bounds.height)
+        let labelX: CGFloat = glyph.image == nil ? 15 : 69
         label.frame = CGRect(x: labelX, y: 0, width: bounds.width - labelX - 20, height: bounds.height)
     }
 
@@ -241,9 +241,9 @@ final class MusicSidebarGenresHeaderCell: UICollectionViewCell {
         let divider = UIView(frame: CGRect(x: 0, y: 33, width: bounds.width, height: 1))
         divider.autoresizingMask = [.flexibleWidth]
         divider.backgroundColor = UIColor(white: 1, alpha: 0.12)
-        let label = MusicChrome.label(size: 25, weight: .medium, color: MusicMetrics.secondary)
+        let label = MusicChrome.label(size: 24, weight: .medium, color: MusicMetrics.secondary)
         label.text = String(localized: "Genres")
-        label.frame = CGRect(x: 20, y: 96, width: bounds.width - 40, height: 32)
+        label.frame = CGRect(x: 16, y: 67, width: bounds.width - 32, height: 32)
         label.autoresizingMask = [.flexibleWidth]
         [divider, label].forEach(contentView.addSubview)
     }

@@ -14,14 +14,18 @@ import UIKit
 
 /// Points on a 1920x1080 canvas.
 nonisolated enum MusicMetrics {
-    /// Content spans x 80..1840 and starts at y 60 on every Music screen.
+    /// Content spans x 80..1840 and starts at y 60 on the album and artist pages.
     static let margin: CGFloat = 80
     static let top: CGFloat = 60
+    /// The Library's content starts under the shell's pill: the sidebar's first capsule and the grid.
+    static let libraryTop: CGFloat = 152
     static let pillHeight: CGFloat = 66
     static let pillGap: CGFloat = 24
-    static let lockupArt: CGFloat = 320
+    static let lockupArt: CGFloat = 248
     static let lockupGap: CGFloat = 40
-    /// Label block under the art: 8pt gap and two 38pt callout lines.
+    /// Label block under the art: two 25pt lines, 121 from the art's top to the next row less the gap.
+    static let lockupLabels: CGFloat = 81
+    /// The photo folder tile's label block (`PhotoCell`).
     static let lockupFooter: CGFloat = 96
     static let secondary = UIColor(white: 1, alpha: 0.55)
     /// Apple's `tertiaryLabel`, fixed to its dark value: the Music pages are always dark.
@@ -401,18 +405,19 @@ final class MusicHeaderCell: UICollectionViewCell {
         /// Text baselines from the page top. Apple sets a playlist's higher than an album's.
         var baselines: [CGFloat] {
             switch self {
-            case .album: [157, 213, 260]
+            case .album: [157, 206.5, 257.5]
             case .playlist: [138, 189, 273]
             case .grid: [106, 152, 0]
-            case .browse: [88, 120, 0]
+            case .browse: [MusicMetrics.libraryTop + 28, MusicMetrics.libraryTop + 60, 0]
             }
         }
 
         var pillTop: CGFloat {
             switch self {
-            case .album: 348
+            case .album: 313
             case .playlist: 364
-            case .grid, .browse: MusicMetrics.top
+            case .grid: MusicMetrics.top
+            case .browse: MusicMetrics.libraryTop
             }
         }
 
@@ -431,7 +436,7 @@ final class MusicHeaderCell: UICollectionViewCell {
         var pillInset: CGFloat { self == .browse ? 35 : 31 }
 
         /// Header height on an album or playlist page: the first row starts here.
-        var height: CGFloat { self == .album ? 455 : 468 }
+        var height: CGFloat { self == .album ? 417 : 468 }
     }
 
     private static let titleFont = UIFont.systemFont(ofSize: 57, weight: .bold)

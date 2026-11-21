@@ -82,7 +82,7 @@ final class MusicAlbumViewController: UIViewController, UICollectionViewDelegate
         background.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(background)
 
-        artwork.frame = CGRect(x: MusicMetrics.margin, y: MusicMetrics.top, width: 800, height: 800)
+        artwork.frame = CGRect(x: MusicMetrics.margin, y: 80, width: 800, height: 800)
         artwork.contentMode = .scaleAspectFill
         artwork.clipsToBounds = true
         artwork.layer.cornerRadius = 30

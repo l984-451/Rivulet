@@ -170,6 +170,7 @@ struct IOSRootView: View {
         .onChange(of: tabBarPlacement) { placeLibraryTab() }
         .onChange(of: selectedTab) { placeLibraryTab() }
         .onChange(of: sidebarTabs) { placeLibraryTab() }
+        .onChange(of: browse.isLoadingContent) { placeLibraryTab() }
         .onChange(of: browse.sessionGeneration) {
             librarySelection = nil
             libraryColumn = .sidebar
@@ -220,7 +221,7 @@ struct IOSRootView: View {
         guard showsSidebarLibraries, let placement = tabBarPlacement else { return }
         if placement == .sidebar {
             unfoldLibraryTab()
-        } else if librarySelection(forTab: selectedTab) != nil {
+        } else if placement == .topBar, librarySelection(forTab: selectedTab) != nil {
             // A tab whose library has not loaded yet waits for it (`sidebarTabs` changes).
             foldSidebarTab()
         }
@@ -242,11 +243,13 @@ struct IOSRootView: View {
 
     /// The sidebar is showing: the Library tab's library, and the pages pushed over it,
     /// carry on in that library's sidebar tab. With none picked (or one gone), the first
-    /// library opens, as the split view picks it; with no library loaded yet, it waits.
+    /// library opens, as the split view picks it; with no library loaded yet, it waits, and
+    /// a load that found none (offline, failed) leaves Downloads.
     private func unfoldLibraryTab() {
         guard selectedTab == "library" else { return }
         let picked = librarySelection.map(tab(for:)).flatMap { sidebarTabs.contains($0) ? $0 : nil }
-        guard let target = picked ?? videoLibraries.first.map(libraryTab) else { return }
+        let settled = browse.hasRefreshed && !browse.isLoadingContent
+        guard let target = picked ?? videoLibraries.first.map(libraryTab) ?? (settled ? "downloads" : nil) else { return }
         sidebarPaths[target] = picked != nil ? libraryPath : NavigationPath()
         libraryColumn = .sidebar
         libraryPath = NavigationPath()

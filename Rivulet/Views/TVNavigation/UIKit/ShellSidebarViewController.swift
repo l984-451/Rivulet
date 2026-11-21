@@ -44,7 +44,8 @@ private enum Metrics {
     /// The TV app's 50pt icon disc, centred in the 60pt pill.
     static let pillDiscSize: CGFloat = 50
     static var pillDiscInset: CGFloat { (pillHeight - pillDiscSize) / 2 }
-    static let pillTrailing: CGFloat = 41
+    /// Measured on device (tvOS 27.2): 26 from the label to the pill edge, as the TV app draws it.
+    static let pillTrailing: CGFloat = 25
     /// The TV app's sidebar avatar, and how much it grows under focus.
     static let avatarSize: CGFloat = 50
     static let avatarFocusGrowth: CGFloat = 4

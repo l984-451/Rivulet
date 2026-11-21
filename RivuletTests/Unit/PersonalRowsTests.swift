@@ -38,7 +38,8 @@ final class PersonalRowsTests: XCTestCase {
 
     private func removeKeys() {
         for profile in [profileA, profileB] {
-            for base in ["showHomeFavoriteMovies", "showHomeFavoriteShows", "hiddenHomeRowIdentifiers", "homeRowOrder"] {
+            for base in ["showHomeFavoriteMovies", "showHomeFavoriteShows", "showHomeFavoriteAlbums",
+                         "hiddenHomeRowIdentifiers", "homeRowOrder"] {
                 UserDefaults.standard.removeObject(forKey: "\(base)_user_\(profile)")
             }
         }
@@ -84,6 +85,23 @@ final class PersonalRowsTests: XCTestCase {
         XCTAssertEqual(requests.map(\.provider.id), ["plex:a", "jellyfin:s"])
         XCTAssertEqual(requests[0].libraries.map(\.id), ["1", "2"])
         XCTAssertEqual(requests[0].libraryKey, "1", "placed with the first of its libraries")
+    }
+
+    /// Favorite albums come from Jellyfin and Emby music libraries; Plex's music favorites are artists.
+    func test_requests_albumsSkipPlexMusic() {
+        let plex = StubMediaProvider(id: "plex:a", kind: .plex)
+        let jf = StubMediaProvider(id: "jellyfin:s", kind: .jellyfin)
+        plex.favoritesSupported = true
+        jf.favoritesSupported = true
+        let requests = PersonalRows.requests(
+            libraries: [(plex, library("1", .music, provider: "plex:a"), "1"),
+                        (jf, library("a", .music, provider: "jellyfin:s"), "jellyfin:s/a")],
+            kinds: [.music])
+        XCTAssertEqual(requests.map(\.provider.id), ["jellyfin:s"])
+        XCTAssertFalse(PersonalRows.showsFavorites(.music), "off by default")
+        XCTAssertNil(PersonalRows.heroSource(.music))
+        XCTAssertFalse(PersonalRows.offersAlbumFavorites([plex]))
+        XCTAssertTrue(PersonalRows.offersAlbumFavorites([plex, jf]))
     }
 
     func test_keeping_dropsRowsNothingAsksFor() {

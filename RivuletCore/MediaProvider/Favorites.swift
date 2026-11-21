@@ -35,13 +35,17 @@ enum FavoritesFeed {
 
     /// Every server's favorite movies and shows, by title. A server or library that fails drops out.
     /// The same title on two servers appears twice.
-    static func load(from providers: [any MediaProvider]) async -> [MediaItem] {
+    /// `includeAlbums` adds Jellyfin's and Emby's favorite albums (their music libraries' favorites
+    /// are albums, `isMusic`). Plex is left out: its music section's favorites are artists.
+    static func load(from providers: [any MediaProvider], includeAlbums: Bool = false) async -> [MediaItem] {
         let limit = Self.limit
         let found = await withTaskGroup(of: [MediaItem].self) { group in
             for provider in providers where provider.supportsFavorites {
+                let kinds = PersonalRows.videoFavoriteKinds
+                    + (includeAlbums && provider.kind != .plex ? [.music] : [])
                 group.addTask {
                     let libraries = ((try? await provider.libraries()) ?? [])
-                        .filter { PersonalRows.favoriteKinds.contains($0.kind) }
+                        .filter { kinds.contains($0.kind) }
                     var items: [MediaItem] = []
                     for library in libraries {
                         items += (try? await provider.favorites(in: library, limit: limit)) ?? []

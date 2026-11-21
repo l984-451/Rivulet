@@ -61,7 +61,8 @@ extension BrowseStore {
                   isSidebarLibraryShown(library) else { return nil }
             return (provider, library, library.id)
         }
-        let kinds = PersonalRows.wantedKinds
+        // iOS Home has no Favorite Albums row.
+        let kinds = PersonalRows.wantedKinds.filter(PersonalRows.videoFavoriteKinds.contains)
         let favorites = PersonalRows.requests(libraries: candidates, kinds: kinds)
         let pins = PersonalRows.wantedPins.filter { shown.contains($0.providerID) }
 
@@ -135,7 +136,7 @@ extension BrowseStore {
                                            kind: .shelf(hiddenID: id), isOn: !HomeRowSettings.isHidden(id)))
         }
         if offersFavorites {
-            for kind in PersonalRows.favoriteKinds {
+            for kind in PersonalRows.videoFavoriteKinds {
                 entries.append(HomeRowEntry(id: PersonalRows.favoritesIdentifier(kind), title: PersonalRows.favoritesTitle(kind),
                                                kind: .favorites(kind), isOn: PersonalRows.showsFavorites(kind)))
             }

@@ -155,6 +155,17 @@ struct WhatsNewView: View {
     // MARK: - Changelog Data
 
     static let changelogs: [(version: String, features: [String])] = [
+        ("1.3.1 (132)", [
+            "Live TV can start a show from the beginning when Plex is recording it",
+            "Swipe to scrub follows your finger. @268htvgzs6-art",
+            "Up or Down from the Skip button brings up the controls in one press. @268htvgzs6-art",
+            "Surround music plays as multichannel on a receiver instead of stereo",
+            "Updated AetherEngine to 7.71.0",
+            "## Fixes",
+            "Libraries you hide from Home stay out of the Home hero",
+            "Sideloaded copies on a free Apple ID no longer crash. @stackempty",
+            "Fixed a black screen on server conversions with Match Dynamic Range on",
+        ]),
         ("1.3.1 (131)", [
             "Plex titles play the original file again instead of a server conversion",
             "With the autoplay countdown off, episodes end like movies, with no Up Next",

@@ -71,10 +71,14 @@ final class SkipPillButton: UIButton {
         ])
 
         setTitleColor(.white, for: .normal)
-        // AVKit's contextual action: bold 29, focused at 225x67 for "Skip Intro"
-        // (these insets plus the 1.05 focus scale).
-        titleLabel?.font = .systemFont(ofSize: 29, weight: .bold)
-        contentEdgeInsets = UIEdgeInsets(top: 14, left: 40, bottom: 14, right: 40)
+        // AVKit's contextual action: bold 30 label, 225 x 64 focused, so 214 x 61
+        // at rest under the 1.05 focus scale ("Skip Intro" is already about 214).
+        titleLabel?.font = .systemFont(ofSize: 30, weight: .bold)
+        contentEdgeInsets = UIEdgeInsets(top: 12, left: 40, bottom: 12, right: 40)
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: 61),
+            widthAnchor.constraint(greaterThanOrEqualToConstant: 214),
+        ])
     }
 
     /// Starts the left-to-right sweep, reaching the full pill width after

@@ -47,7 +47,7 @@ struct IOSPlexLibrarySplitView: View {
         } detail: {
             NavigationStack(path: $path) {
                 // A new selection is a new page: library grids keep their items in view state.
-                detail.id(selection).iosPlexDestinations()
+                detail(showsAccount: false).id(selection).iosPlexDestinations()
             }
         }
     }
@@ -55,7 +55,8 @@ struct IOSPlexLibrarySplitView: View {
     /// The list has no column here: its root page carries it as a menu, where the sidebar button sat.
     private var topBarStack: some View {
         NavigationStack(path: $path) {
-            detail.environment(\.iosLibraryChooser, pick).id(selection).iosPlexDestinations()
+            // The tab's root here, so it carries the avatar as Home's does.
+            detail(showsAccount: true).environment(\.iosLibraryChooser, pick).id(selection).iosPlexDestinations()
         }
     }
 
@@ -69,13 +70,14 @@ struct IOSPlexLibrarySplitView: View {
     }
 
     @ViewBuilder
-    private var detail: some View {
+    private func detail(showsAccount: Bool) -> some View {
         switch selection {
-        case .downloads: IOSDownloadsView().iosLibraryChooser()
-        case .favorites: IOSFavoritesView().iosLibraryChooser()
+        case .downloads: IOSDownloadsView(showsAccount: showsAccount).iosLibraryChooser()
+        case .favorites: IOSFavoritesView(showsAccount: showsAccount).iosLibraryChooser()
         // Places the chooser itself, ahead of its page pill.
-        case .library(let library): IOSLibraryPage(library: library)
-        case .playlists(let providerID): IOSPlexPlaylistsView(providerID: providerID).iosLibraryChooser()
+        case .library(let library): IOSLibraryPage(library: library, showsAccount: showsAccount)
+        case .playlists(let providerID):
+            IOSPlexPlaylistsView(providerID: providerID, showsAccount: showsAccount).iosLibraryChooser()
         case nil: ContentUnavailableView("Choose a Library", systemImage: "rectangle.stack").iosLibraryChooser()
         }
     }

@@ -84,7 +84,8 @@ struct IOSPlexDetailView: View {
         } else if let summary = shown.overview, !summary.isEmpty {
             summaryView(summary).padding(.horizontal, leading)
         }
-        if isSeries {
+        // A catalog title (TMDB) has no seasons of its own to list.
+        if isSeries, !item.isMetadataOnly {
             episodesSection(leading: leading)
         }
         IOSPlexExtrasRow(detail: detail?.adding(extras: seasonExtras))
@@ -193,6 +194,19 @@ struct IOSPlexDetailView: View {
 
     private func load() async {
         do {
+            // A title on no server, from a catalog (TMDB), is that catalog's detail alone, as on tvOS.
+            if browse.provider(for: item.ref.providerID) == nil,
+               let source = MetadataSourceRegistry.shared.source(for: item.ref.providerID) {
+                // TMDB answers every failure, a cancelled request included, with "not found".
+                guard let loaded = try? await source.itemDetail(item.ref) else {
+                    if !Task.isCancelled { error = String(localized: "Try again in a moment.") }
+                    return
+                }
+                detail = loaded
+                error = nil
+                loadedRevision = browse.watchStateRevision
+                return
+            }
             let provider = try browse.provider(for: item.ref)
             let loaded = try await provider.fullDetail(for: item.ref)
             detail = loaded
@@ -422,15 +436,18 @@ private struct IOSPlexDetailHeader: View {
                 if item.isPlayable, canDownload {
                     IOSDownloadButton(item: item)
                 }
-                Menu {
-                    // No Delete: the page would be left showing what it deleted.
-                    IOSPlexItemMenu(item: item, showsPlay: false, showsWatchlist: false, showsFavorite: false, showsDelete: false)
-                } label: {
-                    Image(systemName: "ellipsis").frame(width: 22, height: 22)
+                // Its actions (watched, refresh metadata) need the title on a server.
+                if !item.isMetadataOnly {
+                    Menu {
+                        // No Delete: the page would be left showing what it deleted.
+                        IOSPlexItemMenu(item: item, showsPlay: false, showsWatchlist: false, showsFavorite: false, showsDelete: false)
+                    } label: {
+                        Image(systemName: "ellipsis").frame(width: 22, height: 22)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .accessibilityLabel("More")
                 }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .accessibilityLabel("More")
             }
         }
         .frame(maxWidth: 480)

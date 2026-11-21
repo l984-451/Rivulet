@@ -27,6 +27,7 @@ struct IOSRootView: View {
     /// library into the Library tab when the window narrows and the tab goes away.
     @State private var sidebarPaths: [String: NavigationPath] = [:]
     @Namespace private var homeZoom
+    @Namespace private var discoverZoom
     @Namespace private var libraryZoom
     @Namespace private var sidebarZoom
     @Namespace private var searchZoom
@@ -47,6 +48,11 @@ struct IOSRootView: View {
             Tab("Home", systemImage: "house", value: "home") {
                 tabStack(homeZoom) {
                     IOSPlexHomeView().environment(\.launchHeroReady) { splashGate.heroIsReady() }
+                }
+            }
+            if showsDiscover {
+                Tab("Discover", systemImage: "sparkles", value: "discover") {
+                    tabStack(discoverZoom) { IOSDiscoverView() }
                 }
             }
             // iPhone flattens sections into the tab bar, so libraries live only in the iPad sidebar.
@@ -153,6 +159,10 @@ struct IOSRootView: View {
         .onChange(of: showsSidebarLibraries) { _, sidebar in
             if sidebar { unfoldLibraryTab() } else { foldSidebarTab() }
         }
+        // Without Plex there is no Discover tab, at launch or after signing out: Home takes its place.
+        .onChange(of: showsDiscover, initial: true) { _, shows in
+            if !shows, selectedTab == "discover" { selectedTab = "home" }
+        }
         .onChange(of: browse.sessionGeneration) {
             librarySelection = nil
             libraryColumn = .sidebar
@@ -185,8 +195,12 @@ struct IOSRootView: View {
     /// Home is on screen: its own tab, or a stored tab this window does not have (a tab from an
     /// older build, or a library not loaded yet), for which the tab view shows its first tab, Home.
     private var showsHome: Bool {
-        selectedTab == "home" || !(["library", "live-tv", "search"] + sidebarTabs).contains(selectedTab)
+        selectedTab == "home" || !(["library", "live-tv", "search"] + (showsDiscover ? ["discover"] : []) + sidebarTabs)
+            .contains(selectedTab)
     }
+
+    /// TMDB's rows, offered with Plex signed in, as on tvOS.
+    private var showsDiscover: Bool { plex.isSignedIn }
 
     /// A sidebar library tab vanishes on a server without that library.
     private func dropOrphanedLibraryTab() {

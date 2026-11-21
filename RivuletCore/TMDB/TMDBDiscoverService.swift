@@ -47,6 +47,11 @@ actor TMDBDiscoverService {
         try? FileManager.default.createDirectory(at: detailCacheDirectory, withIntermediateDirectories: true)
     }
 
+    /// A retry the user asked for asks again at once, without waiting out `listRetryDelay`.
+    func forgetListFailures() {
+        listFailedAt = [:]
+    }
+
     func fetchSection(_ section: TMDBDiscoverSection) async -> [TMDBListItem] {
         // 1) Hot in-memory cache
         if let cached = listCache[section],

@@ -119,10 +119,11 @@ struct IOSPlexCastRow: View {
         }
     }
 
-    /// The person on this title's server, so their page reads the right one.
+    /// The person on this title's server, so their page reads the right one. A catalog title's
+    /// cast stays serverless, so the selected server finds them by name.
     private func owned(_ person: MediaPerson) -> MediaPerson {
         var person = person
-        person.providerID = person.providerID ?? item.ref.providerID
+        if !item.isMetadataOnly { person.providerID = person.providerID ?? item.ref.providerID }
         return person
     }
 

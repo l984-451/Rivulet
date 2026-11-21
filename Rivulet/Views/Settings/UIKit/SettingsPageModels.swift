@@ -214,6 +214,7 @@ enum SettingsContent {
 
     private static func allRows(for page: SettingsPage) -> [SettingsRowItem] {
         switch page {
+        case .seerr:       return seerr
         case .root:        return root
         case .appearance:  return appearance
         case .playback:    return playback
@@ -854,7 +855,9 @@ enum SettingsContent {
                 id: "embyServer", title: "Emby Server",
                 kind: .navigationAction(.emby,
                                         value: { EmbySession.account?.serverName ?? "" },
-                                        prepare: { addSourceDraft = AddSourceDraft() }))
+                                        prepare: { addSourceDraft = AddSourceDraft() })),
+            SettingsRowItem(id: "seerrServer", title: "Seerr",
+                            kind: .navigationValue(.seerr, value: { seerrServerValue }))
         ] + iCloudRows
     }
 

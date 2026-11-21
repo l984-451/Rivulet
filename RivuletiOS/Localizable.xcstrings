@@ -1,6 +1,15 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "%@ (Default)" : {
+
+    },
+    "%@ · 4K" : {
+
+    },
+    "API Key" : {
+
+    },
     "Aspect Ratio" : {
       "localizations" : {
         "de" : {
@@ -22,6 +31,21 @@
           }
         }
       }
+    },
+    "Available" : {
+
+    },
+    "Check Connection" : {
+
+    },
+    "Couldn’t Request" : {
+
+    },
+    "Enter the server address and an API key first." : {
+
+    },
+    "Find the API key in Seerr under Settings > General. Requests are made as Seerr's admin and approved automatically. Restricted profiles can't request." : {
+
     },
     "Leave a Tip" : {
       "localizations" : {
@@ -77,6 +101,9 @@
         }
       }
     },
+    "Partially Available" : {
+
+    },
     "Photos from %@" : {
       "localizations" : {
         "de" : {
@@ -116,7 +143,22 @@
       }
     },
     "Plays surround soundtracks as stereo with the subwoofer channel mixed into left and right, for 2.1 speakers on a stereo connection." : {},
+    "Processing" : {
+
+    },
     "Recording in Progress" : {
+
+    },
+    "Remove Seerr" : {
+
+    },
+    "Request" : {
+
+    },
+    "Request All Seasons" : {
+
+    },
+    "Requested" : {
 
     },
     "Rivulet is free and open source. A tip helps keep it going." : {
@@ -140,6 +182,37 @@
           }
         }
       }
+    },
+    "Search then shows titles you can request, and their pages a Request button." : {
+
+    },
+    "Seerr" : {
+
+    },
+    "Seerr %@, signed in as %@. Search now shows titles you can request." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Seerr %1$@, signed in as %2$@. Search now shows titles you can request."
+          }
+        }
+      }
+    },
+    "Seerr answered with an error (%lld)." : {
+
+    },
+    "Seerr didn’t accept the API key." : {
+
+    },
+    "Seerr Isn’t Set Up" : {
+
+    },
+    "Seerr isn’t set up. Add it in Settings > Servers." : {
+
+    },
+    "Server Address" : {
+
     },
     "Server Can't Play This" : {
       "localizations" : {
@@ -242,6 +315,9 @@
           }
         }
       }
+    },
+    "That address didn’t answer like a Seerr server." : {
+
     },
     "The App Store couldn't be reached. Try again later." : {
       "localizations" : {
@@ -572,6 +648,9 @@
           }
         }
       }
+    },
+    "Unavailable" : {
+
     },
     "Unfavorite" : {
       "localizations" : {

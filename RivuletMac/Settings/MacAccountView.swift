@@ -16,6 +16,7 @@ struct MacAccountView: View {
     @State private var showingServers = false
     @State private var confirmingSignOut = false
     @State private var signInServer: OtherServerKind?
+    @State private var showingSeerr = false
     /// Bumped when a server sheet closes, so the rows re-read their stored accounts.
     @State private var serverRevision = 0
 
@@ -53,6 +54,7 @@ struct MacAccountView: View {
         .sheet(isPresented: $showingProfiles) { MacProfilePickerSheet() }
         .sheet(isPresented: $showingServers) { MacPlexServerPicker() }
         .sheet(item: $signInServer, onDismiss: { serverRevision += 1 }) { MacServerSignInSheet(server: $0) }
+        .sheet(isPresented: $showingSeerr, onDismiss: { serverRevision += 1 }) { MacSeerrSettingsSheet() }
         .onAppear { serverRevision += 1 }
         .toolbar {
             if showsDone { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
@@ -94,6 +96,9 @@ struct MacAccountView: View {
                 LabeledContent("\(server.kind.displayName) Server") {
                     Button(server.account()?.name ?? String(localized: "Sign In…")) { signInServer = server }
                 }
+            }
+            LabeledContent("Seerr") {
+                Button(SeerrSettings.isConfigured ? SeerrSettings.displayHost : String(localized: "Set Up…")) { showingSeerr = true }
             }
         }
     }

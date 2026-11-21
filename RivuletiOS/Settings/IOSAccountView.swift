@@ -180,6 +180,15 @@ struct IOSAccountView: View {
                     }
                 }
             }
+            NavigationLink {
+                IOSSeerrSettingsView()
+            } label: {
+                LabeledContent {
+                    Text(verbatim: SeerrSettings.isConfigured ? SeerrSettings.displayHost : "")
+                } label: {
+                    Label("Seerr", systemImage: "tray.and.arrow.down")
+                }
+            }
         }
     }
 

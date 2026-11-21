@@ -260,6 +260,26 @@ enum SettingsDescriptorStore {
             icon: "hifispeaker.2",
             description: "Keeps the height channels of object-based soundtracks, lossless over HDMI. Some soundtracks need 7.1.4 or 9.1.6."
         ),
+        "seerrServer": SettingDescriptor(
+            icon: "tray.and.arrow.down",
+            description: "Request movies and shows through your Seerr server. Search then shows a Request row for titles you don't have, and their detail pages a Request button."
+        ),
+        "seerrAddress": SettingDescriptor(
+            icon: "tray.and.arrow.down",
+            description: "Seerr's address, such as 192.168.1.10:5055 or https://seerr.example.com."
+        ),
+        "seerrAPIKey": SettingDescriptor(
+            icon: "tray.and.arrow.down",
+            description: "Find the API key in Seerr under Settings > General. Requests are made as Seerr's admin and approved automatically. Restricted profiles can't request."
+        ),
+        "seerrCheck": SettingDescriptor(
+            icon: "tray.and.arrow.down",
+            description: "Checks the address and the API key."
+        ),
+        "seerrRemove": SettingDescriptor(
+            icon: "tray.and.arrow.down",
+            description: "Forgets the address and API key on this Apple TV."
+        ),
         "upscaleLowResolution": SettingDescriptor(
             icon: "sparkles.tv",
             description: "Sharpens SD and 720p video with Apple's machine learning upscaler. Uses more power, and stops if the Apple TV can't keep up. HDR, Dolby Vision and Live TV are not changed."
@@ -675,6 +695,7 @@ enum SettingsDescriptorStore {
     /// call `UIColor(_:)`. These are the same system colors either way.
     static func pageInfo(for page: SettingsPage) -> (icon: String, color: UIColor) {
         switch page {
+        case .seerr: return ("tray.and.arrow.down.fill", .systemIndigo)
         case .root: return ("gearshape.fill", .systemGray)
         case .appearance: return ("paintbrush.fill", .systemPurple)
         case .playback: return ("play.fill", .systemBlue)

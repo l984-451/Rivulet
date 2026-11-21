@@ -84,7 +84,8 @@ struct IOSPlexDetailView: View {
         } else if let summary = shown.overview, !summary.isEmpty {
             summaryView(summary).padding(.horizontal, leading)
         }
-        if isSeries {
+        // A title not in the library has no seasons to browse; Request lists them.
+        if isSeries, !shown.isMetadataOnly {
             episodesSection(leading: leading)
         }
         IOSPlexExtrasRow(detail: detail?.adding(extras: seasonExtras))
@@ -192,6 +193,7 @@ struct IOSPlexDetailView: View {
     // MARK: - Loading
 
     private func load() async {
+        if item.isMetadataOnly { return await loadCatalogTitle() }
         do {
             let provider = try browse.provider(for: item.ref)
             let loaded = try await provider.fullDetail(for: item.ref)
@@ -212,6 +214,22 @@ struct IOSPlexDetailView: View {
             if related.isEmpty, loaded.item.kind == .movie || loaded.item.kind == .show {
                 related = (try? await provider.moreLikeThis(for: loaded.item.ref, kind: loaded.item.kind)) ?? []
             }
+        } catch let error where isCancellationError(error) {
+            return
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// A title not in the library (a Seerr result, a Discover pick) has no server: its page reads
+    /// the catalog's detail (Plex Discover, then Seerr, then TMDB) and its recommendations.
+    private func loadCatalogTitle() async {
+        guard let source = MetadataSourceRegistry.shared.source(for: item.ref.providerID) else { return }
+        do {
+            detail = try await source.itemDetail(item.ref)
+            error = nil
+            loadedRevision = browse.watchStateRevision
+            if related.isEmpty { related = await SeerrCatalog.related(to: item) }
         } catch let error where isCancellationError(error) {
             return
         } catch {
@@ -279,6 +297,8 @@ private struct IOSPlexDetailHeader: View {
     @State private var onList: Bool?
     @State private var onScreen = false
     @State private var inView = true
+    /// Seerr's state for a title not in the library; nil otherwise or when Seerr is off.
+    @State private var request: SeerrRequestModel?
 
     private var isWide: Bool { size.width > size.height }
 
@@ -385,6 +405,8 @@ private struct IOSPlexDetailHeader: View {
         return layout {
             // Play shows only where `IOSPlaybackGate` allows it.
             if canPlay { playButton.layoutPriority(1) }
+            // A title not in the library: Request in Play's place.
+            if let request { IOSSeerrRequestButton(model: request).layoutPriority(1) }
             HStack(spacing: 12) {
                 if canPlay, item.kind == .show {
                     Button { actions.shuffleShow(item) } label: {
@@ -419,20 +441,28 @@ private struct IOSPlexDetailHeader: View {
                 if item.isPlayable, canDownload {
                     IOSDownloadButton(item: item)
                 }
-                Menu {
-                    // No Delete: the page would be left showing what it deleted.
-                    IOSPlexItemMenu(item: item, showsPlay: false, showsWatchlist: false, showsFavorite: false, showsDelete: false)
-                } label: {
-                    Image(systemName: "ellipsis").frame(width: 22, height: 22)
+                // A title not in the library has no server for More's actions.
+                if !item.isMetadataOnly {
+                    Menu {
+                        // No Delete: the page would be left showing what it deleted.
+                        IOSPlexItemMenu(item: item, showsPlay: false, showsWatchlist: false, showsFavorite: false, showsDelete: false)
+                    } label: {
+                        Image(systemName: "ellipsis").frame(width: 22, height: 22)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .accessibilityLabel("More")
                 }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .accessibilityLabel("More")
             }
         }
         .frame(maxWidth: 480)
         .controlSize(.large)
         .task(id: item.ref) { await loadWatchlistState() }
+        .task(id: item.ref) {
+            guard let model = SeerrRequestModel(item: item) else { request = nil; return }
+            request = model
+            await model.load()
+        }
         .onReceive(PlexWatchlistService.shared.$watchlistItems.dropFirst()) { _ in
             Task { await loadWatchlistState() }
         }

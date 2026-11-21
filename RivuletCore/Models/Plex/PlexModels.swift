@@ -243,6 +243,29 @@ nonisolated struct PlexMediaContainerWrapper: Codable, Sendable {
     var MediaContainer: PlexMediaContainer
 }
 
+extension PlexMediaContainer {
+    /// A server sends `librarySectionID` as a number. Plex Discover (metadata.provider.plex.tv)
+    /// sends the section's type there instead ("movie"), which names no section here; reading it
+    /// strictly rejected the whole answer.
+    nonisolated init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        size = try c.decodeIfPresent(Int.self, forKey: .size)
+        totalSize = try c.decodeIfPresent(Int.self, forKey: .totalSize)
+        librarySectionID = c.lenientInt(forKey: .librarySectionID)
+        librarySectionTitle = try c.decodeIfPresent(String.self, forKey: .librarySectionTitle)
+        Metadata = try c.decodeIfPresent([PlexMetadata].self, forKey: .Metadata)
+        Hub = try c.decodeIfPresent([PlexHub].self, forKey: .Hub)
+    }
+}
+
+extension KeyedDecodingContainer {
+    /// A number sent as a number or as numeric text; anything else reads as absent.
+    nonisolated func lenientInt(forKey key: Key) -> Int? {
+        if let value = try? decodeIfPresent(Int.self, forKey: key) { return value }
+        return (try? decodeIfPresent(String.self, forKey: key)).flatMap { $0.flatMap(Int.init) }
+    }
+}
+
 /// Container for extras API response
 nonisolated struct PlexExtrasMediaContainer: Codable, Sendable {
     var size: Int?

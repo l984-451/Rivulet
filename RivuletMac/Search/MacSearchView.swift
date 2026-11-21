@@ -35,6 +35,8 @@ struct MacSearchView: View {
     @State private var query = ""
     @State private var scope = Scope.all
     @State private var results = SearchHits()
+    /// Seerr's results: titles to request, minus what is already available.
+    @State private var requestable: [SeerrTitle] = []
     @State private var isSearching = false
     @State private var error: String?
     @FocusState private var fieldFocused: Bool
@@ -61,7 +63,7 @@ struct MacSearchView: View {
             recentSearches
         } else if let error {
             MacErrorView(title: "Couldn’t Search", message: error) { await search() }
-        } else if groups.isEmpty {
+        } else if groups.isEmpty, shownRequestable.isEmpty {
             if isSearching {
                 ProgressView()
             } else {
@@ -81,6 +83,14 @@ struct MacSearchView: View {
                             }
                             .buttonStyle(.plain)
                             .listRowSeparator(.visible)
+                        }
+                    }
+                }
+                if !shownRequestable.isEmpty {
+                    Section("Request") {
+                        ForEach(shownRequestable) { title in
+                            MacTileButton(item: title.mediaItem) { MacSeerrSearchRow(title: title) }
+                                .listRowSeparator(.visible)
                         }
                     }
                 }
@@ -127,6 +137,15 @@ struct MacSearchView: View {
 
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
 
+    /// Seerr's results in the chosen scope.
+    private var shownRequestable: [SeerrTitle] {
+        switch scope {
+        case .all: requestable
+        case .movies: requestable.filter { $0.kind == .movie }
+        case .shows: requestable.filter { $0.kind == .tv }
+        }
+    }
+
     private var recents: [String] { recentsRaw.split(separator: "\n").map(String.init) }
 
     /// By kind; with several servers, each server's own, under its name.
@@ -161,12 +180,14 @@ struct MacSearchView: View {
         error = nil
         guard !value.isEmpty, browse.hasServers else {
             results = SearchHits()
+            requestable = []
             isSearching = false
             return
         }
         isSearching = true
         try? await Task.sleep(for: .milliseconds(300))
         guard !Task.isCancelled else { return }
+        async let seerr = SeerrCatalog.search(value)
         do {
             results = try await SearchResults.search(value, providers: browse.searchProviders)
         } catch {
@@ -174,6 +195,9 @@ struct MacSearchView: View {
             if Task.isCancelled || isCancellationError(error) { return }
             self.error = error.localizedDescription
         }
+        // Seerr answers on its own time; its section joins the results when it does.
+        let found = await seerr
+        if !Task.isCancelled { requestable = found }
         isSearching = false
     }
 }

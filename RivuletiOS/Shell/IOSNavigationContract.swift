@@ -101,6 +101,7 @@ private struct IOSPlexDestinations: ViewModifier {
         if let namespace {
             IOSPlexDetailView(item: item)
                 .iosPlexActionHost()
+                .background { IOSZoomMorphTrimmer() }
                 .navigationTransition(.zoom(sourceID: sourceID, in: namespace))
         } else {
             IOSPlexDetailView(item: item).iosPlexActionHost()

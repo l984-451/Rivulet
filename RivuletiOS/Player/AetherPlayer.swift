@@ -324,7 +324,6 @@ final class AetherPlayer: ObservableObject {
             .sink { [weak self] cues in
                 guard let self else { return }
                 // The engine's cue type cannot be named here (module and class share a name).
-                let isDVB = self.activeSubtitleIsDVB
                 self.subtitleCues = cues.map { cue in
                     let body: SubtitleCue.Body
                     switch cue.body {
@@ -347,9 +346,6 @@ final class AetherPlayer: ObservableObject {
                             )
                         })
                     case .image(let image):
-                        if isDVB {
-                            ReleaseFixChecks.dvbSubtitle(position: image.position, canvas: image.canvasSize, video: self.videoSize)
-                        }
                         body = .image(UIImage(cgImage: image.cgImage), image.position)
                     }
                     return SubtitleCue(
@@ -362,8 +358,6 @@ final class AetherPlayer: ObservableObject {
                 }
             }
             .store(in: &cancellables)
-
-        observeReleaseFixChecks()
 
         engine.$currentAVPlayer
             .receive(on: DispatchQueue.main)
@@ -1527,27 +1521,5 @@ private extension PlaybackPhase {
         case .rebuffering: .rebuffering
         default: .loading
         }
-    }
-}
-
-// MARK: - Release fix checks (temporary: delete with ReleaseFixChecks)
-
-extension AetherPlayer {
-    var activeSubtitleIsDVB: Bool {
-        engine.subtitleTracks.first { $0.id == engine.activeSubtitleTrackIndex }?.codec == "dvb_subtitle"
-    }
-
-    func observeReleaseFixChecks() {
-        EngineLog.structuredHandler = { @Sendable line, _, _ in ReleaseFixChecks.engineLine(line) }
-        engine.$audioShapingState
-            .removeDuplicates()
-            .filter { $0 != .off }
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] state in
-                guard let self else { return }
-                let track = self.engine.audioTracks.first { $0.id == self.engine.activeAudioTrackIndex }
-                ReleaseFixChecks.audioShaping(state: state.rawValue, codec: track?.codec, channels: track?.channels)
-            }
-            .store(in: &cancellables)
     }
 }

@@ -627,8 +627,8 @@ final class LiveMultiviewViewController: UIViewController {
             }
         }
         let header = TileMenuHeader(
-            title: slot.currentProgram?.title ?? slot.channel.name,
-            detail: [slot.channel.channelNumber.map(String.init), slot.channel.name]
+            title: slot.currentProgram?.title ?? slot.channel.displayName,
+            detail: [slot.channel.displayNumber.map(String.init), slot.channel.displayName]
                 .compactMap { $0 }
                 .joined(separator: " · ")
         )
@@ -1369,7 +1369,7 @@ final class LiveMultiviewTileView: UIView {
             slot.aetherPlayer.bind(surface: surface)
             boundPlayer = slot.aetherPlayer
         }
-        captionLabel.text = [slot.channel.channelNumber.map(String.init), slot.channel.name]
+        captionLabel.text = [slot.channel.displayNumber.map(String.init), slot.channel.displayName]
             .compactMap { $0 }
             .joined(separator: " · ")
         // A failure still being retried shows the spinner; only a tile that

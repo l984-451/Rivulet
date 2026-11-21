@@ -94,7 +94,7 @@ final class LiveMiniPlayerView: UIView {
             session.player.bind(surface: surface)
             boundPlayer = session.player
         }
-        channelLabel.text = [session.channel.channelNumber.map(String.init), session.channel.name]
+        channelLabel.text = [session.channel.displayNumber.map(String.init), session.channel.displayName]
             .compactMap { $0 }
             .joined(separator: " · ")
     }

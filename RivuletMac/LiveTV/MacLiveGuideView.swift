@@ -331,7 +331,7 @@ private struct MacLiveGuideBlock: View {
     }
 
     private var helpText: String {
-        guard let program else { return channel.name }
+        guard let program else { return channel.displayName }
         return [program.displayTitle, program.timeRange].joined(separator: "\n")
     }
 
@@ -355,9 +355,9 @@ private struct MacLiveGuideChannelCell: View {
                 if channel.logoURL != nil {
                     MacLiveLogo(url: channel.logoURL).frame(maxHeight: 22)
                 } else {
-                    Text(channel.name).font(.caption.weight(.semibold)).lineLimit(2).multilineTextAlignment(.center)
+                    Text(channel.displayName).font(.caption.weight(.semibold)).lineLimit(2).multilineTextAlignment(.center)
                 }
-                if let number = channel.channelNumber {
+                if let number = channel.displayNumber {
                     Text(String(number)).font(.caption2.weight(.medium)).foregroundStyle(.secondary)
                 }
             }
@@ -377,8 +377,8 @@ private struct MacLiveGuideChannelCell: View {
         .contextMenu {
             MacLiveMenuContent(sections: actions.menu(channel, nil))
         }
-        .help(channel.numberAndName)
-        .accessibilityLabel(channel.numberAndName)
+        .help(channel.displayNumberAndName)
+        .accessibilityLabel(channel.displayNumberAndName)
         .accessibilityValue(nowTitle ?? "")
         .accessibilityHint(String(localized: "Plays the channel"))
     }

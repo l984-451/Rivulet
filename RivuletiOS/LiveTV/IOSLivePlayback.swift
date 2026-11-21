@@ -25,6 +25,7 @@ final class IOSLivePlayback: ObservableObject, IOSPlaybackSession {
     private var loadTask: Task<Void, Never>?
     private var watchTask: Task<Void, Never>?
     private var rolloverTask: Task<Void, Never>?
+    private var cancellables = Set<AnyCancellable>()
     private var shownProgramId: String?
 
     /// Skips stack here and land as one seek once the taps settle: AVPlayer
@@ -47,6 +48,19 @@ final class IOSLivePlayback: ObservableObject, IOSPlaybackSession {
             isUserPaused: { [weak player] in player?.state == .paused }
         ))
         windowSeeker.onChange = { [weak self] in self?.objectWillChange.send() }
+        // The channel's picture and sound, for the channel lists (`LiveStreamQualityStore`), once it
+        // plays: a switch clears the size, so the old channel's sound never lands on the new one.
+        // Playing is an input too: tracks that settled before it must still be noted.
+        Publishers.CombineLatest4(player.$videoSize, player.$audioTracks, player.$currentAudioTrackId, player.$state)
+            .debounce(for: .seconds(2), scheduler: DispatchQueue.main)
+            .sink { [weak self] size, audio, audioId, state in
+                guard let self, state == .playing, size.height > 0 || !audio.isEmpty else { return }
+                let track = audio.first { $0.id == audioId } ?? audio.first { $0.isDefault } ?? audio.first
+                LiveStreamQualityStore.shared.record(channelId: self.channel.id,
+                                                     height: size.height > 0 ? Int(size.height.rounded()) : nil,
+                                                     audioChannels: track?.channels)
+            }
+            .store(in: &cancellables)
     }
 
     /// Where stacked skips will land while they settle, on the session axis.
@@ -85,8 +99,8 @@ final class IOSLivePlayback: ObservableObject, IOSPlaybackSession {
     var nowPlayingItem: IOSNowPlaying.Item {
         let programme = programme
         return IOSNowPlaying.Item(
-            title: programme?.displayTitle ?? channel.name,
-            subtitle: programme == nil ? nil : channel.name,
+            title: programme?.displayTitle ?? channel.displayName,
+            subtitle: programme == nil ? nil : channel.displayName,
             artworkURL: channel.logoURL,
             isLive: true
         )
@@ -209,8 +223,8 @@ private struct IOSLivePlayerScreen: View {
         TimelineView(.periodic(from: .now, by: 15)) { context in
             let programme = programme(at: context.date)
             IOSPlayerChrome(
-                title: programme?.displayTitle ?? session.channel.name,
-                subtitle: session.channel.numberAndName,
+                title: programme?.displayTitle ?? session.channel.displayName,
+                subtitle: session.channel.displayNumberAndName,
                 isPlaying: player.state == .playing,
                 isBusy: session.notice == nil && (player.state == .idle || player.state == .loading || player.isBuffering),
                 timeline: .live(
@@ -260,7 +274,17 @@ private struct IOSLivePlayerScreen: View {
             }
         }
         .sheet(isPresented: $showsChannels) {
-            IOSLiveChannelPicker(current: session.channel) { session.switchChannel(to: $0) }
+            NavigationStack {
+                IOSLiveListView(mode: .picker(current: session.channel)) { session.switchChannel(to: $0) }
+                    .navigationTitle("Channels")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button(role: .confirm) { showsChannels = false }
+                        }
+                    }
+            }
+            .presentationDetents([.medium, .large])
         }
         .sheet(item: $info) { selection in
             IOSLiveProgrammeSheet(selection: selection, onWatch: nil)
@@ -370,78 +394,5 @@ private struct IOSLivePlayerScreen: View {
             .font(.body.weight(.semibold))
             .frame(width: 44, height: 44)
             .glassEffect(.regular.interactive(), in: .circle)
-    }
-}
-
-/// Every channel, favourites first, with what is on now. Picking one switches in place.
-struct IOSLiveChannelPicker: View {
-    let current: UnifiedChannel
-    let onPick: (UnifiedChannel) -> Void
-    @ObservedObject private var store = LiveTVDataStore.shared
-    @Environment(\.dismiss) private var dismiss
-    @State private var query = ""
-
-    var body: some View {
-        NavigationStack {
-            List {
-                let favorites = filtered(store.favorites(in: store.channels))
-                if !favorites.isEmpty {
-                    Section("Favorites") { ForEach(favorites) { row($0) } }
-                }
-                Section(favorites.isEmpty ? "" : "All Channels") {
-                    ForEach(filtered(store.channels)) { row($0) }
-                }
-            }
-            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Channels")
-            .navigationTitle("Channels")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(role: .confirm) { dismiss() }
-                        .keyboardShortcut(.cancelAction)
-                }
-            }
-            .overlay {
-                if !query.isEmpty, filtered(store.channels).isEmpty {
-                    ContentUnavailableView.search(text: query)
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
-    }
-
-    private func filtered(_ channels: [UnifiedChannel]) -> [UnifiedChannel] {
-        guard !query.isEmpty else { return channels }
-        return channels.filter {
-            $0.name.localizedCaseInsensitiveContains(query)
-                || $0.channelNumber.map { String($0).hasPrefix(query) } == true
-                || store.getCurrentProgram(for: $0)?.title.localizedCaseInsensitiveContains(query) == true
-        }
-    }
-
-    private func row(_ channel: UnifiedChannel) -> some View {
-        Button {
-            onPick(channel)
-            dismiss()
-        } label: {
-            HStack(spacing: 12) {
-                IOSLiveLogo(url: channel.logoURL)
-                    .frame(width: 52, height: 32)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(channel.numberAndName).foregroundStyle(.primary)
-                    if let programme = store.getCurrentProgram(for: channel) {
-                        Text(programme.displayTitle)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .lineLimit(1)
-                Spacer(minLength: 0)
-                if channel.id == current.id {
-                    Image(systemName: "checkmark").foregroundStyle(.tint).accessibilityHidden(true)
-                }
-            }
-        }
-        .accessibilityAddTraits(channel.id == current.id ? .isSelected : [])
     }
 }

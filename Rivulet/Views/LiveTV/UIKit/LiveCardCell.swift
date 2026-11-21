@@ -205,16 +205,20 @@ final class LiveCardCell: UICollectionViewCell {
         // Text
         switch item.kind {
         case .channel:
-            titleLabel.text = program?.displayTitle ?? channel?.name ?? String(localized: "Live")
-            detailLabel.text = [channel?.channelNumber.map(String.init), channel?.name]
-                .compactMap { $0 }
-                .joined(separator: " · ")
+            titleLabel.text = program?.displayTitle ?? channel?.displayName ?? String(localized: "Live")
+            // With no guide data the title is already the channel: the line under it
+            // names its category rather than repeating it.
+            detailLabel.text = program == nil
+                ? channel.flatMap { LiveGroupOrder.trimmed($0.groupTitle) }.map(LiveGroupDisplay.name)
+                : [channel?.displayNumber.map(String.init), channel?.displayName]
+                    .compactMap { $0 }
+                    .joined(separator: " · ")
             // On now and set to record means it is recording. LIVE is for
             // live airings only, never replays.
             setPill(item.setToRecord ? String(localized: "● REC") : program?.isLiveAiring == true ? String(localized: "▶ LIVE") : nil, color: .systemRed)
         case .upcoming:
             titleLabel.text = program?.displayTitle ?? String(localized: "Upcoming")
-            detailLabel.text = channel?.name
+            detailLabel.text = channel?.displayName
             setPill(program.map { LiveCardItem.startLabel($0, now: now) }, color: UIColor.white.withAlphaComponent(0.25),
                     recordDot: item.setToRecord)
         case .recording:

@@ -14,6 +14,10 @@ struct MacLiveTVView: View {
     @State private var selection: LiveProgrammeSelection?
     @State private var pendingPlay: UnifiedChannel?
     @State private var jumpToken = 0
+    /// The smart list editor: nil closed, "" a new list, else the list's id.
+    @State private var editingSmartList: String?
+    @State private var deletingList: LiveChannelList?
+    @ObservedObject private var channelLists = LiveChannelListStore.shared
     @State private var dismissedIssues = ""
     @EnvironmentObject private var playback: MacPlaybackController
 
@@ -27,6 +31,24 @@ struct MacLiveTVView: View {
             .navigationTitle("Live TV")
             .toolbar { toolbar }
             .macPageRefresh { Task { await reloadEverything() } }
+            .confirmationDialog(
+                deletingList.map { String(localized: "Delete \u{201C}\($0.name)\u{201D}?") } ?? "",
+                isPresented: Binding(get: { deletingList != nil }, set: { if !$0 { deletingList = nil } }),
+                titleVisibility: .visible,
+                presenting: deletingList
+            ) { list in
+                Button("Delete", role: .destructive) {
+                    channelLists.delete(list.id)
+                    guideFilter = ""
+                }
+            } message: { _ in
+                Text("Its channels stay where they are.")
+            }
+            .sheet(isPresented: Binding(get: { editingSmartList != nil }, set: { if !$0 { editingSmartList = nil } })) {
+                MacLiveSmartListEditor(listId: editingSmartList.flatMap { $0.isEmpty ? nil : $0 }) { id in
+                    guideFilter = id.map { LiveChannelList.filterPrefix + $0 } ?? ""
+                }
+            }
             .sheet(item: $selection, onDismiss: playPending) { selection in
                 MacLiveProgrammeSheet(selection: selection) { pendingPlay = $0 }
             }
@@ -74,6 +96,14 @@ struct MacLiveTVView: View {
                     banner
                     guide
                 }
+            case .list:
+                VStack(spacing: 0) {
+                    banner
+                    MacLiveListView(mode: .page, onPick: play, menu: { channel in
+                        LiveMenu.sections(channel: channel, program: store.getCurrentProgram(for: channel),
+                                          recorder: recorder, watch: play, details: { selection = $0 })
+                    }, canProbe: { playback.session == nil })
+                }
             }
         }
     }
@@ -107,6 +137,10 @@ struct MacLiveTVView: View {
         if guideFilter == Self.favoritesFilter {
             let favorites = store.favorites(in: store.channels)
             return favorites.isEmpty ? store.channels : favorites
+        }
+        if let list = LiveChannelList.forFilter(guideFilter, store: channelLists) {
+            let channels = list.channels(in: store.channels, epg: store.epg, versions: store.lineupVersions)
+            return channels.isEmpty ? store.channels : channels
         }
         guard !guideFilter.isEmpty else { return store.channels }
         let matching = store.channels.filter {
@@ -155,9 +189,31 @@ struct MacLiveTVView: View {
                 if hasFavorites {
                     Label("Favorites", systemImage: "star").tag(Self.favoritesFilter)
                 }
-                ForEach(groups, id: \.self) { Text($0).tag($0) }
+                ForEach(channelLists.lists) { list in
+                    Label { Text(verbatim: list.name) } icon: {
+                        Image(systemName: list.isSmart ? "gearshape.2" : "list.bullet")
+                    }
+                    .tag(list.filterTag)
+                }
+                let names = LiveGroupDisplay.names(groups)
+                ForEach(groups, id: \.self) { Text(verbatim: names[$0] ?? $0).tag($0) }
             }
             .pickerStyle(.inline)
+            Divider()
+            Button { editingSmartList = "" } label: { Label("New Smart List…", systemImage: "plus") }
+            if let list = LiveChannelList.forFilter(guideFilter, store: channelLists), list.isSmart {
+                Button { editingSmartList = list.id } label: {
+                    Label("Edit \u{201C}\(list.name)\u{201D}…", systemImage: "pencil")
+                }
+            }
+            if let list = LiveChannelList.forFilter(guideFilter, store: channelLists), !list.isSmart {
+                Button { recorder.askRename(list) } label: {
+                    Label("Rename \u{201C}\(list.name)\u{201D}…", systemImage: "pencil")
+                }
+                Button(role: .destructive) { deletingList = list } label: {
+                    Label("Delete \u{201C}\(list.name)\u{201D}…", systemImage: "trash")
+                }
+            }
         } label: {
             Label("Filter", systemImage: active
                   ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")

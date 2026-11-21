@@ -19,12 +19,25 @@ class LiveTVDataStore: ObservableObject {
     // MARK: - Published State
 
     /// All channels from all sources, merged and sorted
-    @Published var channels: [UnifiedChannel] = []
+    @Published var channels: [UnifiedChannel] = [] {
+        didSet { channelsVersion &+= 1 }
+    }
 
     /// Current EPG data (channelId -> programs)
     @Published var epg: [String: [UnifiedProgram]] = [:] {
-        didSet { rememberEventSlots() }
+        didSet {
+            epgVersion &+= 1
+            rememberEventSlots()
+        }
     }
+
+    /// Bumped on every change to `channels` and `epg`: what derived work (smart-list
+    /// matches) is keyed by, rather than the arrays' shape.
+    private(set) var channelsVersion = 0
+    private(set) var epgVersion = 0
+
+    /// Both versions, for `LiveSmartRules`.
+    var lineupVersions: LiveSmartRules.Versions { .init(channels: channelsVersion, epg: epgVersion) }
 
     /// Channels whose guide has carried an event slot (a pregame block or "No
     /// game scheduled"), so a guide gap on one means no game is on. Kept
@@ -405,6 +418,7 @@ class LiveTVDataStore: ObservableObject {
         let key = account.server.absoluteString.lowercased() + "\n" + (account.username ?? "")
         return "tvheadend:" + SHA256.hash(data: Data(key.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined()
     }
+
 
     /// From a hash of the server and username, so neither ends up in channel ids.
     static func xtreamSourceId(for account: XtreamAccount) -> String {
@@ -1651,17 +1665,25 @@ class LiveTVDataStore: ObservableObject {
     // MARK: - Recently watched
 
     /// `channel` started playing, full screen or in multiview: it heads
-    /// Recently Watched now, and For You learns from it once it has played a
-    /// minute, so channel surfing teaches nothing. Cancel the returned task
-    /// when it stops playing.
-    func beganWatching(_ channel: UnifiedChannel) -> Task<Void, Never> {
-        noteWatched(channel)
-        return Task { [weak self] in
-            try? await Task.sleep(for: .seconds(60))
+    /// Recently Watched once it has played 50 seconds, and For You learns from
+    /// it after a minute, so channel surfing neither fills the list nor teaches
+    /// anything. Cancel the returned task when it stops playing.
+    func beganWatching(_ channel: UnifiedChannel, recentAfter: Duration = recentlyWatchedAfter,
+                       learnAfter: Duration = .seconds(60)) -> Task<Void, Never> {
+        Task { [weak self] in
+            // Recently Watched holds what was watched, not every channel zapped past.
+            try? await Task.sleep(for: recentAfter)
+            guard !Task.isCancelled else { return }
+            self?.noteWatched(channel)
+            try? await Task.sleep(for: learnAfter - recentAfter)
             guard !Task.isCancelled else { return }
             self?.recordViewing(channel)
         }
     }
+
+    /// How long a channel plays before it joins Recently Watched. The players cancel the
+    /// returned task when the viewer switches or stops, so a shorter look never counts.
+    static let recentlyWatchedAfter: Duration = .seconds(50)
 
     private func noteWatched(_ channel: UnifiedChannel) {
         var ids = recentChannelIds.filter { $0 != channel.id }

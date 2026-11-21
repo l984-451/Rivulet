@@ -26,4 +26,15 @@ final class GuideCategoryTabsTests: XCTestCase {
         XCTAssertEqual(GuideLayoutView.tabTitles(groups: ["Favorites", "A"], sourceNames: [], hasFavorites: false),
                        ["Favorites", "A"])
     }
+
+    func test_ownListsAndPinnedGroups_leadAfterFavorites() {
+        XCTAssertEqual(
+            GuideLayoutView.tabTitles(groups: ["News", "Sport", "Kids"], sourceNames: ["Locals"], hasFavorites: true,
+                                      lists: ["Evening"], pinnedGroups: ["Kids", "Gone"]),
+            ["Favorites", "Evening", "Kids", "Locals", "News", "Sport"])
+        // A list wins a name it shares with a group: one tab.
+        XCTAssertEqual(
+            GuideLayoutView.tabTitles(groups: ["Sport"], sourceNames: [], hasFavorites: false, lists: ["Sport"]),
+            ["Sport"])
+    }
 }

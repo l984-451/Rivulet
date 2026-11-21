@@ -96,6 +96,15 @@ private struct IOSLiveRecorderPresenter: ViewModifier {
             } message: { failure in
                 Text(failure.message)
             }
+            .alert(
+                recorder.naming?.title ?? "",
+                isPresented: Binding(get: { recorder.naming != nil }, set: { if !$0 { recorder.naming = nil } })
+            ) {
+                TextField("List Name", text: $recorder.namingText)
+                Button("Cancel", role: .cancel) {}
+                Button("Save") { recorder.commitName() }
+                    .disabled(recorder.namingText.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
     }
 }
 
@@ -104,14 +113,20 @@ private struct IOSLiveRecorderPresenter: ViewModifier {
 extension LiveMenu {
     static func uiMenu(_ sections: [[LiveMenuAction]]) -> UIMenu {
         UIMenu(children: sections.map { group in
-            UIMenu(options: .displayInline, children: group.map { action in
-                UIAction(
-                    title: action.title,
-                    image: UIImage(systemName: action.systemImage),
-                    attributes: action.isDestructive ? .destructive : []
-                ) { _ in action.perform() }
-            })
+            UIMenu(options: .displayInline, children: group.map(element))
         })
+    }
+
+    private static func element(_ action: LiveMenuAction) -> UIMenuElement {
+        if !action.children.isEmpty {
+            return UIMenu(title: action.title, image: UIImage(systemName: action.systemImage),
+                          children: action.children.map(element))
+        }
+        return UIAction(
+            title: action.title,
+            image: UIImage(systemName: action.systemImage),
+            attributes: action.isDestructive ? .destructive : []
+        ) { _ in action.perform() }
     }
 }
 
@@ -123,8 +138,18 @@ struct IOSLiveMenuContent: View {
         ForEach(sections.indices, id: \.self) { index in
             Section {
                 ForEach(sections[index]) { action in
-                    Button(role: action.isDestructive ? .destructive : nil, action: action.perform) {
-                        Label(action.title, systemImage: action.systemImage)
+                    if action.children.isEmpty {
+                        Button(role: action.isDestructive ? .destructive : nil, action: action.perform) {
+                            Label(action.title, systemImage: action.systemImage)
+                        }
+                    } else {
+                        Menu {
+                            ForEach(action.children) { child in
+                                Button(action: child.perform) { Label(child.title, systemImage: child.systemImage) }
+                            }
+                        } label: {
+                            Label(action.title, systemImage: action.systemImage)
+                        }
                     }
                 }
             }

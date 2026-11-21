@@ -109,6 +109,9 @@ struct EPGGuide: UIViewRepresentable {
     /// The channel still playing in the corner, and what Select on it does.
     var miniSession: LiveTVSessionHandoff? = nil
     var onMiniPlayerSelect: (() -> Void)? = nil
+    /// Set when the guide was opened from the List layout: Left from a row's
+    /// first programme, and Menu, leave the guide through it.
+    var onExit: (() -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -172,11 +175,13 @@ struct EPGGuide: UIViewRepresentable {
             actionTitle: categoryActionTitle,
             onAction: onCategoryAction)
         container.setTransparent(transparent)
+        container.onExit = onExit
         return container
     }
 
     func updateUIView(_ uiView: EPGContainerView, context: Context) {
         context.coordinator.parent = self
+        uiView.onExit = onExit
         guard let cv = context.coordinator.collectionView,
               let layout = cv.collectionViewLayout as? EPGLayout else { return }
         uiView.configureCategories(
@@ -447,6 +452,8 @@ struct EPGGuide: UIViewRepresentable {
             // A plain no-op. Only `.left` headings reach here, so Up, Down and
             // Right at this same cell are untouched, and Menu is not a focus
             // heading at all and still escapes to the sidebar as usual.
+            // Opened from the List, this Left goes back to it instead.
+            if parent.onExit != nil { (collectionView.superview as? EPGContainerView)?.exitToList() }
             return false
         }
 
@@ -638,7 +645,16 @@ struct EPGGuide: UIViewRepresentable {
         /// Scroll `channelId`'s row into view at the live edge of the timeline
         /// and put focus on its programme airing now. Used when the player
         /// closes, so the guide comes back on the channel that was playing.
-        func focusLiveProgramme(channelId: String) {
+        func focusLiveProgramme(channelId: String, attempt: Int = 0) {
+            // Requested as the guide appears (opened from the List): wait for
+            // its first layout, or there is no cell to focus yet.
+            if let cv = collectionView, cv.window == nil || cv.bounds.isEmpty || sections.isEmpty {
+                guard attempt < 20 else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                    self?.focusLiveProgramme(channelId: channelId, attempt: attempt + 1)
+                }
+                return
+            }
             guard let cv = collectionView,
                   let layout = cv.collectionViewLayout as? EPGLayout,
                   let section = sections.firstIndex(where: { $0.id == channelId }),
@@ -656,6 +672,17 @@ struct EPGGuide: UIViewRepresentable {
             lockedX = -EPGTheme.channelColumnWidth
             cv.setContentOffset(CGPoint(x: lockedX, y: targetY), animated: false)
             cv.layoutIfNeeded()
+            if parent.onExit != nil, let container = cv.superview as? EPGContainerView,
+               cv.cellForItem(at: IndexPath(item: item, section: section)) != nil {
+                // The channel, not its cell: a reload before focus arrives reuses cells, and a
+                // held cell would by then show another channel's programme.
+                container.initialFocusResolver = { [weak self, weak cv] in
+                    guard let self, let cv,
+                          let section = self.sections.firstIndex(where: { $0.id == channelId }),
+                          let item = self.liveItem(inSection: section) else { return nil }
+                    return cv.cellForItem(at: IndexPath(item: item, section: section))
+                }
+            }
             requestFocus(IndexPath(item: item, section: section))
         }
 
@@ -704,6 +731,30 @@ final class EPGContainerView: UIView {
     private let timeFade = CAGradientLayer()
     private let bottomFade = CAGradientLayer()
     private let rightFade = CAGradientLayer()
+    /// Opened from the List layout: Left out of the guide and Menu leave
+    /// through this.
+    var onExit: (() -> Void)?
+    private var isExiting = false
+
+    /// Leaves for the List once, however many moves ask for it on the way.
+    func exitToList() {
+        guard let onExit, !isExiting else { return }
+        isExiting = true
+        DispatchQueue.main.async(execute: onExit)
+    }
+
+    /// Opened from the List, any Left that would leave the guide (from the
+    /// grid, the pills or the corner player) goes back to it, never to the
+    /// shell's edge and the sidebar.
+    override func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool {
+        if onExit != nil, context.focusHeading.contains(.left),
+           (context.previouslyFocusedItem as? UIView)?.isDescendant(of: self) == true,
+           (context.nextFocusedItem as? UIView)?.isDescendant(of: self) != true {
+            exitToList()
+            return false
+        }
+        return super.shouldUpdateFocus(in: context)
+    }
     /// The grid starts this far below the top, so the info bar above it can never
     /// obscure a focused cell.
     var contentTopInset: CGFloat = 0 { didSet { setNeedsLayout() } }
@@ -809,6 +860,24 @@ final class EPGContainerView: UIView {
     /// programme focused before it.
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
         super.didUpdateFocus(in: context, with: coordinator)
+        if context.nextFocusedView === initialFocusTarget {
+            initialFocusTarget = nil
+        } else if initialFocusResolver != nil, initialFocusTarget == nil,
+                  let next = context.nextFocusedView, let grid = collectionView, next.isDescendant(of: grid) {
+            // The channel's row has no cell and the viewer is already among the programmes:
+            // the first entry is over, so a later move must not be pulled back to that channel.
+            initialFocusResolver = nil
+        } else if let target = initialFocusTarget, let next = context.nextFocusedView, next.isDescendant(of: self) {
+            // Focus came in elsewhere (the pills): on to the channel's programme.
+            initialFocusTarget = nil
+            DispatchQueue.main.async { [weak self, weak target] in
+                guard let self, let target, target.window != nil else { return }
+                self.pendingGridFocusTarget = target
+                self.setNeedsFocusUpdate()
+                self.updateFocusIfNeeded()
+                self.pendingGridFocusTarget = nil
+            }
+        }
         if context.nextFocusedView === miniPlayer, let miniChannel {
             onMiniPlayerFocus?(miniChannel)
         }
@@ -842,6 +911,16 @@ final class EPGContainerView: UIView {
             guard let self, let cv, self.pendingGridFocusTarget == nil else { return }
             cv.layoutIfNeeded()
             guard let cell = cv.cellForItem(at: indexPath) else { return }
+            // Nothing here holds focus yet: the guide has just replaced the
+            // List, whose focused row went with it, or opened over the player.
+            // A request from this view would be ignored, so it goes to the
+            // focus system itself, unless something is presented over the guide.
+            if let system = UIFocusSystem.focusSystem(for: self),
+               (system.focusedItem as? UIView)?.isDescendant(of: self) != true,
+               self.isFrontmost {
+                system.requestFocusUpdate(to: cell)
+                return
+            }
             self.pendingGridFocusTarget = cell
             self.setNeedsFocusUpdate()
             self.updateFocusIfNeeded()
@@ -857,8 +936,31 @@ final class EPGContainerView: UIView {
         if let pendingCategoryFocusTarget {
             return [pendingCategoryFocusTarget]
         }
+        // Opened from the List: focus enters on the channel's programme, not the pills.
+        if let initialFocusTarget, initialFocusTarget.window != nil {
+            return [initialFocusTarget]
+        }
         return super.preferredFocusEnvironments
     }
+
+    /// Nothing is presented over the guide: it sits in the topmost presented
+    /// controller's view (the shell's, or the player it was laid over).
+    var isFrontmost: Bool {
+        guard var top = window?.rootViewController else { return false }
+        while let presented = top.presentedViewController { top = presented }
+        return isDescendant(of: top.view)
+    }
+
+    /// The programme focus first enters on, opened from the List or over the player: the
+    /// channel's programme airing now, looked up each time it is asked. Cleared once focus
+    /// is inside the guide.
+    var initialFocusTarget: UIView? {
+        get { initialFocusResolver?() }
+        set { if newValue == nil { initialFocusResolver = nil } }
+    }
+
+    /// Finds `initialFocusTarget`'s cell as the grid is now.
+    var initialFocusResolver: (() -> UIView?)?
 
     /// Complete the category-to-grid handoff after the directional focus update
     /// that requested it has ended. Calling `updateFocusIfNeeded` inline from a
@@ -967,8 +1069,13 @@ extension EPGContainerView: MenuBackHandling, SidebarTabReselecting {
         // focus in its own views, and Menu keeps its meaning there.
         guard let system = UIFocusSystem.focusSystem(for: self),
               let focused = system.focusedItem as? UIView,
-              focused.isDescendant(of: self), !focused.isDescendant(of: miniPlayer)
-        else { return false }
+              focused.isDescendant(of: self) else { return false }
+        // Opened from the List: one press goes back to it, from anywhere here.
+        if onExit != nil {
+            exitToList()
+            return true
+        }
+        guard !focused.isDescendant(of: miniPlayer) else { return false }
         // Requested from this view, which holds focus: a request aimed at the
         // corner player is ignored, since it doesn't (#334). Before the scroll,
         // which can take the focused cell away.
@@ -1012,7 +1119,11 @@ final class GuideCategoryBarView: UIView {
         var isAction = false
     }
 
-    private var items: [Item] = []
+    private var items: [Item] = [] {
+        didSet { displayNames = LiveGroupDisplay.names(items.map(\.title)) }
+    }
+    /// The pills' text: group names without the list's tags (`LiveGroupDisplay`).
+    private var displayNames: [String: String] = [:]
     private var selectedGroup: String?
     private var onSelect: ((String?) -> Void)?
     private var onAction: (() -> Void)?
@@ -1082,7 +1193,21 @@ final class GuideCategoryBarView: UIView {
         collectionView.frame = bounds
         // The fade reads the content size, which the first pass has yet to measure.
         collectionView.layoutIfNeeded()
+        revealSelectionIfNeeded()
         updateEdgeMask()
+    }
+
+    /// Set when the pills load: the selected one is scrolled into view once
+    /// the bar has a width. A guide opened on a category far down the list
+    /// otherwise shows only the first pills.
+    private var revealsSelection = false
+
+    private func revealSelectionIfNeeded() {
+        guard revealsSelection, bounds.width > 0 else { return }
+        revealsSelection = false
+        guard selectedGroup != nil,
+              let index = items.firstIndex(where: { !$0.isAction && $0.group == selectedGroup }) else { return }
+        collectionView.scrollToItem(at: IndexPath(item: index, section: 0), at: .centeredHorizontally, animated: false)
     }
 
     /// How strongly each end fades, from 0 to 1: nothing beyond that end means
@@ -1139,6 +1264,8 @@ final class GuideCategoryBarView: UIView {
         if itemsChanged {
             collectionView.reloadData()
             collectionView.layoutIfNeeded()
+            revealsSelection = true
+            revealSelectionIfNeeded()
             updateEdgeMask()
         } else if selectionChanged {
             refreshVisiblePills()
@@ -1150,7 +1277,7 @@ final class GuideCategoryBarView: UIView {
             guard let item = items[safe: indexPath.item],
                   let cell = collectionView.cellForItem(at: indexPath) as? GuideCategoryPillCell
             else { continue }
-            cell.configure(title: item.title, selected: !item.isAction && item.group == selectedGroup)
+            cell.configure(title: displayNames[item.title] ?? item.title, selected: !item.isAction && item.group == selectedGroup)
         }
     }
 
@@ -1190,7 +1317,7 @@ extension GuideCategoryBarView: UICollectionViewDataSource,
             withReuseIdentifier: GuideCategoryPillCell.reuseIdentifier,
             for: indexPath) as! GuideCategoryPillCell
         if let item = items[safe: indexPath.item] {
-            cell.configure(title: item.title, selected: !item.isAction && item.group == selectedGroup)
+            cell.configure(title: displayNames[item.title] ?? item.title, selected: !item.isAction && item.group == selectedGroup)
         }
         cell.onDeclinedDownPress = { [weak self] in
             self?.onMoveDown?()
@@ -1776,11 +1903,11 @@ final class ChannelColumnView: UICollectionReusableView {
 
         // Number under the logo when the source has one; the logo takes the
         // whole box when it does not.
-        let number = channel.channelNumber.map(String.init)
+        let number = channel.displayNumber.map(String.init)
         numberLabel.text = number
         numberLabel.isHidden = number == nil
         logoHeight.constant = number == nil ? 70 : 52
-        nameLabel.text = channel.name
+        nameLabel.text = channel.displayName
         nameLabel.isHidden = channel.logoURL != nil
 
         // Reused cells get reconfigured rapidly during fast guide scrolling.
@@ -1800,7 +1927,7 @@ final class ChannelColumnView: UICollectionReusableView {
         guard let url = currentLogoURL else { return }
 
         logoLoadTask = Task { [weak self] in
-            let image = await ImageCacheManager.shared.image(for: url, quality: .logo)?.legibleChannelLogo
+            let image = await UIImage.legibleChannelLogo(for: url)
             guard let self,
                   !Task.isCancelled,
                   self.currentLogoURL == url
@@ -2065,8 +2192,8 @@ struct GuideInfoBar: View {
     }
 
     private func channelLine(_ channel: UnifiedChannel) -> String {
-        if let number = channel.channelNumber { return "\(number) · \(channel.name)" }
-        return channel.name
+        if let number = channel.displayNumber { return "\(number) · \(channel.displayName)" }
+        return channel.displayName
     }
 
     private func timeRange(_ program: UnifiedProgram) -> String {

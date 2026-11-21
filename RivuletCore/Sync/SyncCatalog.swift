@@ -47,6 +47,8 @@ nonisolated enum SyncCatalog {
         // Live TV (not recents, viewings or event slots: device habit)
         "liveTVLayout", "combineLiveTVSources", "liveTVFavoriteChannelIds", "liveTVUnfavoritedChannelIds",
         "liveTVHiddenPlexServers", "liveTVHideJellyfin", "liveTVHideEmby",
+        // The viewer's own and smart channel lists, and pinned categories
+        channelListsKey, "liveTVPinnedCategories",
         // Servers the user turned off, by machine id
         "plexDisabledServers",
         // Photos
@@ -71,7 +73,7 @@ nonisolated enum SyncCatalog {
     /// and the library order across all servers.
     static let reviewedSecretWordKeys: Set<String> = [
         "homeCollectionPins", "homePlaylistPins", "heroPlaylistPins", "libraryCollectionPins", "showSkipIntro", "autoSkipIntro",
-        "liveTVHiddenPlexServers", "plexDisabledServers", "libraryOrderAllServers",
+        "liveTVHiddenPlexServers", "plexDisabledServers", "libraryOrderAllServers", "liveTVPinnedCategories",
     ]
 
     static func isSynced(_ key: String) -> Bool {
@@ -88,7 +90,13 @@ nonisolated enum SyncCatalog {
     }
 
     /// Lists of Live TV channel ids. Ids that embed an address or a login stay on the device they were made on.
-    static let channelListKeys: Set<String> = ["liveTVFavoriteChannelIds", "liveTVUnfavoritedChannelIds"]
+    /// Pins are "<source id>|<category>", so they follow the same rule.
+    static let channelListKeys: Set<String> = ["liveTVFavoriteChannelIds", "liveTVUnfavoritedChannelIds",
+                                               "liveTVPinnedCategories"]
+
+    /// `LiveChannelListStore.listsKey`: JSON lists whose channel ids and smart-list source ids
+    /// follow the channel-id rule, list by list.
+    static let channelListsKey = "liveTVChannelLists"
 
     /// A channel id is "<type>:<source id>:<channel>". Plex and Dispatcharr source ids hold the server address
     /// (which differs per device), and an M3U id from before the re-key held the whole playlist URL, login included.
@@ -101,17 +109,63 @@ nonisolated enum SyncCatalog {
 
     /// The local value as the cloud may see it.
     static func outgoing(_ key: String, _ value: Any) -> Any {
+        if key == channelListsKey { return lists(value).map { encode($0.map { shared($0) }) } ?? value }
         guard channelListKeys.contains(key), let ids = value as? [String] else { return value }
         return ids.filter(isSyncableChannelId)
     }
 
     /// What this device keeps after taking the cloud's value: the cloud's ids, then the local ones that stay home.
     static func incoming(_ key: String, cloud: Any?, local: Any?) -> Any? {
+        if key == channelListsKey { return incomingLists(cloud: cloud, local: local) }
         guard channelListKeys.contains(key) else { return cloud }
         let shared = (cloud as? [String] ?? []).filter(isSyncableChannelId)
         let home = (local as? [String] ?? []).filter { !isSyncableChannelId($0) }
         let merged = shared + home
         return merged.isEmpty && cloud == nil ? nil : merged
+    }
+
+    // MARK: Channel lists
+
+    /// The cloud's lists; a list this device also has keeps the ids that stay home, after the shared ones.
+    private static func incomingLists(cloud: Any?, local: Any?) -> Any? {
+        guard let cloudLists = lists(cloud as Any) else { return cloud }
+        let localById = Dictionary((lists(local as Any) ?? []).compactMap { list in
+            (list["id"] as? String).map { ($0, list) }
+        }, uniquingKeysWith: { first, _ in first })
+        let merged = cloudLists.map { list -> [String: Any] in
+            var list = shared(list)
+            guard let id = list["id"] as? String, let mine = localById[id] else { return list }
+            let home = (mine["channelIds"] as? [String] ?? []).filter { !isSyncableChannelId($0) }
+            list["channelIds"] = (list["channelIds"] as? [String] ?? []) + home
+            if var rules = list["rules"] as? [String: Any], let myRules = mine["rules"] as? [String: Any] {
+                let homeSources = (myRules["sourceIds"] as? [String] ?? []).filter { !isSyncableChannelId($0) }
+                rules["sourceIds"] = (rules["sourceIds"] as? [String] ?? []) + homeSources
+                list["rules"] = rules
+            }
+            return list
+        }
+        return encode(merged)
+    }
+
+    /// A list without the ids that stay home.
+    private static func shared(_ list: [String: Any]) -> [String: Any] {
+        var list = list
+        if let ids = list["channelIds"] as? [String] { list["channelIds"] = ids.filter(isSyncableChannelId) }
+        if var rules = list["rules"] as? [String: Any], let sources = rules["sourceIds"] as? [String] {
+            rules["sourceIds"] = sources.filter(isSyncableChannelId)
+            list["rules"] = rules
+        }
+        return list
+    }
+
+    private static func lists(_ value: Any) -> [[String: Any]]? {
+        guard let data = value as? Data else { return nil }
+        return (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]]
+    }
+
+    /// Sorted keys: the same lists always make the same bytes, so the mirror sees no false change.
+    private static func encode(_ lists: [[String: Any]]) -> Any {
+        (try? JSONSerialization.data(withJSONObject: lists, options: [.sortedKeys])) ?? Data()
     }
 
     /// NSUbiquitousKeyValueStore raises on a key over 128 UTF-16 units.

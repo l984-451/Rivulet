@@ -165,6 +165,15 @@ private struct MacLiveRecorderPresenter: ViewModifier {
             } message: { failure in
                 Text(failure.message)
             }
+            .alert(
+                recorder.naming?.title ?? "",
+                isPresented: Binding(get: { recorder.naming != nil }, set: { if !$0 { recorder.naming = nil } })
+            ) {
+                TextField("List Name", text: $recorder.namingText)
+                Button("Cancel", role: .cancel) {}
+                Button("Save") { recorder.commitName() }
+                    .disabled(recorder.namingText.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
     }
 }
 
@@ -176,8 +185,18 @@ struct MacLiveMenuContent: View {
         ForEach(sections.indices, id: \.self) { index in
             Section {
                 ForEach(sections[index]) { action in
-                    Button(role: action.isDestructive ? .destructive : nil, action: action.perform) {
-                        Label(action.title, systemImage: action.systemImage)
+                    if action.children.isEmpty {
+                        Button(role: action.isDestructive ? .destructive : nil, action: action.perform) {
+                            Label(action.title, systemImage: action.systemImage)
+                        }
+                    } else {
+                        Menu {
+                            ForEach(action.children) { child in
+                                Button(action: child.perform) { Label(child.title, systemImage: child.systemImage) }
+                            }
+                        } label: {
+                            Label(action.title, systemImage: action.systemImage)
+                        }
                     }
                 }
             }

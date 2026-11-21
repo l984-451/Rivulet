@@ -46,6 +46,8 @@ final class ShelfRowCell: UICollectionViewCell {
             }
         }
         var pitch: CGFloat { tileWidth + gap }
+        /// How far a focused tile grows above its resting artwork.
+        var focusRise: CGFloat { (tile?.growth.height ?? MediaRowMetrics.focusGrowth) / 2 }
         /// Inset of the first cell frame: it rests the artwork on the margin.
         var leading: CGFloat { tile?.leading ?? margin }
         /// The row's margin, where its header and its artwork rest.
@@ -67,6 +69,9 @@ final class ShelfRowCell: UICollectionViewCell {
     var onFocusItem: ((Int) -> Void)?
     /// Reports resting offsets so the owner can restore them across reuse.
     var onOffsetChanged: ((CGFloat) -> Void)?
+    /// The header text over this row when it lives outside the cell (Home's section header).
+    var liftingHeader: (() -> UIView?)?
+    private weak var liftedHeader: UIView?
 
     /// Focused tile index in this row, nil off-row or on the skeleton. Play/Pause bubbles to the
     /// owning controller with no per-tile callback, so the controller reads it from here.
@@ -249,6 +254,8 @@ final class ShelfRowCell: UICollectionViewCell {
     override func prepareForReuse() {
         super.prepareForReuse()
         pendingFocusIndex = nil
+        liftedHeader?.transform = .identity
+        liftedHeader = nil
         // Belongs to the row this cell WAS showing; carrying it into a
         // different row would restore focus to an unrelated tile index.
         lastFocusedItemIndex = nil
@@ -610,13 +617,38 @@ extension ShelfRowCell: UICollectionViewDataSource, UICollectionViewDelegate {
     func collectionView(_ collectionView: UICollectionView,
                         didUpdateFocusIn context: UICollectionViewFocusUpdateContext,
                         with coordinator: UIFocusAnimationCoordinator) {
-        guard let next = context.nextFocusedIndexPath else { return }
+        let next = context.nextFocusedIndexPath
+        let target = next.map { snappedOffset(toShow: $0.item) } ?? collectionView.contentOffset.x
+        updateHeaderLift(focusedItem: next?.item, offset: target, coordinator: coordinator)
+        guard let next else { return }
         lastFocusedItemIndex = next.item
         if next.item < realCount { onFocusItem?(next.item) }
-        let target = snappedOffset(toShow: next.item)
         guard abs(target - collectionView.contentOffset.x) > 0.5 else { return }
         animateOffset(to: target)
         onOffsetChanged?(target)
+    }
+
+    /// The Apple TV app lifts a row's header by the focused tile's upward growth while that tile's
+    /// grown frame overlaps the header text (VideosUI 27 0x202f39f04).
+    private func updateHeaderLift(focusedItem: Int?, offset: CGFloat, coordinator: UIFocusAnimationCoordinator) {
+        let header = liftingHeader?() ?? (headerLabel.isHidden ? nil : headerLabel)
+        if let old = liftedHeader, old !== header {
+            coordinator.addCoordinatedAnimations({ old.transform = .identity }, completion: nil)
+        }
+        liftedHeader = header
+        guard let header else { return }
+        var overlaps = false
+        if let item = focusedItem,
+           let frame = flow.layoutAttributesForItem(at: IndexPath(item: item, section: 0))?.frame {
+            // Where the tile will rest once the row has scrolled to `offset`.
+            let tile = convert(frame.offsetBy(dx: rowCollectionView.contentOffset.x - offset, dy: 0),
+                               from: rowCollectionView)
+            let text = header.convert(header.bounds, to: self)
+            overlaps = tile.minX < text.maxX && tile.maxX > text.minX
+        }
+        let transform = overlaps ? CGAffineTransform(translationX: 0, y: -tileKind.focusRise) : .identity
+        guard header.transform != transform else { return }
+        coordinator.addCoordinatedAnimations({ header.transform = transform }, completion: nil)
     }
 
     /// Keep a Left press at the window edge from escaping to the sidebar

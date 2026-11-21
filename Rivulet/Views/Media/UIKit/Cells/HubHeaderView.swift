@@ -28,6 +28,14 @@ final class HubHeaderView: UICollectionReusableView {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    /// The title and badge, which lift over a focused tile (`ShelfRowCell.liftingHeader`).
+    var textView: UIView { stack }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        stack.transform = .identity
+    }
+
     private func setUp() {
         backgroundColor = .clear
 

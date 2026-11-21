@@ -95,14 +95,15 @@ final class ContinueWatchingCardCompositorTests: XCTestCase {
         let card = try XCTUnwrap(Compositor.render(still: white, geometry: g, scale: 1))
         XCTAssertEqual(pixel(card, x: 160, y: 40).r, 255, "clear above the first stop")
         XCTAssertEqual(Double(pixel(card, x: 160, y: 145).r), 255 * 0.97, accuracy: 3)
-        XCTAssertEqual(Double(pixel(card, x: 160, y: 180).r), 255 * 0.93, accuracy: 4)
-        XCTAssertEqual(Double(pixel(card, x: 160, y: 227).r), 255 * 0.81, accuracy: 4)
+        // The band's blur spreads the stops: 0.93 and 0.81 drawn, 0.91 and 0.83 after it.
+        XCTAssertEqual(Double(pixel(card, x: 160, y: 180).r), 255 * 0.91, accuracy: 4)
+        XCTAssertEqual(Double(pixel(card, x: 160, y: 227).r), 255 * 0.83, accuracy: 4)
     }
 
-    func testBandMirrorsTheStillAboutTheSeam() throws {
+    func testBandContinuesTheStillsLastRow() throws {
         let g = Compositor.Geometry(cardWidth: 320)
-        // Red still whose lowest 18 pt are green: a mirror puts green just under
-        // the seam and red at the card's bottom edge; a stretch would stay green.
+        // Red still whose lowest 18 pt are green: a stretch stays green to the card's
+        // bottom edge; a mirror would bring the red back there.
         let striped = still {
             $0.setFillColor(UIColor.red.cgColor); $0.fill(CGRect(x: 0, y: 0, width: 320, height: 162))
             $0.setFillColor(UIColor.green.cgColor); $0.fill(CGRect(x: 0, y: 162, width: 320, height: 18))
@@ -113,7 +114,7 @@ final class ContinueWatchingCardCompositorTests: XCTestCase {
         let underSeam = pixel(card, x: 160, y: 184)
         XCTAssertGreaterThan(underSeam.g, underSeam.r)
         let bottom = pixel(card, x: 160, y: 226)
-        XCTAssertGreaterThan(bottom.r, bottom.g * 4)
+        XCTAssertGreaterThan(bottom.g, bottom.r * 4)
     }
 
     func testTitleBitmapKeepsTheLogoOnTheLeadingEdge() throws {

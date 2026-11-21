@@ -38,6 +38,10 @@ enum SettingsPalette {
     }
     static let text = adaptive(dark: .white, light: .black)
     static let caption = adaptive(dark: .white.withAlphaComponent(0.5), light: .black.withAlphaComponent(0.45))
+    // Measured off tvOS Settings in dark: the title about 0.26, a section caption about 0.30.
+    // Light stays at the old values, which were never measured.
+    static let pageTitle = adaptive(dark: .white.withAlphaComponent(0.26), light: .black.withAlphaComponent(0.45))
+    static let sectionCaption = adaptive(dark: .white.withAlphaComponent(0.30), light: .black.withAlphaComponent(0.45))
     static let dim = adaptive(dark: .white.withAlphaComponent(0.35), light: .black.withAlphaComponent(0.4))
 }
 
@@ -63,7 +67,7 @@ final class SettingsHeaderCell: UICollectionViewCell {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
     /// Not tertiaryLabel: the dynamic gray vanishes on the dark page.
-    static let captionColor = SettingsPalette.caption
+    static let captionColor = SettingsPalette.sectionCaption
 
     func configure(title: String) {
         // 31 = tvOS Callout. Measured off tvOS Settings' own captions: 21.0-21.5pt
@@ -107,6 +111,23 @@ final class SettingsCell: UICollectionViewCell {
     private static let restingValue = SettingsPalette.adaptive(dark: .white.withAlphaComponent(0.3),
                                                                light: .black.withAlphaComponent(0.4))
     private static let focusedValue = UIColor.black.withAlphaComponent(0.4)
+
+    /// Apple's picker check: a thin 33 x 27 stroke, wider than any SF Symbols weight draws it.
+    private static let checkmarkImage: UIImage = {
+        let size = CGSize(width: 33, height: 27)
+        let line: CGFloat = 3.5
+        return UIGraphicsImageRenderer(size: size).image { _ in
+            let path = UIBezierPath()
+            path.move(to: CGPoint(x: line / 2, y: 13.5))
+            path.addLine(to: CGPoint(x: 10.5, y: size.height - line / 2))
+            path.addLine(to: CGPoint(x: size.width - line / 2, y: line / 2))
+            path.lineWidth = line
+            path.lineCapStyle = .round
+            path.lineJoinStyle = .round
+            UIColor.black.setStroke()
+            path.stroke()
+        }.withRenderingMode(.alwaysTemplate)
+    }()
 
     /// Called when this cell GAINS focus (drives the description panel).
     var onFocusGained: (() -> Void)?
@@ -157,8 +178,7 @@ final class SettingsCell: UICollectionViewCell {
         chevron.translatesAutoresizingMaskIntoConstraints = false
         bg.addSubview(chevron)
 
-        checkmark.image = UIImage(systemName: "checkmark",
-                                  withConfiguration: UIImage.SymbolConfiguration(pointSize: 28, weight: .bold))
+        checkmark.image = Self.checkmarkImage
         checkmark.tintColor = .systemBlue
         checkmark.contentMode = .center
         checkmark.isHidden = true
@@ -189,7 +209,7 @@ final class SettingsCell: UICollectionViewCell {
             chevron.trailingAnchor.constraint(equalTo: bg.trailingAnchor, constant: -32),
             chevron.centerYAnchor.constraint(equalTo: bg.centerYAnchor),
 
-            checkmark.trailingAnchor.constraint(equalTo: bg.trailingAnchor, constant: -28),
+            checkmark.trailingAnchor.constraint(equalTo: bg.trailingAnchor, constant: -31.5),
             checkmark.centerYAnchor.constraint(equalTo: bg.centerYAnchor),
 
             spinner.trailingAnchor.constraint(equalTo: valueLabel.trailingAnchor),
@@ -268,7 +288,7 @@ final class SettingsCell: UICollectionViewCell {
             titleLabel.textColor = destructive ? .systemRed : .black
             valueLabel.textColor = Self.focusedValue
             chevron.tintColor = Self.focusedValue
-            checkmark.tintColor = .black
+            checkmark.tintColor = Self.focusedValue
             spinner.color = Self.focusedValue
         } else {
             // Unfocused rows are translucent glass capsules (visible buttons).

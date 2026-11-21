@@ -225,6 +225,10 @@ enum SettingsContent {
         case .plexServerDetail: return plexServerDetail
         case .jellyfin:    return jellyfin
         case .emby:        return emby
+        case .embyAddUser: return embyAddUser
+        case .embyRemoveUser: return embyRemoveUser
+        case .jellyfinAddUser: return jellyfinAddUser
+        case .jellyfinRemoveUser: return jellyfinRemoveUser
         case .libraries:   return libraries
         case .homeRows:    return homeRows
         case .cache:       return cache

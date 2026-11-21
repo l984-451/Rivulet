@@ -13,30 +13,25 @@ enum IOSLibrarySelection: Hashable {
 }
 
 /// Library tab: the list as a split view's sidebar, so a regular-width iPhone (iPhone Duo
-/// open, Plus and Max in landscape) shows it beside the library. Compact collapses to a stack.
+/// open, Plus and Max in landscape) shows it beside the library. Compact collapses to a stack,
+/// and under iPad's top tab bar it is one stack, the list a menu on the bar's Library (`IOSLibraryMenu`).
 struct IOSPlexLibrarySplitView: View {
     @Binding var selection: IOSLibrarySelection?
     @Binding var column: NavigationSplitViewColumn
     @Binding var path: NavigationPath
     @EnvironmentObject private var browse: BrowseStore
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.tabBarPlacement) private var tabBarPlacement
 
     var body: some View {
-        NavigationSplitView(preferredCompactColumn: $column) {
-            // A pick in the list starts the detail column over. A selection set from outside
-            // (the sidebar's library tab folding in at compact width) keeps its pushed pages.
-            IOSPlexLibrariesView(selection: Binding(get: { selection }, set: { picked in
-                if picked != selection { path = NavigationPath() }
-                selection = picked
-            }))
-        } detail: {
-            NavigationStack(path: $path) {
-                // A new selection is a new page: library grids keep their items in view state.
-                detail.id(selection).iosPlexDestinations()
-            }
+        Group {
+            // iPad's top tab bar shares its row only with a stack's bar, as on Home. A split view
+            // is set below it, its bar in a row of its own and the hero short of the top edge.
+            if tabBarPlacement == .topBar { topBarStack } else { splitView }
         }
-        // Side by side, the detail column is never left empty.
-        .onChange(of: [sizeClass == .regular, browse.shownLibraries.isEmpty], initial: true) {
+        // Side by side, or under the top bar, the page is never left empty: a library
+        // hidden or gone clears the selection, and the first one takes its place.
+        .onChange(of: [sizeClass == .regular, browse.shownLibraries.isEmpty, selection == nil], initial: true) {
             if sizeClass == .regular, selection == nil, let first = browse.shownLibraries.first {
                 selection = .library(first)
             }
@@ -47,14 +42,118 @@ struct IOSPlexLibrarySplitView: View {
         }
     }
 
+    private var splitView: some View {
+        NavigationSplitView(preferredCompactColumn: $column) {
+            IOSPlexLibrariesView(selection: pick)
+        } detail: {
+            NavigationStack(path: $path) {
+                // A new selection is a new page: library grids keep their items in view state.
+                detail(topBar: false).id(selection).iosPlexDestinations()
+            }
+        }
+    }
+
+    /// The list has no column here: the top bar's Library opens it as a menu.
+    private var topBarStack: some View {
+        NavigationStack(path: $path) {
+            detail(topBar: true).id(selection).iosPlexDestinations()
+        }
+    }
+
+    /// A pick in the list starts the detail over. A selection set from outside
+    /// (the sidebar's library tab folding in at compact width) keeps its pushed pages.
+    private var pick: Binding<IOSLibrarySelection?> {
+        Binding(get: { selection }, set: { picked in
+            if picked != selection { path = NavigationPath() }
+            selection = picked
+        })
+    }
+
+    /// Under the top bar the page is the tab's root, so it carries the avatar as Home's does.
     @ViewBuilder
-    private var detail: some View {
+    private func detail(topBar: Bool) -> some View {
         switch selection {
-        case .downloads: IOSDownloadsView()
-        case .favorites: IOSFavoritesView()
-        case .library(let library): IOSLibraryPage(library: library)
-        case .playlists(let providerID): IOSPlexPlaylistsView(providerID: providerID)
+        case .downloads: IOSDownloadsView(showsAccount: topBar)
+        case .favorites: IOSFavoritesView(showsAccount: topBar)
+        case .library(let library): IOSLibraryPage(library: library, showsAccount: topBar)
+        case .playlists(let providerID): IOSPlexPlaylistsView(providerID: providerID, showsAccount: topBar)
+        case nil where topBar:
+            // No list beside it to say why nothing is open: sign in, loading, or what failed.
+            ScrollView { IOSLibrariesStatus().containerRelativeFrame([.horizontal, .vertical]) }
+                .refreshable { await browse.refresh() }
+                .navigationTitle("Library")
+                .toolbar { IOSAccountToolbarItem() }
         case nil: ContentUnavailableView("Choose a Library", systemImage: "rectangle.stack")
+        }
+    }
+}
+
+/// The Library tab's list as a menu, hung from iPad's top tab bar: Downloads, then each
+/// server's libraries and playlists, the open one checked.
+struct IOSLibraryMenu: View {
+    let selection: IOSLibrarySelection?
+    let pick: (IOSLibrarySelection) -> Void
+    @EnvironmentObject private var browse: BrowseStore
+    @AppStorage(IOSLibrarySettingsView.showPlaylistsKey) private var showPlaylists = true
+    @AppStorage("showFavoritesTab") private var showFavorites = false
+
+    var body: some View {
+        // As tall as its rows, scrolling only once they outgrow the screen.
+        ViewThatFits(in: .vertical) {
+            rows
+            ScrollView { rows }
+        }
+    }
+
+    private var rows: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            row(Text("Downloads"), icon: "arrow.down.circle", .downloads)
+            if showFavorites, browse.offersFavorites {
+                row(Text("Favorites"), icon: "heart", .favorites)
+            }
+            ForEach(browse.libraryGroups, id: \.id) { group in
+                Divider().padding(.vertical, 6)
+                if let name = group.name {
+                    Text(name).font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+                        .padding(.horizontal, 16).padding(.vertical, 4)
+                }
+                ForEach(group.libraries) { library in
+                    row(Text(verbatim: library.title), icon: library.iosIcon, .library(library))
+                }
+                if showPlaylists, !browse.playlists(providerID: group.providerID).isEmpty {
+                    row(Text("Playlists"), icon: "list.and.film", .playlists(providerID: group.providerID))
+                }
+            }
+        }
+        .padding(.vertical, 8)
+        // As wide as the longest name, every row that wide.
+        .frame(minWidth: 250)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func row(_ title: Text, icon: String, _ value: IOSLibrarySelection) -> some View {
+        Button { pick(value) } label: {
+            HStack(spacing: 12) {
+                Image(systemName: icon).frame(width: 24)
+                title.lineLimit(1)
+                Spacer(minLength: 16)
+                if value == selection { Image(systemName: "checkmark").fontWeight(.semibold) }
+            }
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(value == selection ? .isSelected : [])
+    }
+}
+
+private extension BrowseStore {
+    /// The shown libraries, one group per server, named once there are several.
+    var libraryGroups: [(id: String, providerID: String, name: String?, libraries: [MediaLibrary])] {
+        let ids = shownLibraries.reduce(into: [String]()) { if !$0.contains($1.providerID) { $0.append($1.providerID) } }
+        return ids.map { id in
+            (id, id, ids.count > 1 ? labels.badge(providerID: id) : nil, shownLibraries.filter { $0.providerID == id })
         }
     }
 }
@@ -88,10 +187,10 @@ struct IOSPlexLibrariesView: View {
                     if !browse.hasServers {
                         IOSPlexConnectView().listRowBackground(Color.clear)
                     } else if videoLibraries.isEmpty {
-                        status.frame(maxWidth: .infinity).listRowBackground(Color.clear)
+                        IOSLibrariesStatus().frame(maxWidth: .infinity).listRowBackground(Color.clear)
                     } else {
                         // One section per server, under its name once there are several.
-                        ForEach(serverGroups, id: \.id) { group in
+                        ForEach(browse.libraryGroups, id: \.id) { group in
                             Section(group.name ?? "") {
                                 ForEach(group.libraries) { library in
                                     NavigationLink(value: IOSLibrarySelection.library(library)) {
@@ -123,23 +222,23 @@ struct IOSPlexLibrariesView: View {
     }
 
     private var videoLibraries: [MediaLibrary] { browse.shownLibraries }
+}
 
-    /// One section per server, under its name once there are several.
-    private var serverGroups: [(id: String, providerID: String, name: String?, libraries: [MediaLibrary])] {
-        let ids = videoLibraries.reduce(into: [String]()) { if !$0.contains($1.providerID) { $0.append($1.providerID) } }
-        return ids.map { id in
-            (id, id, ids.count > 1 ? browse.labels.badge(providerID: id) : nil, videoLibraries.filter { $0.providerID == id })
-        }
-    }
+/// Why the Library tab has no library to open: signed out, still loading, or a failed load.
+struct IOSLibrariesStatus: View {
+    @EnvironmentObject private var browse: BrowseStore
 
-    @ViewBuilder
-    private var status: some View {
-        if browse.isLoadingContent {
+    var body: some View {
+        if !browse.hasServers {
+            IOSPlexConnectView()
+        } else if browse.isLoadingContent {
             ProgressView().padding()
         } else if let error = browse.contentError ?? browse.failedServers.first?.message {
             IOSPlexErrorView(title: "Couldn't Load Libraries", message: error) { await browse.refresh() }
-        } else {
+        } else if browse.shownLibraries.isEmpty {
             ContentUnavailableView("No Libraries", systemImage: "film.stack")
+        } else {
+            ContentUnavailableView("Choose a Library", systemImage: "rectangle.stack")
         }
     }
 }

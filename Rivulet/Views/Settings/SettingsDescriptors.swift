@@ -456,7 +456,7 @@ enum SettingsDescriptorStore {
         ),
         "profilePickerOnLaunch": SettingDescriptor(
             icon: "person.2.circle",
-            description: "Asks who is watching when you open Rivulet after being away: on the Home Screen, in another app or on the screensaver. Instant asks every time."
+            description: "Asks who is watching every time Rivulet starts, and when you come back after being away this long: from the Home Screen, another app or the screensaver. Instant asks on every return."
         ),
         "liveTVSources": SettingDescriptor(
             icon: "tv.and.mediabox",

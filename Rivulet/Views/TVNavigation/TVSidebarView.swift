@@ -53,7 +53,16 @@ struct TVSidebarView: View {
     @State private var hasCheckedProfilePicker = false
     @State private var isAwaitingProfileSelection = false
     /// The app is not active (Home, another app, the screensaver).
-    @State private var isAway = false
+    /// The trip off the screen in progress, from resigning active to becoming active again.
+    @State private var awayTrip: AwayTrip?
+
+    private struct AwayTrip {
+        let leftAt: Date
+        let inputIdle: TimeInterval
+        /// False while playback keeps the screen awake: no screensaver can start then.
+        let screensaverPossible: Bool
+        var backgrounded = false
+    }
     @AppStorage("lastSeenBuild") private var lastSeenBuild = ""
     /// The setup landing was finished. Unset, an install that already has a source counts as set up.
     @AppStorage("setupComplete") private var setupComplete = SetupLandingViewController.hasAnySource
@@ -282,7 +291,7 @@ struct TVSidebarView: View {
 
             // A saved profile with no stored token of its own: nothing may load
             // until plex.tv lets it in, so resolve it now instead of deferring.
-            let wantsPicker = profileManager.shouldAskWhoIsWatching() && !hasCheckedProfilePicker
+            let wantsPicker = profileManager.shouldAskWhoIsWatchingAtLaunch && !hasCheckedProfilePicker
             if wantsPicker || authManager.isContentWithheld {
                 // Block content immediately; profile data must load before the picker shows
                 isAwaitingProfileSelection = true
@@ -368,7 +377,7 @@ struct TVSidebarView: View {
             applyDebugLaunchTab()
             // Defer What's New check if profile picker needs to be shown first
             if authManager.isContentWithheld
-                || (profileManager.shouldAskWhoIsWatching() && authManager.selectedServerToken != nil) {
+                || (profileManager.shouldAskWhoIsWatchingAtLaunch && authManager.selectedServerToken != nil) {
                 return
             }
             checkAndShowWhatsNew()
@@ -405,14 +414,27 @@ struct TVSidebarView: View {
         // The Profile Picker also covers coming back to the app: tvOS resumes it
         // far more often than it relaunches it. UIApplication's notifications, not
         // scenePhase, because scenePhase does not report the trip while the player is up.
+        // Control Center resigns active too, so a trip counts only if it reaches the background or
+        // looks like the screensaver (`tripCountsAsAway`).
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
-            guard !isAway else { return }
-            isAway = true
-            profileManager.noteLeftApp()
+            guard awayTrip == nil else { return }
+            let now = Date()
+            awayTrip = AwayTrip(leftAt: now, inputIdle: now.timeIntervalSince(MenuPressInterceptor.lastInputAt),
+                                screensaverPossible: !UIApplication.shared.isIdleTimerDisabled)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+            awayTrip?.backgrounded = true
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-            guard isAway else { return }
-            isAway = false
+            // Coming back is input, though the press went to the system: without this, Control Center
+            // soon after a long trip read the trip as idle time.
+            MenuPressInterceptor.noteInput()
+            guard let trip = awayTrip else { return }
+            awayTrip = nil
+            guard PlexUserProfileManager.tripCountsAsAway(
+                backgrounded: trip.backgrounded, inputIdle: trip.inputIdle,
+                screensaverPossible: trip.screensaverPossible) else { return }
+            profileManager.noteLeftApp(at: trip.leftAt)
             if profileManager.shouldAskWhoIsWatching() {
                 presentProfilePickerOnReturn()
             }

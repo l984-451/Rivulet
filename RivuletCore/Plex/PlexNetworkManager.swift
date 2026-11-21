@@ -3343,84 +3343,16 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         return users
     }
 
-    /// Get the access token for a specific server URL using the user's auth token
-    /// This is used after switching users to get a server-specific access token
-    func getServerAccessToken(authToken: String, serverURL: String, serverName: String? = nil) async -> String? {
+    /// Get the access token for the selected server using the user's auth token.
+    /// This is used after switching users to get a server-specific access token.
+    func getServerAccessToken(authToken: String, serverURL: String, machineID: String?,
+                              serverName: String? = nil) async -> String? {
         do {
             let servers = try await getServers(authToken: authToken)
-
-            // Extract the machine identifier from plex.direct URL if present
-            // Format: https://IP.MACHINEID.plex.direct:PORT
-            var targetMachineId: String?
-            if serverURL.contains(".plex.direct") {
-                let components = serverURL.components(separatedBy: ".")
-                if components.count >= 3 {
-                    // The machine ID is the second-to-last component before "plex.direct"
-                    targetMachineId = components[1]
-                }
-            }
-
-            // Find a server that matches
-            for server in servers {
-
-                // Check if machine identifier matches
-                if let targetMachineId = targetMachineId,
-                   let serverMachineId = server.machineIdentifier,
-                   serverMachineId == targetMachineId {
-                    if let accessToken = server.accessToken {
-                        return accessToken
-                    }
-                }
-
-                // Also check by clientIdentifier (sometimes used interchangeably)
-                if let targetMachineId = targetMachineId,
-                   server.clientIdentifier == targetMachineId {
-                    if let accessToken = server.accessToken {
-                        return accessToken
-                    }
-                }
-
-                // Check connections - look for matching plex.direct URL or same host
-                for connection in server.connections ?? [] {
-                    // Direct match
-                    if serverURL == connection.uri {
-                        if let accessToken = server.accessToken {
-                            return accessToken
-                        }
-                    }
-
-                    // Check if connection URI contains the same plex.direct identifier
-                    if let targetMachineId = targetMachineId,
-                       connection.uri.contains(targetMachineId) {
-                        if let accessToken = server.accessToken {
-                            return accessToken
-                        }
-                    }
-
-                    // Partial match for same server
-                    if serverURL.contains(connection.uri) || connection.uri.contains(serverURL) {
-                        if let accessToken = server.accessToken {
-                            return accessToken
-                        }
-                    }
-                }
-
-                // If we found a server with accessToken (last resort - only 1 server in list)
-                if servers.count == 1, let accessToken = server.accessToken {
-                    return accessToken
-                }
-            }
-
-            // A raw-address fallback URL matches no advertised uri: match address and port,
-            // only when one server has them (two LANs can share a private address)
-            // and it carries the selected server's name.
-            if let url = URL(string: serverURL), let host = url.host {
-                let matches = servers.filter { server in
-                    (server.connections ?? []).contains { $0.address == host && $0.port == url.port }
-                }
-                if matches.count == 1, matches[0].name == serverName, let accessToken = matches[0].accessToken {
-                    return accessToken
-                }
+            if let server = Self.serverForAccessToken(
+                in: servers, serverURL: serverURL, machineID: machineID, serverName: serverName),
+               let accessToken = server.accessToken {
+                return accessToken
             }
 
             // No per-server token. The plex.tv token makes PMS treat the user as a
@@ -3431,6 +3363,25 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             DiagLog.error(.profile, "Server access token fetch failed: \(DiagLog.describe(error))")
             return nil
         }
+    }
+
+    /// The server whose token belongs to the selected server. A saved machineIdentifier
+    /// is the only match: a friend's shared server can share our private address, and
+    /// matching it would hand us (and send to it) the friend's token. With no saved id,
+    /// an exact uri, else address and port, matches only when one server has it
+    /// (two LANs can share a private address) and it carries the selected server's name.
+    nonisolated static func serverForAccessToken(in servers: [PlexDevice], serverURL: String,
+                                                 machineID: String?, serverName: String?) -> PlexDevice? {
+        if let machineID { return servers.first { $0.machineIdentifier == machineID } }
+        guard let url = URL(string: serverURL), let host = url.host else { return nil }
+        let byURI = servers.filter { server in (server.connections ?? []).contains { $0.uri == serverURL } }
+        let matches = byURI.isEmpty
+            ? servers.filter { server in
+                (server.connections ?? []).contains { $0.address == host && $0.port == url.port }
+            }
+            : byURI
+        guard matches.count == 1, matches[0].name == serverName else { return nil }
+        return matches[0]
     }
 
     /// Switch to a home user profile (validates PIN if protected)

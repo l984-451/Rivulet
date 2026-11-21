@@ -83,7 +83,7 @@ extension SettingsContent {
                     handler: { vc in
                         Task { @MainActor in
                             await JellyfinSession.switchUser(to: user.userID)
-                            (vc as? SettingsPageViewController)?.reloadRows()
+                            reloadAfterServerLoad(vc as? SettingsPageViewController)
                         }
                     }))
             }
@@ -120,7 +120,7 @@ extension SettingsContent {
                 Task { @MainActor in
                     await JellyfinSession.removeUser(user.userID)
                     let page = vc as? SettingsPageViewController
-                    if JellyfinSession.savedUsers.isEmpty { page?.onPop?() } else { page?.reloadRows() }
+                    if JellyfinSession.savedUsers.isEmpty { page?.onPop?() } else { reloadAfterServerLoad(page) }
                 }
             }))
         }

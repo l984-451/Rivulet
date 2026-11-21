@@ -81,7 +81,7 @@ extension SettingsContent {
                     handler: { vc in
                         Task { @MainActor in
                             await EmbySession.switchUser(to: user.userID)
-                            (vc as? SettingsPageViewController)?.reloadRows()
+                            reloadAfterServerLoad(vc as? SettingsPageViewController)
                         }
                     }))
             }
@@ -92,6 +92,16 @@ extension SettingsContent {
         ] + (EmbySession.savedUsers.isEmpty ? [] : [
             SettingsRowItem(id: "embyRemoveUser", title: "Remove User", kind: .navigation(.embyRemoveUser))
         ])
+    }
+
+    /// Redraws `page` now and again once the server rows stop loading, as Refresh does, so its
+    /// spinner stops: a user switch reloads them, and the first redraw lands while they load.
+    static func reloadAfterServerLoad(_ page: SettingsPageViewController?) {
+        page?.reloadRows()
+        Task { @MainActor [weak page] in
+            for await loading in ServerDataStore.shared.$isLoading.values where !loading { break }
+            page?.reloadRows()
+        }
     }
 
     /// Settings > Emby Server > Add User: another user of the same server, signed in beside the active one.
@@ -114,7 +124,7 @@ extension SettingsContent {
                 Task { @MainActor in
                     await EmbySession.removeUser(user.userID)
                     let page = vc as? SettingsPageViewController
-                    if EmbySession.savedUsers.isEmpty { page?.onPop?() } else { page?.reloadRows() }
+                    if EmbySession.savedUsers.isEmpty { page?.onPop?() } else { reloadAfterServerLoad(page) }
                 }
             }))
         }

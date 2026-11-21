@@ -66,7 +66,7 @@ struct IOSRootView: View {
                         .reportsTabBarPlacement($tabBarPlacement)
                 }
                 // The sidebar lists each library itself, so the list tab would repeat it.
-                // While the sidebar shows, this tab hands its library to the library's own tab.
+                // On iPad at full width this tab hands its library to the library's own tab.
                 .defaultVisibility(.hidden, for: .sidebar)
                 if showsSidebarLibraries {
                     Tab("Downloads", systemImage: "arrow.down.circle", value: "downloads") {
@@ -98,7 +98,8 @@ struct IOSRootView: View {
             }
             // The top bar shows the whole section as one Library item, so the menu hangs from it.
             .popover(isPresented: $showingLibraryMenu) {
-                IOSLibraryMenu(selection: librarySelection, pick: pickLibrary).iosSessionObjects(plex)
+                IOSLibraryMenu(selection: librarySelection(forTab: selectedTab) ?? librarySelection, pick: pickLibrary)
+                    .iosSessionObjects(plex)
             }
             Tab("Live TV", systemImage: "play.tv", value: "live-tv") {
                 NavigationStack { IOSLiveTVView() }
@@ -168,11 +169,11 @@ struct IOSRootView: View {
         }
         // Stage Manager and Split View resize the window: at compact width the sidebar's
         // library tabs vanish, and the one in use folds into the Library tab. Back at
-        // regular width it returns to its sidebar tab if the sidebar shows.
+        // regular width it returns to its own tab.
         .onChange(of: showsSidebarLibraries) { _, sidebar in
             if sidebar { placeLibraryTab() } else { foldSidebarTab() }
         }
-        // The sidebar shown or hidden, the Library tab picked, or a library loaded.
+        // The tab view's first report, the Library tab picked, or a library loaded.
         .onChange(of: tabBarPlacement) { placeLibraryTab() }
         .onChange(of: selectedTab) { placeLibraryTab() }
         .onChange(of: sidebarTabs) { placeLibraryTab() }
@@ -212,12 +213,17 @@ struct IOSRootView: View {
         })
     }
 
-    /// A pick in the library menu starts the Library tab over, unless it is the library already open.
+    /// A pick in the library menu opens that page's own tab as it was left, as the sidebar does.
     private func pickLibrary(_ picked: IOSLibrarySelection) {
+        showingLibraryMenu = false
+        let tab = tab(for: picked)
+        if sidebarTabs.contains(tab) {
+            selectedTab = tab
+            return
+        }
         if picked != librarySelection { libraryPath = NavigationPath() }
         librarySelection = picked
         selectedTab = "library"
-        showingLibraryMenu = false
     }
 
     /// A library gone from the server or hidden in Settings leaves the selection.
@@ -240,22 +246,16 @@ struct IOSRootView: View {
         selectedTab = "library"
     }
 
-    /// Libraries are listed in one place at a time. While the iPad sidebar shows it lists
-    /// them, so the Library tab's library carries on in its own sidebar tab, selected there.
-    /// While the top bar shows, a sidebar tab folds into the Library tab, whose list is then
-    /// the only one (the top bar's Library opens it). Compact width is `foldSidebarTab`'s.
+    /// On iPad at full width each library has its own tab, under the sidebar and the top bar
+    /// alike: the sidebar selects it, and the top bar's Library reopens the one picked last and
+    /// its menu picks another. So the Library tab's library carries on in its own tab, and
+    /// showing or hiding the sidebar changes no page. Compact width is `foldSidebarTab`'s.
     private func placeLibraryTab() {
-        guard showsSidebarLibraries, let placement = tabBarPlacement else { return }
-        if placement == .sidebar {
-            unfoldLibraryTab()
-        } else if placement == .topBar, librarySelection(forTab: selectedTab) != nil {
-            // A tab whose library has not loaded yet waits for it (`sidebarTabs` changes).
-            foldSidebarTab()
-        }
+        if showsSidebarLibraries { unfoldLibraryTab() }
     }
 
-    /// The window narrowed or the top bar replaced the sidebar: the sidebar tab's library,
-    /// and the pages pushed over it, carry on in the Library tab's detail column.
+    /// The window narrowed: the sidebar tab's library, and the pages pushed over it,
+    /// carry on in the Library tab's detail column.
     private func foldSidebarTab() {
         guard Self.isSidebarTab(selectedTab) else { return }
         guard let selection = librarySelection(forTab: selectedTab) else {
@@ -268,8 +268,8 @@ struct IOSRootView: View {
         selectedTab = "library"
     }
 
-    /// The sidebar is showing: the Library tab's library, and the pages pushed over it,
-    /// carry on in that library's sidebar tab. With none picked (or one gone), the first
+    /// iPad at full width: the Library tab's library, and the pages pushed over it,
+    /// carry on in that library's own tab. With none picked (or one gone), the first
     /// library opens, as the split view picks it; with no library loaded yet, it waits, and
     /// a load that found none (offline, failed) leaves Downloads.
     private func unfoldLibraryTab() {
@@ -309,11 +309,6 @@ struct IOSRootView: View {
         guard showsSidebarLibraries else { return [] }
         return videoLibraries.map(libraryTab) + playlistServers.map(playlistsTab) + ["downloads"]
             + (showsFavorites ? ["favorites"] : [])
-    }
-
-    /// The sidebar is up, not the top bar, so it lists the libraries itself.
-    private var sidebarListsLibraries: Bool {
-        showsSidebarLibraries && tabBarPlacement == .sidebar
     }
 
     /// The Library list's Favorites row, which Account > Library turns on.
@@ -377,14 +372,14 @@ struct IOSRootView: View {
             try? await Task.sleep(for: .seconds(2))
         }
         let path = NavigationPath([IOSPlexDetailRoute(item: item, scope: "")])
-        // With the iPad sidebar showing, the library has moved to its sidebar tab.
+        // On iPad at full width, the library has moved to its own tab.
         if Self.isSidebarTab(selectedTab) { sidebarPaths[selectedTab] = path } else { libraryPath = path }
     }
     #endif
 
-    /// The sidebar's Downloads tab while the iPad sidebar shows, else Downloads in the Library tab.
+    /// The Downloads tab on iPad at full width, else Downloads in the Library tab.
     private func openDownloads() {
-        if sidebarListsLibraries {
+        if showsSidebarLibraries {
             selectedTab = "downloads"
         } else {
             librarySelection = .downloads

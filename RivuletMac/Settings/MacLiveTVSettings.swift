@@ -81,6 +81,7 @@ private struct MacLiveSourceDetailSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var confirmingRemove = false
     @State private var isRefreshing = false
+    @State private var isRefreshingGuide = false
 
     private var source: LiveTVDataStore.LiveTVSourceInfo? { MacLiveSourceList.all(store).first { $0.id == sourceId } }
 
@@ -148,7 +149,20 @@ private struct MacLiveSourceDetailSheet: View {
                                 if isRefreshing { ProgressView().controlSize(.small) }
                             }
                         }
-                        .disabled(isRefreshing)
+                        .disabled(isRefreshing || isRefreshingGuide)
+                        Button {
+                            isRefreshingGuide = true
+                            Task {
+                                await store.loadEPG(startDate: Date(), hours: LiveTVDataStore.refreshWindowHours)
+                                isRefreshingGuide = false
+                            }
+                        } label: {
+                            HStack {
+                                Text("Refresh Guide")
+                                if isRefreshingGuide { ProgressView().controlSize(.small) }
+                            }
+                        }
+                        .disabled(isRefreshing || isRefreshingGuide)
                     }
                     // A server's own Live TV leaves with its sign-in.
                     if !source.sourceType.followsServer {

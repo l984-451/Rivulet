@@ -114,6 +114,15 @@ final class RootShellViewController: UIViewController {
         sidebar.view.isUserInteractionEnabled = false
         if let pendingSections { sidebar.setSections(pendingSections) }
 
+        // Above the content and the sidebar; a presented player covers it.
+        let loadingPill = LoadingPillView()
+        loadingPill.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(loadingPill)
+        NSLayoutConstraint.activate([
+            loadingPill.topAnchor.constraint(equalTo: view.topAnchor, constant: 40),
+            loadingPill.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+        ])
+
         sidebar.onTabSelected = { [weak self] tab in
             guard let self else { return }
             // The profile row opens the switcher; it has no content to mount.

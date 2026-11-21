@@ -88,6 +88,12 @@
         }
       }
     },
+    "Loading guide" : {
+
+    },
+    "Loading channels" : {
+
+    },
     "Map" : {
       "localizations" : {
         "de" : {
@@ -164,9 +170,15 @@
       }
     },
     "Plays surround soundtracks as stereo with the subwoofer channel mixed into left and right, for 2.1 speakers on a stereo connection." : {},
+    "Processing…" : {
+
+    },
     "Ready" : {},
     "Reconnecting to Watch Together…" : {},
     "Recording in Progress" : {
+
+    },
+    "Refresh Guide" : {
 
     },
     "Room Code" : {},

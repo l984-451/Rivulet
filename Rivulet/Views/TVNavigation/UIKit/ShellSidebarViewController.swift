@@ -49,7 +49,7 @@ private enum Metrics {
     static let avatarSize: CGFloat = 50
     static let avatarFocusGrowth: CGFloat = 4
     /// The profile header band: the first tab sits this far below the list top.
-    static let profileBandHeight: CGFloat = 90
+    static let profileBandHeight: CGFloat = 106.5
     /// While music plays the profile slot is the avatar's column plus the Now
     /// Playing pill, which is as tall as the avatar and centred on it.
     static var avatarColumnWidth: CGFloat { iconCenterX * 2 }
@@ -210,7 +210,7 @@ final class ShellSidebarRowCell: UICollectionViewCell {
         backgroundPill.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(backgroundPill)
 
-        iconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 24, weight: .medium)
+        iconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 21, weight: .regular)
         iconView.setContentHuggingPriority(.required, for: .horizontal)
         titleLabel.font = .preferredFont(forTextStyle: .caption1)
         serverLabel.font = .systemFont(ofSize: 17, weight: .semibold)
@@ -637,7 +637,7 @@ final class ShellSidebarViewController: UIViewController {
     private var pillHidden = false
     /// The remote gesture that last moved focus between rows (see `stopsUpwardRun`).
     private var lastFocusMoveGesture = -1
-    /// While the profile panel is up the pill names the user, not the tab.
+    /// While the profile panel is up the pill reads "Switch Profile", not the tab.
     private var pillShowsProfile = false
     /// Move from a row's long-press menu: the held row's key, and the order to put back on Menu.
     private var rowMove: GrabReorderController?
@@ -1046,10 +1046,14 @@ final class ShellSidebarViewController: UIViewController {
     }
 
     private func configurePill() {
+        // Over the profile panel the pill is the TV app's dim "Switch Profile": person glyph, no chevron.
         let item = item(for: pillShowsProfile ? .account : selectedTab)
-        pillIcon.image = UIImage(systemName: item.icon)
-        pillAvatar.url = item.avatarURL
-        pillLabel.text = item.title
+        pillIcon.image = UIImage(systemName: pillShowsProfile ? "person.crop.circle" : item.icon)
+        pillAvatar.url = pillShowsProfile ? nil : item.avatarURL
+        pillLabel.text = pillShowsProfile ? String(localized: "Switch Profile") : item.title
+        pillLabel.textColor = UIColor.white.withAlphaComponent(pillShowsProfile ? 0.29 : 1)
+        pillLabel.font = pillShowsProfile ? .systemFont(ofSize: 25, weight: .regular) : emphasizedFont(.body)
+        pillChevron.isHidden = pillShowsProfile
         // The pill is as wide as its title: resize it when it is at rest.
         view.setNeedsLayout()
     }

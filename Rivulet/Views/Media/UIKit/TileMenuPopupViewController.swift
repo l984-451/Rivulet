@@ -112,7 +112,7 @@ enum TileMenuPlacement {
         -> (frame: CGRect, anchor: CGPoint) {
         let safe = bounds.insetBy(dx: 80, dy: 50)
         let panel = CGSize(width: fullPanel.width, height: min(fullPanel.height, safe.height))
-        let gap: CGFloat = 16
+        let gap: CGFloat = 19.5
         guard let tile else {
             let origin = CGPoint(x: bounds.midX - panel.width / 2, y: bounds.midY - panel.height / 2)
             return (CGRect(origin: origin, size: panel), CGPoint(x: 0.5, y: 0.5))
@@ -135,7 +135,7 @@ enum TileMenuPlacement {
 
 final class TileMenuPopupViewController: UIViewController {
 
-    /// Action groups, with a hairline divider between groups.
+    /// Action groups, run together as Apple's menu does; only a header gets a divider.
     private let sections: [[TileMenuAction]]
     private let header: TileMenuHeader?
     /// The pressed tile's frame in window coordinates. The popup is
@@ -148,7 +148,7 @@ final class TileMenuPopupViewController: UIViewController {
     /// with those on the effect view the rows drew away from the panel on a 4K 1st gen (#486).
     private let panelHolder = UIView()
     /// The dim the backdrop animates to.
-    private let dimColor = UIColor.black.withAlphaComponent(0.55)
+    private let dimColor = UIColor.black.withAlphaComponent(0.30)
     private var isDismissing = false
 
     /// Present with `animated: false` — entrance/exit run in-controller so
@@ -164,10 +164,12 @@ final class TileMenuPopupViewController: UIViewController {
     required init?(coder: NSCoder) { fatalError() }
 
     // Layout constants, matched against a screenshot of the system menu
-    // (1920x1080), tvOS 27: 66pt row pitch, hairline group dividers, glass panel
+    // (1920x1080), tvOS 27: 66pt row pitch, no group dividers, glass panel
     // with 16pt content inset, panel corner 50.
     private let rowHeight: CGFloat = 66
     private let panelInset: CGFloat = 16
+    /// Above the first row and below the last: Apple's first row centre sits 54 down.
+    private let panelVerticalInset: CGFloat = 21
     private let dividerVerticalPad: CGFloat = 8
 
     override func viewDidLoad() {
@@ -184,9 +186,6 @@ final class TileMenuPopupViewController: UIViewController {
             if !sections.isEmpty { arranged.append(DividerView()) }
         }
         for (sectionIndex, section) in sections.enumerated() {
-            if sectionIndex > 0 {
-                arranged.append(DividerView())
-            }
             for action in section {
                 let row = MenuRowButton(action: action) { [weak self] handler in
                     self?.animateOut { handler() }
@@ -220,8 +219,8 @@ final class TileMenuPopupViewController: UIViewController {
             scroll.bottomAnchor.constraint(equalTo: panel.contentView.bottomAnchor),
             scroll.leadingAnchor.constraint(equalTo: panel.contentView.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: panel.contentView.trailingAnchor),
-            stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: panelInset),
-            stack.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -panelInset),
+            stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: panelVerticalInset),
+            stack.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -panelVerticalInset),
             stack.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor, constant: panelInset),
             stack.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor, constant: -panelInset),
             stack.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -panelInset * 2),
@@ -230,8 +229,8 @@ final class TileMenuPopupViewController: UIViewController {
         // Panel size: rows + dividers, wide enough for the longest title. A
         // header asks for a wider panel so its description reads as prose.
         let actionCount = sections.reduce(0) { $0 + $1.count }
-        let dividerCount = max(0, sections.count - 1) + (headerView != nil && !sections.isEmpty ? 1 : 0)
-        let minimumWidth: CGFloat = headerView == nil ? 440 : 620
+        let dividerCount = headerView != nil && !sections.isEmpty ? 1 : 0
+        let minimumWidth: CGFloat = headerView == nil ? 450 : 620
         let panelWidth = min(max(Self.widestRowWidth(for: sections) + panelInset * 2, minimumWidth), 680)
         var headerHeight: CGFloat = 0
         if let headerView {
@@ -244,7 +243,7 @@ final class TileMenuPopupViewController: UIViewController {
         let panelHeight = CGFloat(actionCount) * rowHeight
             + CGFloat(dividerCount) * (1 + dividerVerticalPad * 2)
             + headerHeight
-            + panelInset * 2
+            + panelVerticalInset * 2
 
         let placement = TileMenuPlacement.place(panel: CGSize(width: panelWidth, height: panelHeight),
                                                 beside: sourceFrame, in: view.bounds)
@@ -394,9 +393,9 @@ private final class DividerView: UIView {
 /// glass with white (red for destructive) content.
 private final class MenuRowButton: UIView {
 
-    static let titleFont = UIFont.systemFont(ofSize: 26, weight: .medium)
+    static let titleFont = UIFont.systemFont(ofSize: 25, weight: .medium)
 
-    private static let leadingPad: CGFloat = 26
+    private static let leadingPad: CGFloat = 16
     private static let iconWidth: CGFloat = 40
     private static let iconTitleGap: CGFloat = 14
     private static let trailingPad: CGFloat = 30
@@ -432,7 +431,7 @@ private final class MenuRowButton: UIView {
         addSubview(highlight)
 
         iconView.image = UIImage(systemName: action.systemImage)
-        iconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 22, weight: .semibold)
+        iconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 24, weight: .semibold)
         iconView.contentMode = .scaleAspectFit
         iconView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(iconView)

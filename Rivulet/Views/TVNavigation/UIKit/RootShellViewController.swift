@@ -59,7 +59,7 @@ final class RootShellViewController: UIViewController {
         }
     }
 
-    /// The profile panel is up: the sidebar folds to its pill, which names the user.
+    /// The profile panel is up: the sidebar folds to its pill, which reads "Switch Profile".
     var profilePanelOpen = false {
         didSet {
             guard profilePanelOpen != oldValue, isViewLoaded else { return }

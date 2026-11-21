@@ -260,7 +260,8 @@ final class WatchTogetherSession: ObservableObject {
         case let joined as ParticipantJoinedEvent:
             notices.send(String(localized: "\(joined.participant.name) joined"))
         case let left as ParticipantLeftEvent:
-            notices.send(String(localized: "\(left.participant.name) left"))
+            // Its own key: "%@ left" already means time remaining ("45 min left").
+            notices.send(String(localized: "watchTogether.left", defaultValue: "\(left.participant.name) left"))
         case let action as ActionEvent where !action.byMe:
             guard let name = action.by?.name else { break }
             switch action.kind {

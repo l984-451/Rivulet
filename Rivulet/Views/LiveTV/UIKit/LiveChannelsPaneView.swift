@@ -125,7 +125,7 @@ private final class LiveChannelCardView: UIView {
         art.backgroundColor = UIColor.white.withAlphaComponent(0.08)
 
         let channelLine = UILabel()
-        channelLine.text = [isCurrent ? String(localized: "Watching") : nil, channel.channelNumber.map(String.init), channel.name]
+        channelLine.text = [isCurrent ? String(localized: "Watching") : nil, channel.displayNumber.map(String.init), channel.displayName]
             .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
         channelLine.font = .systemFont(ofSize: 19, weight: .medium)
         channelLine.textColor = UIColor.white.withAlphaComponent(0.6)

@@ -253,3 +253,27 @@ actor XtreamService {
         double(value).flatMap { $0.isFinite ? Int(exactly: $0.rounded(.towardZero)) : nil }
     }
 }
+
+// MARK: - Names
+
+extension XtreamService {
+    /// The title a viewer reads: without the language or quality tags panels put in front
+    /// ("┃NL┃ ", "┃FR-4K┃", "[EN] ", "NL | ", "┃NL " with its closing bar missing), and with
+    /// single spaces. Never a colon, which titles use ("CSI: Miami"). The category already says
+    /// the language. A name that is only tags keeps them.
+    nonisolated static func cleanName(_ name: String) -> String { splitTags(name).name }
+
+    /// `cleanName` with the tags it left out, each without its bars ("NL", "FR-4K").
+    nonisolated static func splitTags(_ name: String) -> (name: String, tags: [String]) {
+        var rest = Substring(name)
+        var tags: [String] = []
+        let tag = #"^\s*(?:┃[^┃|\n]{1,20}[┃|]|┃[A-Z]{2,5}(?=\s)|\|\s*[A-Z0-9+-]{2,8}\s*[┃|]|\[[A-Z]{2}\]|[A-Z]{2,4}(?:-[A-Z0-9]{2,4})?\s*[┃|])\s*"#
+        while let match = rest.range(of: tag, options: .regularExpression), match.upperBound < rest.endIndex {
+            let text = rest[match].trimmingCharacters(in: CharacterSet(charactersIn: "┃|[]").union(.whitespaces))
+            if !text.isEmpty { tags.append(text) }
+            rest = rest[match.upperBound...]
+        }
+        let single = rest.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        return single.isEmpty ? (name, []) : (single, tags)
+    }
+}

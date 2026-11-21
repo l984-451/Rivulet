@@ -168,11 +168,11 @@ struct IOSLiveCard: View {
     }
 
     private var title: String {
-        item.program?.displayTitle ?? item.recording?.title ?? item.channel?.name ?? ""
+        item.program?.displayTitle ?? item.recording?.title ?? item.channel?.displayName ?? ""
     }
 
     private var detail: String {
-        if let channel = item.channel { return channel.numberAndName }
+        if let channel = item.channel { return channel.displayNumberAndName }
         return item.recording?.channelName ?? ""
     }
 
@@ -235,7 +235,7 @@ private struct IOSLiveCardArt: View {
                 .padding(.horizontal, 36)
                 .padding(.vertical, 30)
             if item.channel?.logoURL == nil {
-                Text(item.channel?.name ?? item.recording?.channelName ?? "")
+                Text(item.channel?.displayName ?? item.recording?.channelName ?? "")
                     .font(.headline)
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)
@@ -328,10 +328,10 @@ private struct IOSLiveCardPreview: View {
             IOSLiveCardArt(item: item, now: now)
                 .frame(width: 340, height: 340 * 9 / 16)
             VStack(alignment: .leading, spacing: 4) {
-                Text(item.program?.displayTitle ?? item.channel?.name ?? "")
+                Text(item.program?.displayTitle ?? item.channel?.displayName ?? "")
                     .font(.headline)
                 if let program = item.program {
-                    Text([program.timeRange, item.channel?.numberAndName].compactMap { $0 }.joined(separator: " · "))
+                    Text([program.timeRange, item.channel?.displayNumberAndName].compactMap { $0 }.joined(separator: " · "))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     if let description = program.description, !description.isEmpty {

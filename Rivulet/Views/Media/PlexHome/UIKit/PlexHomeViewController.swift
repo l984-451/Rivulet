@@ -125,6 +125,8 @@ enum HomeSectionKind: Equatable {
     case searchGrid
     /// Search mode only — the People row: cast and crew circles, each opening its person page.
     case searchPeople
+    /// Search mode only — the Live TV row: channels and programmes on now, as What's On's cards.
+    case searchLive
     /// Home only — the Year in Review banner, one card.
     case yearInReview
     /// Home only — Favorite Channels (#623): What's On's Favorites cards, from `liveCards`.
@@ -158,7 +160,7 @@ struct HomeSectionData {
     var sourceBadge: String? = nil
     /// Search's People row.
     var people: [MediaPerson] = []
-    /// The Favorite Channels row.
+    /// Search's Live TV row, and Home's Favorite Channels row.
     var liveCards: [LiveCardItem] = []
 
     /// True when this section holds music (artist/album/track). Sections are
@@ -323,6 +325,24 @@ struct HomeSectionData {
             hubKey: nil,
             hubIdentifier: nil
         )
+    }
+
+    /// Search mode: the Live TV row.
+    static func searchLive(cards: [LiveCardItem]) -> HomeSectionData {
+        var section = HomeSectionData(
+            id: HomeSectionID.searchGroup("live"),
+            kind: .searchLive,
+            title: String(localized: "Live TV"),
+            headerStyle: .swiftUIInfiniteRow,
+            totalSize: nil,
+            items: [],
+            watchlistItems: [],
+            heroItems: [],
+            hubKey: nil,
+            hubIdentifier: nil
+        )
+        section.liveCards = cards
+        return section
     }
 
     /// Search mode: the People row.
@@ -1026,6 +1046,10 @@ final class PlexHomeViewController: UIViewController {
     private var plexSearchMusic: [PlexMetadata] = []
     /// The other servers' hits for the current query; mixed into Plex's rows.
     private var otherServersSearchHits = SearchHits()
+    /// The Live TV row's cards for the last query.
+    private var liveSearchCards: [LiveCardItem] = []
+    /// The lineup prepared for searching, with when and from what it was built.
+    private var liveSearchIndex: (index: LiveChannelSearch.Index, builtAt: Date, channelCount: Int)?
     private var isSearchLoading = false
     private var searchError: String?
     private var lastSubmittedQuery = ""
@@ -1209,22 +1233,58 @@ final class PlexHomeViewController: UIViewController {
 
         async let plex = plexSearch(query)
         async let others = otherServersSearch(query)
-        let (plexResult, othersResult) = await (plex, others)
+        async let live = liveSearch(query)
+        let (plexResult, othersResult, liveCards) = await (plex, others, live)
         guard token == searchToken else { return }
+        liveSearchCards = liveCards
 
         let answer = try? plexResult.get()
         plexSearchHits = answer?.hits ?? SearchHits()
         plexSearchMusic = answer?.music ?? []
         otherServersSearchHits = (try? othersResult.get()) ?? SearchHits()
         isSearchLoading = false
-        searchError = Self.searchErrorMessage(plex: plexResult.map { !$0.hits.isEmpty || !$0.music.isEmpty },
-                                              otherServers: othersResult.map { !$0.isEmpty })
+        searchError = liveCards.isEmpty
+            ? Self.searchErrorMessage(plex: plexResult.map { !$0.hits.isEmpty || !$0.music.isEmpty },
+                                      otherServers: othersResult.map { !$0.isEmpty })
+            : nil
         lastSubmittedQuery = query
         applySnapshot(animated: false)
         reconfigureVisibleSearchCells()
     }
 
-    /// Movies & TV, then each collection and genre shelf, People, Episodes & Seasons, and Music.
+    /// Channels whose name or number matches, then programmes on now that do, each once, as
+    /// What's On's cards. The index is rebuilt when the lineup changes or a minute has passed,
+    /// so what is on now stays current; building it is off the main thread.
+    private func liveSearch(_ query: String) async -> [LiveCardItem] {
+        let store = LiveTVDataStore.shared
+        guard !store.channels.isEmpty else { return [] }
+        let index: LiveChannelSearch.Index
+        if let cached = liveSearchIndex, cached.channelCount == store.channels.count,
+           Date().timeIntervalSince(cached.builtAt) < 60 {
+            index = cached.index
+        } else {
+            let channels = store.channels
+            let epg = store.epg
+            index = await Task.detached(priority: .userInitiated) {
+                LiveChannelSearch.Index(channels, epg: epg, now: Date())
+            }.value
+            liveSearchIndex = (index, Date(), channels.count)
+        }
+        let found = await Task.detached(priority: .userInitiated) {
+            LiveChannelSearch.search(query, in: index, channelLimit: 30, programLimit: 30)
+        }.value
+        var seen = Set<String>()
+        var cards: [LiveCardItem] = []
+        for channel in found.channels where seen.insert(channel.id).inserted {
+            cards.append(.channel(channel, program: store.getCurrentProgram(for: channel), section: "search"))
+        }
+        for hit in found.onNow where seen.insert(hit.channel.id).inserted {
+            cards.append(.channel(hit.channel, program: hit.program, section: "search"))
+        }
+        return Array(cards.prefix(40))
+    }
+
+    /// Movies & TV, Live TV, then each collection and genre shelf, People, Episodes & Seasons, and Music.
     /// Servers are mixed within a row, each in its own relevance order.
     private func computeSearchSections() -> [HomeSectionData] {
         searchGroupMetas = [:]
@@ -1240,7 +1300,9 @@ final class PlexHomeViewController: UIViewController {
 
         let plex = plexSearchHits
         let others = otherServersSearchHits
-        guard !plex.isEmpty || !others.isEmpty || !plexSearchMusic.isEmpty else { return [.searchState()] }
+        guard !plex.isEmpty || !others.isEmpty || !plexSearchMusic.isEmpty || !liveSearchCards.isEmpty else {
+            return [.searchState()]
+        }
 
         func titles(_ hits: SearchHits, _ kinds: Set<MediaKind>) -> [MediaItem] {
             hits.titles.filter { kinds.contains($0.kind) }
@@ -1254,6 +1316,9 @@ final class PlexHomeViewController: UIViewController {
         var sections: [HomeSectionData] = []
         if !named.isEmpty {
             sections.append(.searchGrid(id: .searchGroup("titles"), title: String(localized: "Movies & TV"), items: named))
+        }
+        if !liveSearchCards.isEmpty {
+            sections.append(.searchLive(cards: liveSearchCards))
         }
         for (index, shelf) in shelves.enumerated() {
             let title = shelf.kind == .collection
@@ -2952,6 +3017,12 @@ final class PlexHomeViewController: UIViewController {
             return makeHubSectionLayout(section: section, isContinueWatching: false)
         case .searchPeople:
             return makeHubSectionLayout(section: section, isContinueWatching: false, tile: MediaRowMetrics.person)
+        case .searchLive:
+            // The card grows further on focus than a poster, and the shelf insets are measured
+            // for posters: without more room the focused card covers the row's title.
+            let layout = makeHubSectionLayout(section: section, isContinueWatching: false, tile: MediaRowMetrics.liveCard)
+            layout.contentInsets.top += 28
+            return layout
         case .liveChannels:
             // The Live TV card: its frame is its artwork.
             let card = CGSize(width: MediaRowMetrics.liveWidth, height: MediaRowMetrics.liveHeight)
@@ -3201,6 +3272,7 @@ final class PlexHomeViewController: UIViewController {
             loadedCount = section.items.count
         case .watchlist, .watchlistGrid: loadedCount = section.watchlistItems.count
         case .searchPeople: loadedCount = section.people.count
+        case .searchLive: loadedCount = section.liveCards.count
         case .liveChannels: loadedCount = section.liveCards.count
         }
         header.configure(
@@ -3307,7 +3379,7 @@ final class PlexHomeViewController: UIViewController {
             cell.overlay.autoAdvanceGate = { [weak self] in self?.heroCanAutoAdvance ?? false }
             return cell
 
-        case .continueWatching, .recentlyAdded, .recommendations, .watchlist, .discoverList, .searchGrid, .searchPeople, .liveChannels:
+        case .continueWatching, .recentlyAdded, .recommendations, .watchlist, .discoverList, .searchGrid, .searchPeople, .searchLive, .liveChannels:
             let cell = collectionView.dequeueReusableCell(withReuseIdentifier: ShelfRowCell.reuseID, for: indexPath) as! ShelfRowCell
             Perf.interval(.cellPrepare, key: perfKey) {
                 configureShelfRow(cell, sectionID: section.id)
@@ -3910,7 +3982,7 @@ final class PlexHomeViewController: UIViewController {
                                   itemID: isPlaceholder ? Self.heroLoadingItemToken : "hero-overlay")]
             case .sortHeader:
                 ids = [Self.sortHeaderItemID]
-            case .continueWatching, .recentlyAdded, .recommendations, .watchlist, .discoverList, .searchGrid, .searchPeople, .liveChannels:
+            case .continueWatching, .recentlyAdded, .recommendations, .watchlist, .discoverList, .searchGrid, .searchPeople, .searchLive, .liveChannels:
                 // Shelf rows are ONE diffable item — the ShelfRowCell hosts
                 // the tiles in its own horizontal collection view (and shows
                 // the pagination skeleton itself). Content changes don't
@@ -3974,7 +4046,7 @@ final class PlexHomeViewController: UIViewController {
 
     private func isShelfKind(_ kind: HomeSectionKind) -> Bool {
         switch kind {
-        case .continueWatching, .recentlyAdded, .recommendations, .watchlist, .discoverList, .searchGrid, .searchPeople, .liveChannels: return true
+        case .continueWatching, .recentlyAdded, .recommendations, .watchlist, .discoverList, .searchGrid, .searchPeople, .searchLive, .liveChannels: return true
         case .hero, .grid, .watchlistGrid, .recommendationsLoading, .recommendationsError,
              .sortHeader, .searchPrompt, .searchState, .yearInReview: return false
         }
@@ -3995,6 +4067,7 @@ final class PlexHomeViewController: UIViewController {
         switch section.kind {
         case .watchlist: section.watchlistItems.count
         case .searchPeople: section.people.count
+        case .searchLive: section.liveCards.count
         case .liveChannels: section.liveCards.count
         default: section.items.count
         }
@@ -4007,6 +4080,8 @@ final class PlexHomeViewController: UIViewController {
             for item in section.watchlistItems { hasher.combine(item.id) }
         } else if section.kind == .searchPeople {
             for person in section.people { hasher.combine(person.providerID); hasher.combine(person.id) }
+        } else if section.kind == .searchLive {
+            for card in section.liveCards { hasher.combine(card.id); hasher.combine(card.program?.id) }
         } else if section.kind == .liveChannels {
             // Identity only, as What's On: new programmes are pushed into the cards on screen.
             for card in section.liveCards { hasher.combine(card.id) }
@@ -4051,6 +4126,7 @@ final class PlexHomeViewController: UIViewController {
             kind: section.kind == .continueWatching ? .continueWatching
                 : section.kind == .liveChannels ? .homeLive
                 : section.kind == .searchPeople ? .person
+                : section.kind == .searchLive ? .live
                 : section.isEpisodeRow ? .episode : (section.isMusic ? .music : .poster),
             realCount: shelfRealCount(section),
             hasSkeleton: paginationStates[section.id]?.isLoadingMore == true,
@@ -4196,6 +4272,10 @@ final class PlexHomeViewController: UIViewController {
             cell.configure(name: person.name, subtitle: [person.role, badge].compactMap { $0 }.joined(separator: " · "),
                            imageURL: person.imageURL)
             return cell
+        case .searchLive:
+            let cell = innerCV.dequeueReusableCell(withReuseIdentifier: LiveCardCell.reuseID, for: indexPath) as! LiveCardCell
+            if indexPath.item < section.liveCards.count { cell.configure(section.liveCards[indexPath.item]) }
+            return cell
         case .hero, .grid, .watchlistGrid, .recommendationsLoading, .recommendationsError,
              .sortHeader, .searchPrompt, .searchState, .yearInReview:
             return nil
@@ -4250,6 +4330,10 @@ final class PlexHomeViewController: UIViewController {
             handleSearchTap(section: section, indexPath: IndexPath(item: itemIndex, section: sectionIndex))
         case .searchPeople:
             presentPersonPage(section.people[itemIndex])
+        case .searchLive:
+            if let channel = section.liveCards[safe: itemIndex]?.channel {
+                LiveChannelPresenter.play(channel, from: self)
+            }
         case .hero, .grid, .watchlistGrid, .recommendationsLoading, .recommendationsError,
              .sortHeader, .searchPrompt, .searchState, .yearInReview:
             return
@@ -4265,7 +4349,7 @@ final class PlexHomeViewController: UIViewController {
             break
         case .hero, .watchlist, .watchlistGrid, .recommendations, .grid, .discoverList,
              .recommendationsLoading, .recommendationsError, .sortHeader,
-             .searchPrompt, .searchState, .yearInReview, .searchGrid, .searchPeople, .liveChannels:
+             .searchPrompt, .searchState, .yearInReview, .searchGrid, .searchPeople, .searchLive, .liveChannels:
             return  // No pagination for these (hubKey == nil)
         }
         guard itemIndex >= section.items.count - 5 else { return }
@@ -4330,6 +4414,9 @@ final class PlexHomeViewController: UIViewController {
             presentTileMenu(for: item, isContinueWatching: false)
         case .watchlist:
             presentWatchlistTileMenu(sectionID: sectionID, itemIndex: itemIndex)
+        case .searchLive:
+            guard let card = section.liveCards[safe: itemIndex], let channel = card.channel else { return }
+            LiveChannelPresenter.presentMenu(channel: channel, program: card.program, from: self, sourceFrame: nil)
         case .hero, .grid, .watchlistGrid, .recommendationsLoading, .recommendationsError,
              .sortHeader, .searchPrompt, .searchState, .yearInReview, .searchPeople:
             return  // hero / state cells and people don't get menus
@@ -4499,8 +4586,7 @@ final class PlexHomeViewController: UIViewController {
             }
             return playableItem(section.items[itemIndex])
         case .watchlist, .watchlistGrid, .hero, .grid, .recommendationsLoading,
-             .recommendationsError, .sortHeader, .searchPrompt, .searchState, .yearInReview, .searchPeople,
-             .liveChannels:
+             .recommendationsError, .sortHeader, .searchPrompt, .searchState, .yearInReview, .searchPeople, .searchLive, .liveChannels:
             return nil
         }
     }
@@ -5862,7 +5948,7 @@ final class PlexHomeViewController: UIViewController {
             return  // the embedded buttons open their own menus
         case .searchPrompt, .searchState:
             return  // recents pills / Try Again are FocusableActionButtons
-        case .continueWatching, .recentlyAdded, .recommendations, .watchlist, .discoverList, .searchGrid, .searchPeople, .liveChannels:
+        case .continueWatching, .recentlyAdded, .recommendations, .watchlist, .discoverList, .searchGrid, .searchPeople, .searchLive, .liveChannels:
             return  // shelf rows route taps through their own delegate (handleShelfTap)
         case .grid:
             guard let item = section.items[safe: indexPath.item], !item.isGridPlaceholder else { return }
@@ -6663,7 +6749,7 @@ final class PlexHomeViewController: UIViewController {
         let section = sectionsSnapshot[sectionIndex]
         switch section.kind {
         case .hero, .recommendationsLoading, .recommendationsError, .sortHeader,
-             .searchPrompt, .searchState, .yearInReview, .searchPeople, .liveChannels:
+             .searchPrompt, .searchState, .yearInReview, .searchPeople, .searchLive, .liveChannels:
             return nil
         case .continueWatching, .recentlyAdded, .recommendations, .grid, .discoverList,
              .searchGrid:
@@ -6938,8 +7024,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         // Left moves resolve normally — no interception.
         let section = sectionsSnapshot[prevIndexPath.section]
         switch section.kind {
-        case .continueWatching, .recentlyAdded, .watchlist, .recommendations, .discoverList, .searchGrid, .searchPeople,
-             .liveChannels:
+        case .continueWatching, .recentlyAdded, .watchlist, .recommendations, .discoverList, .searchGrid, .searchPeople, .searchLive, .liveChannels:
             break
         case .hero, .recommendationsLoading, .recommendationsError, .sortHeader, .grid,
              .watchlistGrid, .searchPrompt, .searchState, .yearInReview:
@@ -6980,7 +7065,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
             previewHiddenRowID != nil && section.id.raw == previewHiddenRowID
         switch section.kind {
         case .hero, .recommendationsLoading, .recommendationsError, .sortHeader,
-             .searchPrompt, .searchState, .yearInReview, .searchGrid, .searchPeople, .watchlistGrid:
+             .searchPrompt, .searchState, .yearInReview, .searchGrid, .searchPeople, .searchLive, .watchlistGrid:
             return  // No pagination for these (the watchlist is fetched whole)
         case .continueWatching, .recentlyAdded, .recommendations, .watchlist, .discoverList, .liveChannels:
             return  // Shelf rows paginate from their own willDisplay (shelfWillDisplay)
@@ -7848,7 +7933,7 @@ extension PlexHomeViewController: UICollectionViewDelegate {
         let section = sectionsSnapshot[indexPath.section]
         switch section.kind {
         case .continueWatching, .recentlyAdded, .watchlist, .watchlistGrid, .recommendations,
-             .grid, .discoverList, .searchGrid, .searchPeople, .liveChannels:
+             .grid, .discoverList, .searchGrid, .searchPeople, .searchLive, .liveChannels:
             // Orthogonal rows AND the grid get the walk-back redirect:
             // point at the previous cell when it's already on screen
             // (ported from MediaLibraryViewController.updateLeftEdgeGuide).

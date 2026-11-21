@@ -105,6 +105,31 @@ extension LiveTVDataStore {
         LiveShelves.build(shelvesInput, sourceIdFilter: sourceIdFilter, now: now, favoritesOnly: favoritesOnly)
     }
 
+    /// For You and the genre rows alone (the List's), as What's On picks them. Kept until the
+    /// lineup, guide, history or five-minute window changes: the List asks on every refresh,
+    /// and a large lineup takes a moment.
+    func liveDiscovery(sourceIdFilter: String?, now: Date = Date()) -> LiveShelves.Discovery {
+        // The newest viewing too: history is capped, so a full one keeps its count.
+        let key = DiscoveryKey(versions: lineupVersions, recent: recentChannelIds, viewings: viewings.count,
+                               lastViewing: viewings.last?.at,
+                               source: sourceIdFilter,
+                               window: Int(now.timeIntervalSince1970 / 300))
+        if let cached = Self.discoveryCache, cached.key == key { return cached.value }
+        let found = LiveShelves.discovery(shelvesInput, sourceIdFilter: sourceIdFilter, now: now)
+        Self.discoveryCache = (key, found)
+        return found
+    }
+
+    private struct DiscoveryKey: Equatable {
+        let versions: LiveSmartRules.Versions
+        let recent: [String]
+        let viewings: Int
+        let lastViewing: Date?
+        let source: String?
+        let window: Int
+    }
+    private static var discoveryCache: (key: DiscoveryKey, value: LiveShelves.Discovery)?
+
     /// The same rows, built off the main thread: a large guide takes seconds to sort (RIVULET-I).
     func whatsOnShelvesInBackground(sourceIdFilter: String?, now: Date = Date()) async -> [LiveShelf] {
         await LiveShelves.buildInBackground(shelvesInput, sourceIdFilter: sourceIdFilter, now: now)
@@ -133,6 +158,62 @@ nonisolated enum LiveShelves {
         var scheduledRecordings: [LiveTVScheduledRecording] = []
         /// Source display names by source id, for the per-source rows.
         var sourceNames: [String: String] = [:]
+    }
+
+    /// For You and the genre rows: what What's On and the List share.
+    struct Discovery {
+        /// Like what this viewer watches at this hour, best first; empty below three picks.
+        var forYou: [UnifiedChannel] = []
+        /// Each genre airing now with its channels, in lineup order; empty unless the lineup
+        /// spans more than one genre with three channels or more.
+        var byGenre: [(genre: LiveGenre, channels: [UnifiedChannel])] = []
+    }
+
+    /// Each airing channel's genre is worked out once, for both: a large lineup takes a moment.
+    /// A shelf per genre by what each channel shows now, so cards move rows at programme
+    /// boundaries (a local station that usually airs sports is not sports during church).
+    private static func discovery(airing: [UnifiedChannel], current: (UnifiedChannel) -> UnifiedProgram?,
+                                  input: Input, now: Date) -> Discovery {
+        let epg = input.epg
+        var result = Discovery()
+        let genres = airing.map { channel in
+            LiveGenre.of(channel, airing: current(channel), guide: epg[channel.id] ?? [])
+        }
+        // Like what this viewer watches at this hour, from what is on now. Recently Watched
+        // already covers going back, so its channels are left out.
+        if input.suggestionsEnabled {
+            let recentIds = Set(input.recentChannelIds)
+            let candidates: [LiveSuggestions.Candidate] = zip(airing, genres).compactMap { channel, genre in
+                recentIds.contains(channel.id) ? nil : (channel: channel, program: current(channel), genre: genre)
+            }
+            let picks = LiveSuggestions.rank(candidates, history: input.viewings, now: now)
+            if picks.count >= 3 { result.forYou = picks }
+        }
+        var byGenre: [LiveGenre: [UnifiedChannel]] = [:]
+        for (channel, genre) in zip(airing, genres) {
+            if let genre { byGenre[genre, default: []].append(channel) }
+        }
+        let shown = LiveGenre.allCases.filter { (byGenre[$0] ?? []).count >= 3 }
+        if shown.count > 1 { result.byGenre = shown.map { ($0, byGenre[$0] ?? []) } }
+        return result
+    }
+
+    /// For You and the genre rows alone, for the List: without the rest of What's On.
+    static func discovery(_ input: Input, sourceIdFilter: String?, now: Date) -> Discovery {
+        var memo: [String: UnifiedProgram?] = [:]
+        func current(_ channel: UnifiedChannel) -> UnifiedProgram? {
+            if let known = memo[channel.id] { return known }
+            let program = input.epg[channel.id]?.first { $0.startTime <= now && $0.endTime > now }
+            memo[channel.id] = program
+            return program
+        }
+        let all = sourceIdFilter.map { id in input.channels.filter { $0.sourceId == id } } ?? input.channels
+        // As What's On: showing something now, not an empty event slot or a slot held for a later game.
+        let airing = all.filter { channel in
+            guard let program = current(channel) else { return !input.eventSlotIds.contains(channel.id) }
+            return !program.isEmptySlot && !program.isPregameBlock
+        }
+        return discovery(airing: airing, current: current, input: input, now: now)
     }
 
     @concurrent static func buildInBackground(_ input: Input, sourceIdFilter: String?, now: Date) async -> [LiveShelf] {
@@ -198,19 +279,11 @@ nonisolated enum LiveShelves {
             shelves.append(LiveShelf(id: "recent", title: String(localized: "Recently Watched"), items: recent))
         }
 
-        // Like what this viewer watches at this hour, from what is on now.
-        // Recently Watched already covers going back, so its channels are left out.
-        if input.suggestionsEnabled, !favoritesOnly {
-            let recentIds = Set(input.recentChannelIds)
-            let candidates = airing.filter { !recentIds.contains($0.id) }.map { channel in
-                let program = current(channel)
-                return (channel: channel, program: program,
-                        genre: LiveGenre.of(channel, airing: program, guide: epg[channel.id] ?? []))
-            }
-            let picks = LiveSuggestions.rank(candidates, history: input.viewings, now: now).prefix(20)
-            if picks.count >= 3 {
-                shelves.append(LiveShelf(id: "foryou", title: String(localized: "For You"), items: onNow(Array(picks), section: "foryou")))
-            }
+        // Home's Favorites row needs none of this, and a large lineup takes a moment to rank.
+        let found = favoritesOnly ? Discovery() : discovery(airing: airing, current: current, input: input, now: now)
+        if !found.forYou.isEmpty {
+            shelves.append(LiveShelf(id: "foryou", title: String(localized: "For You"),
+                                     items: onNow(Array(found.forYou.prefix(20)), section: "foryou")))
         }
 
         // What is being recorded or about to be.
@@ -264,16 +337,9 @@ nonisolated enum LiveShelves {
         // channel is showing now. Cards move rows at programme boundaries; a
         // local station that usually airs sports is not sports during church.
         // A genre with only a channel or two gets no row of its own.
-        let byGenre = Dictionary(grouping: airing) { channel in
-            LiveGenre.of(channel, airing: current(channel), guide: epg[channel.id] ?? [])
-        }
-        let genres = LiveGenre.allCases.filter { (byGenre[$0] ?? []).count >= 3 }
-        if genres.count > 1 {
-            for genre in genres {
-                let id = "genre|\(genre.rawValue)"
-                let list = byGenre[genre] ?? []
-                shelves.append(LiveShelf(id: id, title: genre.title, items: onNow(list, section: id)))
-            }
+        for (genre, members) in found.byGenre {
+            let id = "genre|\(genre.rawValue)"
+            shelves.append(LiveShelf(id: id, title: genre.title, items: onNow(members, section: id)))
         }
 
         // A shelf per source when several are combined, as the Guide's tabs (#377).

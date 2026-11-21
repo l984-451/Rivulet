@@ -306,7 +306,7 @@ final class PlayerProgressBarView: UIView {
         render(
             currentTime: currentTime, duration: duration, isScrubbing: isScrubbing, scrubTime: scrubTime,
             isWheelScrubbing: isWheelScrubbing,
-            labels: vodLabels(displayTime: displayTime, duration: duration),
+            labels: vodLabels(displayTime: displayTime, duration: duration, clock: showsClockTimes && !isScrubbing),
             ghostProgress: isScrubbing && duration > 0 ? currentTime / duration : nil,
             scanLevel: scanLevel, scrubThumbnail: scrubThumbnail,
             markers: markers, chapters: chapters
@@ -757,7 +757,7 @@ final class PlayerProgressBarView: UIView {
     // MARK: - Clock times
 
     /// VOD labels read the time of day instead: now, and when the title ends
-    /// from the playhead. The toggle is the touch-surface tap.
+    /// from the playhead. The toggle is the touch-surface tap; a scrub shows play time.
     private(set) var showsClockTimes = false
     private var clockTick: Timer?
 
@@ -768,9 +768,9 @@ final class PlayerProgressBarView: UIView {
         refreshClockLabels()
     }
 
-    private func vodLabels(displayTime: TimeInterval, duration: TimeInterval) -> Labels {
+    private func vodLabels(displayTime: TimeInterval, duration: TimeInterval, clock: Bool) -> Labels {
         let remaining = max(0, duration - displayTime)
-        guard showsClockTimes else {
+        guard clock else {
             return Labels(elapsed: formatTime(displayTime), remaining: "-\(formatTime(remaining))")
         }
         let now = Date()
@@ -793,7 +793,8 @@ final class PlayerProgressBarView: UIView {
 
     private func refreshClockLabels() {
         guard !isLive, !isSkeleton else { return }
-        let next = vodLabels(displayTime: isScrubbing ? scrubTime : currentTime, duration: duration)
+        let next = vodLabels(displayTime: isScrubbing ? scrubTime : currentTime, duration: duration,
+                             clock: showsClockTimes && !isScrubbing)
         guard next != labels else { return }
         labels = next
         UIView.performWithoutAnimation { layoutBar() }

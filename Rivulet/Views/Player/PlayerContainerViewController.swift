@@ -1066,7 +1066,7 @@ class PlayerContainerViewController: UIViewController {
     /// True when a touch-surface swipe may drive the scrubber.
     private var panCanDriveScrub: Bool {
         guard let vm = viewModel else { return false }
-        return !vm.playbackState.isFailed
+        return vm.playbackState == .paused
             && vm.postVideoState == .hidden
             && descriptionOverlay == nil
             && !focusIsOnTransportButton
@@ -1131,7 +1131,6 @@ class PlayerContainerViewController: UIViewController {
         // between play time and the clock.
         if vm.showControls, !tapWasClick, let bar = progressBar {
             bar.setShowsClockTimes(!bar.showsClockTimes)
-            SettingsStore.setBool(Self.clockTimesKey, bar.showsClockTimes)
         }
         vm.showControlsTemporarily()
     }
@@ -1142,12 +1141,10 @@ class PlayerContainerViewController: UIViewController {
         vm.fillsScreen.toggle()
     }
 
-    private static let clockTimesKey = "playerShowsClockTimes"
-
     /// Does nothing until `SwipeScrubAxisLock` decides the touch: horizontal scrubs,
     /// vertical and undecided touches belong to the focus engine and the gated swipes.
     @objc private func handlePanGesture(_ gesture: UIPanGestureRecognizer) {
-        // Swipe-to-scrub works whether playing or paused.
+        // Scrubs only while paused, as AVKit does: a swipe while playing is ignored.
 
         let translation = gesture.translation(in: view)
         let velocity = gesture.velocity(in: view)
@@ -1246,6 +1243,7 @@ class PlayerContainerViewController: UIViewController {
         if RemoteInputHandler.isRingJogging { return "ring jog" }
         if swipeTouchClicked { return "clickpad down" }
         if swipeTouchSpent { return "an Up or Down swipe took it" }
+        if viewModel?.playbackState != .paused { return "not paused" }
         if !panCanDriveScrub { return focusIsOnTransportButton ? "focus is on a control" : "player state" }
         return nil
     }
@@ -1276,7 +1274,6 @@ class PlayerContainerViewController: UIViewController {
 
     private func bindChrome(to vm: UniversalPlayerViewModel) {
         guard let rail, let bar = progressBar else { return }
-        bar.setShowsClockTimes(SettingsStore.bool(Self.clockTimesKey, default: false))
 
         // Static metadata (re-applied on episode advance via itemGeneration).
         applyRailMetadata(vm: vm)
@@ -2386,6 +2383,8 @@ class PlayerContainerViewController: UIViewController {
         let captionLiftChanged = captionOverlay.map { $0.controlsVisible != chromeVisible || $0.paneOpen != paneOpen } ?? false
         captionOverlay?.controlsVisible = chromeVisible
         captionOverlay?.paneOpen = paneOpen
+        // The clock toggle lasts while the controls are up; they come back on play time.
+        if !chromeVisible { progressBar?.setShowsClockTimes(false) }
         guard targetsChanged || ownershipChanged || captionLiftChanged
                 || pillHomeChanged else {
             if anchorNeedsFocusUpdate {

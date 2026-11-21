@@ -1141,6 +1141,44 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     private var pendingInitialFocus: IndexPath?
     func clearPendingInitialFocus() { pendingInitialFocus = nil }
 
+    // MARK: - Header lift
+
+    /// Apple's Trailers title rises 13 over a focused card under it (measured on device, tvOS 27).
+    private static let headerLift: CGFloat = 13
+    private weak var liftedHeader: BelowFoldSectionHeader?
+
+    override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        updateHeaderLift(focused: context.nextFocusedView, coordinator: coordinator)
+    }
+
+    /// Lifts a card rail's header while the focused card sits under its text, as the Apple TV app does.
+    private func updateHeaderLift(focused: UIView?, coordinator: UIFocusAnimationCoordinator) {
+        var header: BelowFoldSectionHeader?
+        var overlaps = false
+        if let focused, focused.isDescendant(of: collectionView),
+           let cell = sequence(first: focused, next: \.superview).first(where: { $0 is UICollectionViewCell }) as? UICollectionViewCell,
+           let path = collectionView.indexPath(for: cell),
+           sectionKinds.indices.contains(path.section),
+           [.trailers, .extras].contains(sectionKinds[path.section]) {
+            header = collectionView.supplementaryView(forElementKind: UICollectionView.elementKindSectionHeader,
+                                                      at: IndexPath(item: 0, section: path.section)) as? BelowFoldSectionHeader
+            if let header {
+                let tile = focused.convert(focused.bounds, to: header)
+                let text = header.textFrame
+                overlaps = tile.minX < text.maxX && tile.maxX > text.minX
+            }
+        }
+        if let old = liftedHeader, old !== header {
+            coordinator.addCoordinatedAnimations({ old.lift = 0 }, completion: nil)
+        }
+        liftedHeader = header
+        guard let header else { return }
+        let lift = overlaps ? Self.headerLift : 0
+        guard header.lift != lift else { return }
+        coordinator.addCoordinatedAnimations({ header.lift = lift }, completion: nil)
+    }
+
     // MARK: - UICollectionViewDelegate
 
     /// Episode and trailer cells are unfocusable so the engine targets their thumb

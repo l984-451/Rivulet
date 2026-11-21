@@ -3979,6 +3979,13 @@ final class PlexHomeViewController: UIViewController {
         }
     }
 
+    private func shelfHeaderText(sectionID: HomeSectionID) -> UIView? {
+        guard let index = sectionsSnapshot.firstIndex(where: { $0.id == sectionID }) else { return nil }
+        let header = collectionView.supplementaryView(forElementKind: UICollectionView.elementKindSectionHeader,
+                                                      at: IndexPath(item: 0, section: index))
+        return (header as? HubHeaderView)?.textView
+    }
+
     private func shelfSection(id: HomeSectionID) -> HomeSectionData? {
         sectionsSnapshot.first(where: { $0.id == id })
     }
@@ -4038,6 +4045,7 @@ final class PlexHomeViewController: UIViewController {
         cell.onOffsetChanged = { [weak self] offset in
             self?.shelfOffsets[sectionID] = offset
         }
+        cell.liftingHeader = { [weak self] in self?.shelfHeaderText(sectionID: sectionID) }
         cell.configure(
             kind: section.kind == .continueWatching ? .continueWatching
                 : section.kind == .liveChannels ? .homeLive

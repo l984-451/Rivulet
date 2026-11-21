@@ -323,6 +323,22 @@ final class BelowFoldSectionHeader: UICollectionReusableView {
         titleLabel.text = title
         baselineConstraint.constant = -baseline
     }
+
+    /// The title's text, not the label's full width.
+    var textFrame: CGRect {
+        CGRect(origin: titleLabel.frame.origin,
+               size: CGSize(width: titleLabel.intrinsicContentSize.width, height: titleLabel.frame.height))
+    }
+
+    /// How far the title sits above its rest, over a focused card (`BelowFoldCollectionView.updateHeaderLift`).
+    var lift: CGFloat = 0 {
+        didSet { titleLabel.transform = CGAffineTransform(translationX: 0, y: -lift) }
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        lift = 0
+    }
 }
 
 // MARK: - Season divider

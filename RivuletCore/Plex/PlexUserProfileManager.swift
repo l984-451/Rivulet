@@ -71,7 +71,7 @@ class PlexUserProfileManager: ObservableObject {
     /// The Profile Picker choices, in Settings order.
     static let profilePickerChoices: [TimeInterval?] = [nil, 0, 30, 300, 600, 1800]
 
-    /// Call when Rivulet leaves the screen.
+    /// Call with when Rivulet left the screen, once the trip counts as away (`tripCountsAsAway`).
     func noteLeftApp(at date: Date = Date()) {
         userDefaults.set(date.timeIntervalSince1970, forKey: leftAppAtKey)
     }
@@ -79,6 +79,18 @@ class PlexUserProfileManager: ObservableObject {
     /// A cold launch asks whenever the profile picker is on: the timer covers coming back only.
     var shouldAskWhoIsWatchingAtLaunch: Bool {
         profilePickerAfter != nil
+    }
+
+    /// tvOS's shortest screensaver delay is 2 minutes; a little under it, for timer slack.
+    static let screensaverMinimumIdle: TimeInterval = 110
+
+    /// Whether a trip off the screen counts as leaving Rivulet, for the timer. tvOS gives no reason
+    /// for resigning active, and Control Center and the screensaver both resign without backgrounding
+    /// (measured, tvOS 27.2). Background is always away. Otherwise only the screensaver is: it starts
+    /// once the remote has been idle for its delay, and never while the screen is kept awake.
+    nonisolated static func tripCountsAsAway(backgrounded: Bool, inputIdle: TimeInterval,
+                                             screensaverPossible: Bool) -> Bool {
+        backgrounded || (screensaverPossible && inputIdle >= screensaverMinimumIdle)
     }
 
     /// Coming back to Rivulet: true when the profile picker is on and Rivulet has been away at

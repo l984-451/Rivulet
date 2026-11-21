@@ -48,4 +48,24 @@ final class ProfilePickerTimingTests: XCTestCase {
         XCTAssertFalse(manager.shouldAskWhoIsWatchingAtLaunch)
         XCTAssertFalse(manager.shouldAskWhoIsWatching())
     }
+
+    // Measured on tvOS 27.2: Control Center and the screensaver both resign active without
+    // backgrounding; Control Center opened 4 s after the last input, the screensaver at 2 min.
+
+    func test_backgrounding_alwaysCountsAsAway() {
+        XCTAssertTrue(PlexUserProfileManager.tripCountsAsAway(backgrounded: true, inputIdle: 0, screensaverPossible: false))
+    }
+
+    func test_controlCenter_doesNotCountAsAway() {
+        XCTAssertFalse(PlexUserProfileManager.tripCountsAsAway(backgrounded: false, inputIdle: 4, screensaverPossible: true))
+    }
+
+    func test_screensaver_countsAsAway() {
+        XCTAssertTrue(PlexUserProfileManager.tripCountsAsAway(backgrounded: false, inputIdle: 120, screensaverPossible: true))
+    }
+
+    /// Playback keeps the screen awake, so a long idle trip then is Control Center over the player.
+    func test_noScreensaverDuringPlayback_soALongIdleTripIsNotAway() {
+        XCTAssertFalse(PlexUserProfileManager.tripCountsAsAway(backgrounded: false, inputIdle: 3600, screensaverPossible: false))
+    }
 }

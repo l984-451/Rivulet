@@ -110,6 +110,9 @@ enum MenuPressInterceptor {
     /// When the last press of any kind began. A clickpad click also lands as a touch-surface
     /// tap, so tap handlers check this to tell a click from a bare tap.
     private(set) static var lastPressBeganAt: CFTimeInterval = 0
+    /// The last press or touch of any kind, from launch on. tvOS starts its screensaver only after
+    /// the remote has been idle, so the Profile Picker's timer reads this to tell it from Control Center.
+    private(set) static var lastInputAt = Date()
 
     private struct WeakHandler {
         weak var value: (any MenuBackHandling)?
@@ -160,6 +163,7 @@ enum MenuPressInterceptor {
                 if event.type == .touches, event.allTouches?.contains(where: { $0.phase == .began }) == true {
                     MainActor.assumeIsolated {
                         remoteGestures.observe(arrowBegan: nil, arrowFinished: false, touchBegan: true)
+                        lastInputAt = Date()
                     }
                     NotificationCenter.default.post(name: .remoteInputBegan, object: nil)
                 }
@@ -181,6 +185,7 @@ enum MenuPressInterceptor {
                 InputProbe.record(presses: pressesEvent.allPresses)
                 if pressesEvent.allPresses.contains(where: { $0.phase == .began }) {
                     lastPressBeganAt = CACurrentMediaTime()
+                    lastInputAt = Date()
                     NotificationCenter.default.post(name: .remoteInputBegan, object: nil)
                 }
 

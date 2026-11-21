@@ -28,7 +28,9 @@ struct IOSThemeVideoBackdrop: UIViewRepresentable {
             clipsToBounds = true
             layer.addSublayer(backdrop.layer)
             backdrop.isCovered = { [weak self] in
-                self?.window.map { ThemeBackdrop.isCovered($0.rootViewController) } ?? true
+                guard let self, let window else { return true }
+                // Also under a zoomed page, or on one still zooming in or closing.
+                return ThemeBackdrop.isCovered(window.rootViewController) || IOSCustomZoom.covers(self)
             }
         }
 

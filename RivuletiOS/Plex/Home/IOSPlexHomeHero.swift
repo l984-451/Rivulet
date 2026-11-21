@@ -22,6 +22,8 @@ struct IOSPlexHomeHero: View {
     @State private var onScreen = false
     @State private var inView = true
     @State private var isPaging = false
+    /// A zoomed page over Home holds the rotation and the video until it closes.
+    @ObservedObject private var zoomCoverage = IOSZoomCoverage.shared
 
     /// Share of the page travel the artwork lags behind, as in `PreviewCarouselLayout`.
     private static let parallax: CGFloat = 0.3
@@ -49,7 +51,7 @@ struct IOSPlexHomeHero: View {
                 // Full bleed, so no neighbouring page shows under a side bar.
                 Group {
                     artworkPager
-                    IOSThemeVideoBackdrop(item: current.ref, isActive: onScreen && inView && !isPaging)
+                    IOSThemeVideoBackdrop(item: current.ref, isActive: onScreen && inView && !isPaging && !zoomCoverage.pageIsUp)
                         .allowsHitTesting(false)
                     LinearGradient(
                         stops: [
@@ -84,11 +86,11 @@ struct IOSPlexHomeHero: View {
             .onScrollVisibilityChange(threshold: 0.3) { inView = $0 }
             .environment(\.colorScheme, .dark)
             // Keyed on the items too, so a refresh that drops the shown page restarts the rotation.
-            .task(id: items.map { "\($0.ref.providerID)|\($0.ref.itemID)" } + ["\(selection?.providerID ?? "")|\(selection?.itemID ?? "")", "\(onScreen && inView)"]) {
+            .task(id: items.map { "\($0.ref.providerID)|\($0.ref.itemID)" } + ["\(selection?.providerID ?? "")|\(selection?.itemID ?? "")", "\(onScreen && inView && !zoomCoverage.pageIsUp)"]) {
                 if selection == nil || !items.contains(where: { $0.id == selection }) {
                     selection = items.first?.id
                 }
-                guard onScreen, inView else { return }
+                guard onScreen, inView, !zoomCoverage.pageIsUp else { return }
                 try? await Task.sleep(for: .seconds(7))
                 guard !Task.isCancelled, items.count > 1,
                       let index = items.firstIndex(where: { $0.id == selection }) else { return }

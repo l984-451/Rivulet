@@ -245,6 +245,8 @@ struct TileSize: ViewModifier {
 }
 
 struct IOSPlexPosterCard: View {
+    static let cornerRadius: CGFloat = 10
+
     let item: MediaItem
     /// Fixed tile width, or nil to fill what the parent offers.
     var width: CGFloat? = nil
@@ -265,8 +267,8 @@ struct IOSPlexPosterCard: View {
             .modifier(TileSize(width: width, ratio: ratio))
             .plexWatchState(item)
             .overlay(alignment: .topTrailing) { editionBadge }
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .tileHover(cornerRadius: 10)
+            .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
+            .tileHover(cornerRadius: Self.cornerRadius)
             .plexZoomSource(item)
 
             if showsCaption {
@@ -315,6 +317,7 @@ struct IOSPlexPosterCard: View {
 struct IOSPlexContinueCard: View {
     /// The tvOS Continue Watching card's ratio (`MediaRowMetrics`).
     static let aspectRatio: CGFloat = 357 / 277
+    static let cornerRadius: CGFloat = 12
 
     let item: MediaItem
     let width: CGFloat
@@ -378,8 +381,8 @@ struct IOSPlexContinueCard: View {
         }
         .frame(width: width, height: height)
         .environment(\.colorScheme, .dark)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .tileHover(cornerRadius: 12)
+        .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
+        .tileHover(cornerRadius: Self.cornerRadius)
         .plexZoomSource(item)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
@@ -666,19 +669,44 @@ struct IOSPlexRail<Tile: View>: View {
     var badge: String? = nil
     @ViewBuilder let tile: (MediaItem, CGFloat) -> Tile
 
-    /// Each rail owns its zoom sources; an item can sit in several rows.
+    @Environment(\.opensCustomZoom) private var opensCustomZoom
+
+    /// Each rail owns its zoom sources; an item can sit in several rows. On Home it is the hub's id.
     private var zoomScope: String { route?.hub.id ?? title }
+
+    /// The artwork's corner, which the custom zoom starts from.
+    private var artworkCornerRadius: CGFloat {
+        kind == .landscape ? IOSPlexContinueCard.cornerRadius : IOSPlexPosterCard.cornerRadius
+    }
 
     var body: some View {
         IOSShelfRow(kind: kind, items: items) {
             IOSPlexShelfHeader(title: title, route: route, badge: badge)
         } tile: { item, width in
-            NavigationLink(value: IOSPlexDetailRoute(item: item, scope: zoomScope)) { tile(item, width) }
-                .buttonStyle(.plain)
-                .plexContextMenu(item)
+            Group {
+                if opensCustomZoom {
+                    Button {
+                        IOSZoomDetailRoot.open(item, sourceID: IOSPlexDetailRoute.sourceID(item, scope: zoomScope),
+                                               hubID: zoomScope, cornerRadius: artworkCornerRadius)
+                    } label: {
+                        tile(item, width)
+                    }
+                    .buttonStyle(IOSZoomTileButtonStyle())
+                } else {
+                    NavigationLink(value: IOSPlexDetailRoute(item: item, scope: zoomScope)) { tile(item, width) }
+                        .buttonStyle(.plain)
+                }
+            }
+            .plexContextMenu(item)
         }
         .environment(\.plexZoomScope, zoomScope)
     }
+}
+
+/// The tile as drawn, with no pressed dimming: the custom zoom grows a still of the tile taken
+/// at the tap, so a dimmed tile would fly and land dimmed.
+private struct IOSZoomTileButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View { configuration.label }
 }
 
 /// Adaptive poster grid for libraries and See All. A nil slot is an item not

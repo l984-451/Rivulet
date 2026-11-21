@@ -961,7 +961,7 @@ final class MediaDetailChromeView: UIView {
             genreRow.addArrangedSubview(Self.makeCaptionLabel(parts.joined(separator: " · "), alpha: 1))
         }
 
-        if let contentRating = detail?.contentRating, !contentRating.isEmpty {
+        if let contentRating = ContentRatingDisplay.shown(detail?.contentRating) {
             genreRow.addArrangedSubview(Self.makeBadge(contentRating, alpha: 1))
         }
     }

@@ -396,8 +396,8 @@ final class EpisodeCell: UIView {
         summaryLabel.isHidden = (episode.overview ?? "").isEmpty
         dateLabel.text = Self.displayDate(for: episode)
         dateLabel.isHidden = dateLabel.text == nil
-        ratingBadge.text = episode.contentRating
-        ratingBadge.isHidden = (episode.contentRating ?? "").isEmpty
+        ratingBadge.text = ContentRatingDisplay.shown(episode.contentRating)
+        ratingBadge.isHidden = ratingBadge.text == nil
 
         // A resume point outranks the watched state, as in Plex.
         let progress = episode.watchProgress.flatMap { $0 > 0 && $0 < 1 ? $0 : nil }

@@ -919,7 +919,7 @@ private final class MediaItemSlideView: UIView {
 
         // Metadata row
         metadataLabel.text = metaLine(for: item)
-        if let rating = item.contentRating, !rating.isEmpty {
+        if let rating = ContentRatingDisplay.shown(item.contentRating) {
             ratingBadge.text = rating
             ratingBadge.isHidden = false
         } else {

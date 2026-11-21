@@ -218,11 +218,11 @@ struct MacDetailInformation: View {
         return [
             (String(localized: "Studio"), detail?.studios.joined(separator: ", ")),
             (String(localized: "Genre"), (detail?.genres.nilIfEmpty ?? item.genres)?.joined(separator: ", ")),
-            (String(localized: "Rated"), detail?.contentRating ?? item.contentRating),
+            (String(localized: "Rated"), ContentRatingDisplay.shown(detail?.contentRating ?? item.contentRating)),
             (String(localized: "Released"), item.releaseDate.flatMap(Self.formattedDate)),
             (String(localized: "Runtime"), item.runtimeText),
             (String(localized: "Aspect Ratio"), source?.aspectRatioLabel),
-            (String(localized: "Audio"), languages(source?.audioTracks.map(\.language) ?? [])),
+            (String(localized: "Audio"), AudioLanguageSummary.text(source?.audioTracks ?? [], name: { LanguageLabel.display($0) })),
             (String(localized: "Subtitles"), languages(source?.subtitleTracks.map(\.language) ?? []))
         ].compactMap { label, value in
             guard let value, !value.isEmpty else { return nil }

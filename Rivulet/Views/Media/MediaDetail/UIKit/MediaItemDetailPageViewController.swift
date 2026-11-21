@@ -297,13 +297,13 @@ final class MediaItemDetailPageViewController: UIViewController {
         genreRatingRow.spacing = 12
         style(genreLabel, size: 25, weight: .medium, alpha: 1)
         genreRatingRow.addArrangedSubview(genreLabel)
-        if let rating = item.contentRating, !rating.isEmpty {
+        if let rating = ContentRatingDisplay.shown(item.contentRating) {
             ratingBadge.text = rating
             genreRatingRow.addArrangedSubview(ratingBadge)
         } else {
             ratingBadge.isHidden = true
         }
-        genreRatingRow.isHidden = (item.contentRating ?? "").isEmpty   // until genres load
+        genreRatingRow.isHidden = ContentRatingDisplay.shown(item.contentRating) == nil   // until genres load
         textColumn.addArrangedSubview(genreRatingRow)
 
         // 4. Synopsis with a bold "S2, E1:" prefix.

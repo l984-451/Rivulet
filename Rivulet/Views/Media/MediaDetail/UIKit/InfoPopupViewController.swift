@@ -373,7 +373,7 @@ enum InfoPopupContent {
             info.append((String(localized: "Watched"), String(localized: "\(progress.played) of \(progress.total)")))
         }
         if let rt = detail.item.runtime, rt > 0 { info.append((String(localized: "Run Time"), runtimeString(rt))) }
-        if let r = detail.contentRating, !r.isEmpty { info.append((String(localized: "Rated"), r)) }
+        if let r = ContentRatingDisplay.shown(detail.contentRating) { info.append((String(localized: "Rated"), r)) }
         if let region = detail.regionOfOrigin, !region.isEmpty { info.append((String(localized: "Region of Origin"), region)) }
         let video = [source?.resolutionBadge, source?.videoTracks.first.flatMap { VersionPicker.codecName($0.codec) }]
             .compactMap { $0 }
@@ -427,7 +427,7 @@ enum InfoPopupContent {
         var parts: [String] = []
         if let y = detail.item.year { parts.append("\(y)") }
         if let rt = detail.item.runtime, rt > 0 { parts.append(runtimeString(rt)) }
-        if let r = detail.contentRating, !r.isEmpty { parts.append(r) }
+        if let r = ContentRatingDisplay.shown(detail.contentRating) { parts.append(r) }
         if !parts.isEmpty {
             row.addArrangedSubview(label(parts.joined(separator: "  ·  "), size: 20, weight: .semibold, color: .white.withAlphaComponent(0.7), lines: 1))
         }

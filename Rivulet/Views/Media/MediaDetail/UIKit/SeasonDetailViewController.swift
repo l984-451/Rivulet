@@ -424,7 +424,7 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
             metaRow.addArrangedSubview(MediaDetailChromeView.makeCaptionLabel(parts.joined(separator: " · "), alpha: 0.75))
         }
         // A season rarely carries its own rating or score; the show's stand in.
-        if let rated = seasonDetail?.contentRating ?? showDetail?.contentRating, !rated.isEmpty {
+        if let rated = ContentRatingDisplay.shown(seasonDetail?.contentRating) ?? ContentRatingDisplay.shown(showDetail?.contentRating) {
             metaRow.addArrangedSubview(MediaDetailChromeView.makeBadge(rated, alpha: 0.75))
         }
         MediaDetailChromeView.scoreAndAgeViews(ratings: scoreRatings, age: ageRating, alpha: 0.75)

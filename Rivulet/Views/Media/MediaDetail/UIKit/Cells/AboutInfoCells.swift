@@ -39,6 +39,9 @@ final class AboutCollectionCell: UICollectionViewCell {
 
     // Review scores beside the advisory: two columns of three; select → ratings popup.
     private let ratingsCard = AboutCardControl()
+    /// The ratings card follows the age card, or the synopsis when there is no rating to show.
+    private lazy var ratingsAfterAge = ratingsCard.leadingAnchor.constraint(equalTo: rightCard.trailingAnchor, constant: MediaRowMetrics.tileGap)
+    private lazy var ratingsAfterSynopsis = ratingsCard.leadingAnchor.constraint(equalTo: leftCard.trailingAnchor, constant: MediaRowMetrics.tileGap)
     private let ratingsGrid = RatingsGridView()
 
     override init(frame: CGRect) {
@@ -144,7 +147,7 @@ final class AboutCollectionCell: UICollectionViewCell {
             rightCard.widthAnchor.constraint(equalToConstant: Self.narrowCard),
 
             ratingsCard.topAnchor.constraint(equalTo: leftCard.topAnchor),
-            ratingsCard.leadingAnchor.constraint(equalTo: rightCard.trailingAnchor, constant: MediaRowMetrics.tileGap),
+            ratingsAfterAge,
             ratingsCard.bottomAnchor.constraint(equalTo: leftCard.bottomAnchor),
             ratingsCard.widthAnchor.constraint(equalToConstant: Self.wideCard),
             ratingsGrid.topAnchor.constraint(equalTo: ratingsCard.topAnchor, constant: 22),
@@ -195,17 +198,24 @@ final class AboutCollectionCell: UICollectionViewCell {
         synopsisLabel.text = detail.item.overview
 
         let advisory = detail.contentAdvisory
+        let rated = ContentRatingDisplay.shown(detail.contentRating)
+        // No rating to show ("NR" or none): no age card, as the Apple TV app shows none.
+        let showsAge = (advisory?.hasAny ?? false) || rated != nil
+        rightCard.isHidden = !showsAge
+        // Off before on, so the two leading constraints are never active together.
+        NSLayoutConstraint.deactivate(showsAge ? [ratingsAfterSynopsis] : [ratingsAfterAge])
+        NSLayoutConstraint.activate(showsAge ? [ratingsAfterAge] : [ratingsAfterSynopsis])
         if let a = advisory, a.hasAny {
             // Inline = compact: age + seal + one-line description. The topic dots
             // and full text live in the click-to-open popup (ATV+ pattern).
-            ageLabel.text = a.ageRating ?? detail.contentRating ?? "NR"
+            ageLabel.text = ContentRatingDisplay.shown(a.ageRating) ?? rated ?? ""
             sealRow.isHidden = false
             oneLinerLabel.text = a.oneLiner
             oneLinerLabel.isHidden = (a.oneLiner ?? "").isEmpty
             fallbackCaption.isHidden = true
         } else {
             // Fallback: content rating only (no CSM available).
-            ageLabel.text = detail.contentRating ?? "NR"
+            ageLabel.text = rated ?? ""
             sealRow.isHidden = true
             oneLinerLabel.isHidden = true
             fallbackCaption.text = String(localized: "Rated")
@@ -360,7 +370,7 @@ final class InfoColumnsView: UIView {
         var info: [(String, String)] = []
         if let y = detail.item.year { info.append((String(localized: "Released"), "\(y)")) }
         if let runtime = detail.item.runtime, runtime > 0 { info.append((String(localized: "Run Time"), Self.runtime(runtime))) }
-        if let r = detail.contentRating, !r.isEmpty { info.append((String(localized: "Rated"), r)) }
+        if let r = ContentRatingDisplay.shown(detail.contentRating) { info.append((String(localized: "Rated"), r)) }
         if !detail.genres.isEmpty { info.append((String(localized: "Genres"), detail.genres.prefix(4).joined(separator: ", "))) }
         if !detail.studios.isEmpty { info.append((String(localized: "Studio"), detail.studios.prefix(2).joined(separator: ", "))) }
         if let ratio = detail.primarySource?.aspectRatioLabel { info.append((String(localized: "Aspect Ratio"), ratio)) }
@@ -370,7 +380,7 @@ final class InfoColumnsView: UIView {
         let source = detail.primarySource
         var langs: [(String, String)] = []
         if let audio = source?.audioTracks, !audio.isEmpty {
-            let names = uniqueOrdered(audio.compactMap { Self.languageName($0.language) })
+            let names = AudioLanguageSummary.entries(audio, name: { Self.languageName($0) })
             if !names.isEmpty { langs.append((String(localized: "Audio"), names.joined(separator: ", "))) }
         }
         if let subs = source?.subtitleTracks, !subs.isEmpty {

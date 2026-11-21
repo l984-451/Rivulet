@@ -282,11 +282,17 @@ private struct IOSPlexContextMenu: ViewModifier {
     let showsDetails: Bool
     @EnvironmentObject private var browse: BrowseStore
 
+    @ViewBuilder
     func body(content: Content) -> some View {
-        content.contextMenu {
-            IOSPlexItemMenu(item: item, showsPlay: true, showsDetails: showsDetails)
-        } preview: {
-            IOSPlexMenuPreview(item: item).environmentObject(browse)
+        // A catalog title (TMDB) is on no server, so it has none of these actions.
+        if item.isMetadataOnly {
+            content
+        } else {
+            content.contextMenu {
+                IOSPlexItemMenu(item: item, showsPlay: true, showsDetails: showsDetails)
+            } preview: {
+                IOSPlexMenuPreview(item: item).environmentObject(browse)
+            }
         }
     }
 }

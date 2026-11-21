@@ -98,6 +98,11 @@ final class TMDBDiscoverServiceTests: XCTestCase {
         let second = await service.fetchSection(.moviePopular)
         XCTAssertTrue(second.isEmpty)
         XCTAssertEqual(TMDBMockURLProtocol.hitCounts["tmdb/list/popular?type=movie"], 1)
+
+        // A retry the user asked for asks again at once.
+        await service.forgetListFailures()
+        let third = await service.fetchSection(.moviePopular)
+        XCTAssertEqual(third.first?.id, 1)
     }
 
     func testConcurrentFetchSectionSharesOneRequest() async {

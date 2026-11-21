@@ -451,9 +451,11 @@ final class BrowseStore: ObservableObject {
         return imageURL(url, providerID: item.ref.providerID, width: width, height: height)
     }
 
-    /// `url` resized by its server at the given pixel size. A server no longer signed in leaves it as is.
+    /// `url` resized by its server at the given pixel size, or by TMDB for a TMDB title.
+    /// A server no longer signed in leaves it as is.
     func imageURL(_ url: URL?, providerID: String, width: Int, height: Int) -> URL? {
         guard let url else { return nil }
+        if providerID == TMDBMediaMapper.providerID { return TMDBMediaMapper.sizedPoster(url, width: width) }
         return registry.provider(for: providerID)?.imageURL(url, width: width, height: height) ?? url
     }
 

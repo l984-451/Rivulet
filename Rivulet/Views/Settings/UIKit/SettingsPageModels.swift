@@ -855,7 +855,7 @@ enum SettingsContent {
                 kind: .navigationAction(.emby,
                                         value: { EmbySession.account?.serverName ?? "" },
                                         prepare: { addSourceDraft = AddSourceDraft() }))
-        ] + iCloudRows
+        ] + iCloudRows + tmdbRows
     }
 
     /// A build signed without iCloud (a free Apple ID) cannot sync, so it shows no iCloud rows.
@@ -867,6 +867,60 @@ enum SettingsContent {
                             kind: .cycle(value: { iCloudSyncValue },
                                          next: { CloudSync.shared.setEnabled(!CloudSync.shared.isEnabled) })),
         ]
+    }
+
+    // MARK: TMDB key
+
+    /// Set while a typed TMDB key is checked, so its row shows a spinner.
+    private static var isCheckingTMDBKey = false
+
+    /// The user's own TMDB key (`TMDBCredential`). The entry field never shows a saved key.
+    private static var tmdbRows: [SettingsRowItem] {
+        let saved = TMDBCredential.saved != nil
+        return [
+            .header(verbatim: "TMDB"),
+            SettingsRowItem(id: "tmdbKey", title: "TMDB Key", kind: .selectable(
+                isSelected: { false },
+                value: { saved ? String(localized: "Set") : String(localized: "Not set") },
+                handler: { vc in presentTMDBKeyEntry(on: vc) }),
+                isBusy: { isCheckingTMDBKey }),
+        ] + (saved ? [
+            SettingsRowItem(id: "tmdbKeyRemove", title: "Remove TMDB Key", kind: .action(destructive: true, handler: { vc in
+                presentConfirm(on: vc, title: "Remove TMDB Key?",
+                               message: "Rivulet stops using your TMDB key on this Apple TV.",
+                               confirmTitle: "Remove", destructive: true) {
+                    TMDBCredential.remove()
+                    (vc as? SettingsPageViewController)?.reloadRows()
+                }
+            }))
+        ] : [])
+    }
+
+    private static func presentTMDBKeyEntry(on vc: UIViewController) {
+        guard !isCheckingTMDBKey else { return }
+        let page = vc as? SettingsPageViewController
+        vc.present(TextEntryViewController(
+            title: String(localized: "TMDB Key"),
+            message: String(localized: "Enter an API Read Access Token or API key from themoviedb.org."),
+            initialText: "", keyboardType: .asciiCapable, isSecure: true, allowsEmpty: false,
+            onCommit: { text in
+                // In place, not reloadRows: with the same rows that is a reloadData, which drops focus.
+                isCheckingTMDBKey = true
+                page?.refreshVisibleValues()
+                Task { @MainActor in
+                    do {
+                        try await TMDBCredential.saveVerified(text)
+                        isCheckingTMDBKey = false
+                        page?.reloadRows()
+                    } catch {
+                        isCheckingTMDBKey = false
+                        page?.refreshVisibleValues()
+                        page?.present(ConfirmationPopupViewController(
+                            title: String(localized: "Couldn't Save Key"), message: error.localizedDescription,
+                            confirmTitle: String(localized: "OK"), cancelTitle: nil, onConfirm: {}), animated: true)
+                    }
+                }
+            }), animated: true)
     }
 
     // MARK: Plex (sign-in / sign-out)

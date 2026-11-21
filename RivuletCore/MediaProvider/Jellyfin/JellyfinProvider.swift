@@ -638,7 +638,16 @@ final class JellyfinProvider: MediaProvider, @unchecked Sendable {
                   let end = JellyfinTicks.seconds(seg.endTicks) else { return nil }
             return PlaybackMarker(kind: kind, start: start, end: end)
         }
-        return PlaybackExtras(markers: markers)
+        return PlaybackExtras(markers: await ProviderIntroDB.filling(markers, episode: { await self.introDBKey(for: itemRef) }))
+    }
+
+    /// An episode's key for IntroDB: its series' IMDb id, season and number. Nil for anything else.
+    private func introDBKey(for itemRef: MediaItemRef) async -> ProviderIntroDB.EpisodeKey? {
+        guard let episode: JFItem = try? await client.get("Items/\(itemRef.itemID)"), episode.type == "Episode",
+              let seriesID = episode.seriesId, let season = episode.parentIndexNumber, let number = episode.indexNumber,
+              let series: JFItem = try? await client.get("Items/\(seriesID)"),
+              let imdb = ProviderIntroDB.imdbID(in: series.providerIds) else { return nil }
+        return ProviderIntroDB.EpisodeKey(seriesIMDbID: imdb, season: season, episode: number)
     }
 
     /// Trickplay sheets at the width nearest the 320 pt scrub still; nil when the version has none.

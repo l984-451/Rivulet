@@ -19,7 +19,17 @@ extension EmbyProvider {
     /// The item's own `Chapters` (the source's copy is missing on 4.8). Empty is normal.
     func playbackExtras(for itemRef: MediaItemRef, sourceID: String?) async -> PlaybackExtras {
         guard let item: EmbyItem = try? await client.get("\(itemsPath)/\(itemRef.itemID)") else { return PlaybackExtras() }
-        return PlaybackExtras(markers: EmbyMediaMapper.markers(item.chapters ?? [], runtime: EmbyTicks.seconds(item.runTimeTicks)))
+        let markers = EmbyMediaMapper.markers(item.chapters ?? [], runtime: EmbyTicks.seconds(item.runTimeTicks))
+        guard item.type == "Episode" else { return PlaybackExtras(markers: markers) }
+        return PlaybackExtras(markers: await ProviderIntroDB.filling(markers, episode: { await self.introDBKey(for: item) }))
+    }
+
+    /// The episode's key for IntroDB: its series' IMDb id, season and number.
+    private func introDBKey(for episode: EmbyItem) async -> ProviderIntroDB.EpisodeKey? {
+        guard let seriesID = episode.seriesId, let season = episode.parentIndexNumber, let number = episode.indexNumber,
+              let series: EmbyItem = try? await client.get("\(itemsPath)/\(seriesID.value)"),
+              let imdb = ProviderIntroDB.imdbID(in: series.providerIds) else { return nil }
+        return ProviderIntroDB.EpisodeKey(seriesIMDbID: imdb, season: season, episode: number)
     }
 
     // MARK: - Streams

@@ -313,9 +313,15 @@ final class PreviewCarouselViewController: UIViewController {
         expandedDetail.onOpenSeason = { [weak self] season in
             guard let self else { return }
             let show = self.items.indices.contains(self.selectedIndex) ? self.items[self.selectedIndex] : nil
-            self.present(SeasonDetailViewController(season: season,
-                                                    showTitle: show?.kind == .show ? show?.title : nil),
-                         animated: true)
+            let page = SeasonDetailViewController(season: season,
+                                                  showTitle: show?.kind == .show ? show?.title : nil)
+            // A season poster is a shelf tile: arm its row while the tile exists and restore on
+            // close, as the collection tile does. Over full screen, so viewDidAppear never fires.
+            if !self.expandedDetail.focusIsOnPills {
+                self.expandedDetail.restoreShelfRowFocusIfNeeded(requestingFocus: false)
+                page.onDismiss = { [weak self] in self?.restoreBelowFoldFocusAfterReturn() }
+            }
+            self.present(page, animated: true)
         }
         // Cast / crew cell Select → person detail page (full-screen).
         expandedDetail.onSelectPerson = { [weak self] person in
@@ -1352,8 +1358,11 @@ final class PreviewCarouselViewController: UIViewController {
             // Lay out first: a preferred index path whose cell is not realized
             // throws NSInternalInconsistencyException.
             self.expandedDetail.belowFoldCollection.layoutIfNeeded()
+            // Season posters: land on the season holding the next episode (no-op otherwise).
+            self.expandedDetail.belowFoldCollection.armSeasonEntryFocusIfNeeded()
             self.setNeedsFocusUpdate()
             self.updateFocusIfNeeded()
+            self.expandedDetail.clearArmedShelfRestore()
             // So Up from the primary row cannot escape into the faded chrome buttons.
             (self.collectionView.cellForItem(at: IndexPath(item: self.selectedIndex, section: 0)) as? PreviewCardView)?
                 .setChromeActionRowFocusable(false)

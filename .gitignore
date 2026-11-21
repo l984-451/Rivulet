@@ -89,6 +89,9 @@ SENTRY_PATCHES/
 # Personal test content map (rating keys are user-specific)
 Docs/TEST_CONTENT_RATING_KEYS.md
 
+# Anime scores table: built locally from public catalogue downloads, never committed.
+Rivulet/Resources/AnimeScores.json
+
 # Instruments traces + exported XML (multi-hundred-MB to multi-GB; do not commit)
 *.trace
 

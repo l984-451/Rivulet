@@ -183,6 +183,10 @@ enum SettingsDescriptorStore {
             icon: "star.leadinghalf.filled",
             description: "Choose the one rating shown at the top of a movie or show's details. If a title doesn't have the rating you choose, Rotten Tomatoes is shown instead."
         ),
+        "animeScores": SettingDescriptor(
+            icon: "star.circle",
+            description: "Shows the MyAnimeList score beside the rating on an anime's pages. The scores are stored inside the app, so nothing is looked up online."
+        ),
         "libraryHero": SettingDescriptor(
             icon: "rectangle.stack",
             description: "Shows a banner of featured titles at the top of each library."

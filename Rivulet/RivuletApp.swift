@@ -110,6 +110,9 @@ struct RivuletApp: App {
         let info = Bundle.main.infoDictionary ?? [:]
         DiagLog.notice(.launch, "Launch \(info["CFBundleShortVersionString"] as? String ?? "?") (\(info["CFBundleVersion"] as? String ?? "?")) tvOS \(ProcessInfo.processInfo.operatingSystemVersionString) signed_in=\(PlexAuthManager.shared.hasCredentials) setup=\(UserDefaults.standard.bool(forKey: "setupComplete"))")
 
+        // The bundled anime scores table, if this build carries one; read off the main thread.
+        AnimeScores.loadAtLaunch()
+
         // NowPlayingService disabled — AVPlayerViewController handles Now Playing natively.
         // NowPlayingService.shared.initialize()
 

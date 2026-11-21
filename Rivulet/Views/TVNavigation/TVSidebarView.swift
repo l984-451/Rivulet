@@ -426,6 +426,9 @@ struct TVSidebarView: View {
             awayTrip?.backgrounded = true
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            // Coming back is input, though the press went to the system: without this, Control Center
+            // soon after a long trip read the trip as idle time.
+            MenuPressInterceptor.noteInput()
             guard let trip = awayTrip else { return }
             awayTrip = nil
             guard PlexUserProfileManager.tripCountsAsAway(

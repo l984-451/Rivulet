@@ -114,6 +114,12 @@ enum MenuPressInterceptor {
     /// the remote has been idle, so the Profile Picker's timer reads this to tell it from Control Center.
     private(set) static var lastInputAt = Date()
 
+    /// Input that never reaches Rivulet's window: the press that brings the app back (Select on its
+    /// Home Screen icon, waking the screensaver) goes to the system.
+    static func noteInput(at date: Date = Date()) {
+        lastInputAt = date
+    }
+
     private struct WeakHandler {
         weak var value: (any MenuBackHandling)?
     }

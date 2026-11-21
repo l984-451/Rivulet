@@ -64,6 +64,14 @@ final class ProfilePickerTimingTests: XCTestCase {
         XCTAssertTrue(PlexUserProfileManager.tripCountsAsAway(backgrounded: false, inputIdle: 120, screensaverPossible: true))
     }
 
+    /// The press that brings Rivulet back goes to the system, so returning sets the input clock itself.
+    func test_noteInput_restartsTheIdleClock() {
+        MenuPressInterceptor.noteInput(at: Date().addingTimeInterval(-1200))
+        XCTAssertGreaterThanOrEqual(Date().timeIntervalSince(MenuPressInterceptor.lastInputAt), 1200)
+        MenuPressInterceptor.noteInput()
+        XCTAssertLessThan(Date().timeIntervalSince(MenuPressInterceptor.lastInputAt), 1)
+    }
+
     /// Playback keeps the screen awake, so a long idle trip then is Control Center over the player.
     func test_noScreensaverDuringPlayback_soALongIdleTripIsNotAway() {
         XCTAssertFalse(PlexUserProfileManager.tripCountsAsAway(backgrounded: false, inputIdle: 3600, screensaverPossible: false))

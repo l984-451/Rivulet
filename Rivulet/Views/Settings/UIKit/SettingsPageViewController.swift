@@ -35,6 +35,10 @@ final class SettingsPageViewController: UIViewController, SidebarTabReselecting 
 
     /// Tracks the focused row so a grab (hold Select) knows which row to act on.
     private var focusedIndexPath: IndexPath?
+    /// The row that last held focus, kept while focus is away (a confirm popup over the page).
+    private var lastFocusedRowID: String?
+    /// Where focus goes when the row it was on removed itself (see `reloadRows`).
+    private var pendingFocus: IndexPath?
     /// Move mode for a grabbed row: Up/Down slide it, Select drops it.
     private var reorder: GrabReorderController!
     private var speechModelState: AnyCancellable?
@@ -201,7 +205,7 @@ final class SettingsPageViewController: UIViewController, SidebarTabReselecting 
     }
 
     /// Re-read every visible row's value in place, keeping focus where it is.
-    private func refreshVisibleValues() {
+    func refreshVisibleValues() {
         guard let collectionView else { return }
         for cell in collectionView.visibleCells {
             guard let cell = cell as? SettingsCell,
@@ -235,6 +239,13 @@ final class SettingsPageViewController: UIViewController, SidebarTabReselecting 
             return
         }
         let path: (Int) -> IndexPath = { IndexPath(item: $0, section: 0) }
+        // A row that removes itself (Remove TMDB Key) stays the collection's remembered
+        // focus, usually while its confirm popup closes, and focus lands nowhere. Send it
+        // to the nearest row above instead.
+        let refocus = lastFocusedRowID.flatMap { id -> Int? in
+            guard !newIDs.contains(id), let old = oldIDs.firstIndex(of: id) else { return nil }
+            return newRows.indices.prefix(old).last { newRows[$0].isFocusable }
+        }
         collectionView.performBatchUpdates({
             // Swapped inside the update: a list with a load pending reads its
             // count first, and that count has to be the old one.
@@ -244,7 +255,19 @@ final class SettingsPageViewController: UIViewController, SidebarTabReselecting 
             for (from, id) in oldIDs.enumerated() {
                 if let to = newIDs.firstIndex(of: id), to != from { collectionView.moveItem(at: path(from), to: path(to)) }
             }
-        }, completion: { [weak self] _ in self?.refreshVisibleValues() })
+        }, completion: { [weak self] _ in
+            self?.refreshVisibleValues()
+            guard let self, let refocus else { return }
+            pendingFocus = path(refocus)
+            collectionView.remembersLastFocusedIndexPath = false
+            // Pull focus in only when it is lost, never from the sidebar.
+            guard let system = UIFocusSystem.focusSystem(for: collectionView) else { return }
+            let current = system.focusedItem as? UIView
+            if current == nil || current?.window == nil || current?.isDescendant(of: collectionView) == true {
+                system.requestFocusUpdate(to: collectionView)
+                system.updateFocusIfNeeded()
+            }
+        })
         focusedIndexPath = focusedID.flatMap { newIDs.firstIndex(of: $0) }.map(path)
     }
 
@@ -338,6 +361,16 @@ extension SettingsPageViewController: UICollectionViewDataSource, UICollectionVi
                         didUpdateFocusIn context: UICollectionViewFocusUpdateContext,
                         with coordinator: UIFocusAnimationCoordinator) {
         focusedIndexPath = context.nextFocusedIndexPath
+        guard let next = context.nextFocusedIndexPath, rows.indices.contains(next.item) else { return }
+        lastFocusedRowID = rows[next.item].id
+        if pendingFocus != nil {
+            pendingFocus = nil
+            collectionView.remembersLastFocusedIndexPath = true
+        }
+    }
+
+    func indexPathForPreferredFocusedView(in collectionView: UICollectionView) -> IndexPath? {
+        pendingFocus
     }
 
     /// While a row is grabbed, lock focus to it so Up/Down slide the row instead

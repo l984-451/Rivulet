@@ -3777,6 +3777,9 @@
         }
       }
     },
+    "Couldn't Load Discover" : {
+
+    },
     "Couldn't Load Home" : {
       "localizations" : {
         "de" : {
@@ -4625,6 +4628,9 @@
       }
     },
     "Different Version" : {},
+    "Discover" : {
+
+    },
     "Dismiss" : {
       "localizations" : {
         "de" : {

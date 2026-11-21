@@ -127,16 +127,22 @@ actor XtreamService {
     /// Live channels with their categories as groups, ready for the shared
     /// channel pipeline. A category list that fails only costs the groups.
     func fetchChannels(format: String) async throws -> [M3UParser.ParsedChannel] {
-        async let streams = json(endpoint("player_api.php", query: [URLQueryItem(name: "action", value: "get_live_streams")]))
+        let report = LoadingActivity.begin(.channels)
+        defer { report.finish() }
+        async let streams = json(endpoint("player_api.php", query: [URLQueryItem(name: "action", value: "get_live_streams")]),
+                                 progress: report)
         let categories = try? await json(endpoint("player_api.php",
                                                    query: [URLQueryItem(name: "action", value: "get_live_categories")]))
-        return Self.channels(from: try await streams, categories: categories, service: self, format: format)
+        let list = try await streams
+        report.processing()
+        return Self.channels(from: list, categories: categories, service: self, format: format)
     }
 
-    private func json(_ url: URL) async throws -> Any {
+    private func json(_ url: URL, progress: LoadingReport? = nil) async throws -> Any {
         let (data, response) = try await BoundedDownload.data(for: URLRequest(url: url),
                                                               limit: BoundedDownload.playlistLimit,
-                                                              configuration: session.configuration)
+                                                              configuration: session.configuration,
+                                                              progress: progress)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 200
         return try Self.parse(data, status: status)
     }

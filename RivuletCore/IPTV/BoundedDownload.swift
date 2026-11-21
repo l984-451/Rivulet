@@ -15,11 +15,13 @@ nonisolated enum BoundedDownload {
     }
 
     /// `credential` answers a Basic or Digest challenge once; a refused login
-    /// comes back as its status rather than a thrown error.
+    /// comes back as its status rather than a thrown error. `progress` hears the bytes as
+    /// they arrive (the loading pill); the caller finishes it.
     static func data(for request: URLRequest, limit: Int,
                      configuration: URLSessionConfiguration = .default,
-                     credential: URLCredential? = nil) async throws -> (Data, URLResponse) {
-        let loader = Loader(limit: limit, credential: credential)
+                     credential: URLCredential? = nil,
+                     progress: LoadingReport? = nil) async throws -> (Data, URLResponse) {
+        let loader = Loader(limit: limit, credential: credential, progress: progress)
         let session = URLSession(configuration: configuration, delegate: loader, delegateQueue: nil)
         defer { session.finishTasksAndInvalidate() }
         let task = session.dataTask(with: request)
@@ -35,14 +37,16 @@ nonisolated enum BoundedDownload {
     private final class Loader: NSObject, URLSessionDataDelegate, @unchecked Sendable {
         private let limit: Int
         private let credential: URLCredential?
+        private let progress: LoadingReport?
         private let lock = NSLock()
         private var data = Data()
         private var tooLarge = false
         private var continuation: CheckedContinuation<(Data, URLResponse), Error>?
 
-        init(limit: Int, credential: URLCredential?) {
+        init(limit: Int, credential: URLCredential?, progress: LoadingReport?) {
             self.limit = limit
             self.credential = credential
+            self.progress = progress
         }
 
         func start(_ task: URLSessionDataTask, continuation: CheckedContinuation<(Data, URLResponse), Error>) {
@@ -78,6 +82,9 @@ nonisolated enum BoundedDownload {
                 return tooLarge
             }
             if over { dataTask.cancel() }
+            // The task's own pair: both count the body as sent, compressed or not.
+            let expected = dataTask.countOfBytesExpectedToReceive
+            progress?.received(dataTask.countOfBytesReceived, of: expected > 0 ? expected : nil)
         }
 
         func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {

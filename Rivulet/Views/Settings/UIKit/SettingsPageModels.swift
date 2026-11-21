@@ -1556,6 +1556,24 @@ enum SettingsContent {
 
     /// Set while Refresh Channels runs, so the row says so and ignores a second press.
     private static var refreshingSourceID: String?
+    /// Refresh Guide while it runs, by "<row>|<source>".
+    private static var runningRefreshes: Set<String> = []
+
+    /// A refresh row: says it is running, ignores a second press, and reloads the page after.
+    private static func refreshRow(id: String, title: String, running: String, sourceID: String,
+                                   work: @escaping @MainActor () async -> Void) -> SettingsRowItem {
+        let key = "\(id)|\(sourceID)"
+        return SettingsRowItem(id: id, verbatim: runningRefreshes.contains(key) ? running : title,
+                               kind: .action(destructive: false, handler: { vc in
+            guard runningRefreshes.insert(key).inserted else { return }
+            (vc as? SettingsPageViewController)?.reloadRows()
+            Task { @MainActor in
+                await work()
+                runningRefreshes.remove(key)
+                (vc as? SettingsPageViewController)?.reloadRows()
+            }
+        }))
+    }
 
     private static var liveTVSourceDetail: [SettingsRowItem] {
         guard let pending = pendingSourceDetail else { return [] }
@@ -1590,6 +1608,11 @@ enum SettingsContent {
             rows.append(SettingsRowItem(id: "src_lastSync", title: "Last Synced",
                                         kind: .info(value: { lastSync.formatted(date: .abbreviated, time: .shortened) })))
         }
+        rows.append(refreshRow(id: "refreshGuide", title: String(localized: "Refresh Guide"),
+                               running: String(localized: "Refreshing Guide…"),
+                               sourceID: source.id) {
+            await LiveTVDataStore.shared.loadEPG(startDate: Date(), hours: LiveTVDataStore.refreshWindowHours)
+        })
         let refreshing = refreshingSourceID == source.id
         rows.append(SettingsRowItem(id: "refreshChannels", title: refreshing ? "Refreshing Channels…" : "Refresh Channels",
                                     kind: .action(destructive: false, handler: { vc in

@@ -482,6 +482,10 @@ enum SettingsDescriptorStore {
             icon: "arrow.clockwise",
             description: "Reloads this source's channels and guide."
         ),
+        "refreshGuide": SettingDescriptor(
+            icon: "calendar.badge.clock",
+            description: "Reloads the guide only, for when it stays empty or out of date."
+        ),
         "removeSource": SettingDescriptor(
             icon: "trash",
             description: "Remove this Live TV source and all its channels."

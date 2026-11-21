@@ -4765,6 +4765,24 @@
         }
       }
     },
+    "Reloads the guide only, for when it stays empty or out of date." : {
+
+    },
+    "Refreshing Guide…" : {
+
+    },
+    "Refresh Guide" : {
+
+    },
+    "Processing…" : {
+
+    },
+    "Loading guide" : {
+
+    },
+    "Loading channels" : {
+
+    },
     "iCloud" : {
       "localizations" : {
         "de" : {

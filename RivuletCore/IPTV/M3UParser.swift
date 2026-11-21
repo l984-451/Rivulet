@@ -71,14 +71,18 @@ actor M3UParser {
     /// - Returns: Array of parsed channels
     func parse(from url: URL) async throws -> [ParsedChannel] {
         // Fetch the URL exactly as supplied — http stays http (no https rewrite).
-        let (data, _) = try await fetchData(from: url)
+        let report = LoadingActivity.begin(.channels)
+        defer { report.finish() }
+        let (data, _) = try await fetchData(from: url, progress: report)
+        report.processing()
         return try parse(data: data)
     }
 
     // MARK: - Private Networking
 
     /// Fetch data from a URL with optional custom timeout
-    private func fetchData(from url: URL, timeout: TimeInterval? = nil) async throws -> (Data, URLResponse) {
+    private func fetchData(from url: URL, timeout: TimeInterval? = nil,
+                           progress: LoadingReport? = nil) async throws -> (Data, URLResponse) {
         var request = URLRequest(url: url)
         // Some panels refuse a request with no recognisable client.
         request.setValue(LiveTVClientIdentity.userAgent, forHTTPHeaderField: "User-Agent")
@@ -86,7 +90,8 @@ actor M3UParser {
             request.timeoutInterval = timeout
         }
 
-        let (data, response) = try await BoundedDownload.data(for: request, limit: BoundedDownload.playlistLimit)
+        let (data, response) = try await BoundedDownload.data(for: request, limit: BoundedDownload.playlistLimit,
+                                                              progress: progress)
 
         if let httpResponse = response as? HTTPURLResponse,
            !(200...299).contains(httpResponse.statusCode) {

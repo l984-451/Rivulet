@@ -90,6 +90,8 @@ struct IOSRootView: View {
             }
         }
         .tabViewStyle(.sidebarAdaptable)
+        // Large loads (a large channel list or guide); the full-screen player covers it.
+        .overlay(alignment: .top) { LoadingPill() }
         .tabViewSearchActivation(.searchTabSelection)
         .tabBarMinimizeBehavior(.onScrollDown)
         .environment(\.openAccount) { showingAccount = true }

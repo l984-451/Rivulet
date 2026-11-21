@@ -74,14 +74,18 @@ actor XMLTVParser {
     /// Parse XMLTV data from a URL
     func parse(from url: URL, filter: GuideFilter? = nil) async throws -> ParseResult {
         // Fetch the URL exactly as supplied — http stays http (no https rewrite).
-        let (data, _) = try await fetchData(from: url)
+        let report = LoadingActivity.begin(.guide)
+        defer { report.finish() }
+        let (data, _) = try await fetchData(from: url, progress: report)
+        report.processing()
         return try parse(data: data, filter: filter)
     }
 
     // MARK: - Private Networking
 
     /// Fetch data from a URL with optional custom timeout
-    private func fetchData(from url: URL, timeout: TimeInterval? = nil) async throws -> (Data, URLResponse) {
+    private func fetchData(from url: URL, timeout: TimeInterval? = nil,
+                           progress: LoadingReport? = nil) async throws -> (Data, URLResponse) {
         var request = URLRequest(url: url)
         // Some panels refuse a request with no recognisable client.
         request.setValue(LiveTVClientIdentity.userAgent, forHTTPHeaderField: "User-Agent")
@@ -89,7 +93,8 @@ actor XMLTVParser {
             request.timeoutInterval = timeout
         }
 
-        let (data, response) = try await BoundedDownload.data(for: request, limit: BoundedDownload.guideLimit)
+        let (data, response) = try await BoundedDownload.data(for: request, limit: BoundedDownload.guideLimit,
+                                                              progress: progress)
 
         if let httpResponse = response as? HTTPURLResponse,
            !(200...299).contains(httpResponse.statusCode) {

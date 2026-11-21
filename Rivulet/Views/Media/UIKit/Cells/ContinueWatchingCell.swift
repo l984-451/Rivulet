@@ -268,7 +268,9 @@ final class ContinueWatchingCell: UICollectionViewCell {
                 await ContinueWatchingCardCompositor.image(.card, for: url, geometry: geometry, scale: scale)
             }
             await MainActor.run {
-                guard let self, self.currentArtworkURL == url else { return }
+                // A cancelled load was replaced or reset: its nil must not show the failure icon
+                // over a newer load of the same card.
+                guard let self, !Task.isCancelled, self.currentArtworkURL == url else { return }
                 if let image {
                     self.artworkImageView.image = image
                     self.placeholderView.isHidden = true

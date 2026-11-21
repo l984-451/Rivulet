@@ -6,7 +6,7 @@ import XCTest
 /// IntroDB for Jellyfin and Emby episodes (`ProviderIntroDB`).
 final class ProviderIntroDBTests: XCTestCase {
 
-    private let key = ProviderIntroDB.EpisodeKey(seriesIMDbID: "tt7587890", season: 8, episode: 12)
+    private let key = ProviderIntroDB.EpisodeKey(seriesIMDbID: "tt0000001", season: 2, episode: 5)
 
     private func plexMarker(_ type: String, _ start: Int, _ end: Int) -> PlexMarker {
         PlexMarker(id: -1, type: type, startTimeOffset: start * 1000, endTimeOffset: end * 1000)

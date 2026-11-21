@@ -90,6 +90,7 @@ final class MusicQueue: ObservableObject {
     private var liveTVSessions: Set<ObjectIdentifier> = []
 
     func liveTVSessionBegan(_ owner: ObjectIdentifier) {
+        ThemeMusic.shared.stopForVideo()
         liveTVSessions.insert(owner)
         if playbackState == .playing { pause() }  // A channel does not play over a song.
     }

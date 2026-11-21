@@ -73,6 +73,10 @@ protocol MediaProvider: Sendable, Identifiable {
     /// server has none or it cannot direct play on AVPlayer; never a transcode. Default: nil (Plex).
     func themeVideoURL(for itemRef: MediaItemRef) async throws -> URL?
 
+    /// A direct-play URL for the theme tune of a show; a season or an episode answers with its
+    /// show's. Nil when the server has none; never a transcode. Default: nil.
+    func themeMusicURL(for itemRef: MediaItemRef) async throws -> URL?
+
     // MARK: - Home rails
     func continueWatching(limit: Int) async throws -> [MediaItem]
     func recentlyAdded(limit: Int) async throws -> [MediaItem]
@@ -243,6 +247,8 @@ protocol MediaProvider: Sendable, Identifiable {
 
 extension MediaProvider {
     func themeVideoURL(for itemRef: MediaItemRef) async throws -> URL? { nil }
+
+    func themeMusicURL(for itemRef: MediaItemRef) async throws -> URL? { nil }
 
     func resolveStream(for itemRef: MediaItemRef, sourceID: String?, maxBitrate: Int?,
                        startTime: TimeInterval) async throws -> StreamInfo {

@@ -183,6 +183,14 @@ enum SettingsDescriptorStore {
             icon: "star.leadinghalf.filled",
             description: "Choose the one rating shown at the top of a movie or show's details. If a title doesn't have the rating you choose, Rotten Tomatoes is shown instead."
         ),
+        "themeMusic": SettingDescriptor(
+            icon: "music.note",
+            description: "Plays a TV show's theme tune quietly while you look at the show, its seasons and episodes. It stops when you leave or start playing."
+        ),
+        "themeMusicVolume": SettingDescriptor(
+            icon: "speaker.wave.2",
+            description: "How loud the theme tune plays, on top of your TV's own volume."
+        ),
         "libraryHero": SettingDescriptor(
             icon: "rectangle.stack",
             description: "Shows a banner of featured titles at the top of each library."

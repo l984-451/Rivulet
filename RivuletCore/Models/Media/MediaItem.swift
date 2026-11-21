@@ -169,6 +169,19 @@ extension MediaItem {
         guard let show, !show.itemID.isEmpty else { return nil }
         return "\(show.providerID)|\(show.itemID)"
     }
+
+    /// The show whose theme tune a page for this item plays: the show itself, a season's parent,
+    /// an episode's grandparent. Nil for anything else, so a film's page stays silent.
+    var themeMusicShowRef: MediaItemRef? {
+        let show: MediaItemRef? = switch kind {
+        case .show: ref
+        case .season: parentRef
+        case .episode: grandparentRef
+        default: nil
+        }
+        guard let show, !show.itemID.isEmpty else { return nil }
+        return show
+    }
 }
 
 extension MediaItem {

@@ -29,6 +29,7 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
     private let logoView = UIImageView()
     private let metaRow = UIStackView()
     private let overviewLabel = UILabel()
+    private let themeIndicator = ThemeMusicIndicatorView()
     private var playButton: FocusableActionButton?
     private weak var playTitleLabel: UILabel?
     private weak var watchedButton: FocusableActionButton?
@@ -132,12 +133,14 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         themeVideo.setActive(true)
+        ThemeMusic.shared.refresh()
     }
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         collectionView.settleFocusScroll()
         themeVideo.setActive(false)
+        ThemeMusic.shared.refresh()
     }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
@@ -430,6 +433,9 @@ final class SeasonDetailViewController: UIViewController, UICollectionViewDelega
         MediaDetailChromeView.scoreAndAgeViews(ratings: scoreRatings, age: ageRating, alpha: 0.75)
             .forEach(metaRow.addArrangedSubview)
         metaRow.isHidden = metaRow.arrangedSubviews.isEmpty
+        // After the emptiness rule: a hidden indicator must not keep an empty row up.
+        themeIndicator.show = season.themeMusicShowRef
+        metaRow.addArrangedSubview(themeIndicator)
     }
 
     private var scoreRatings: [MediaRating] {
@@ -611,4 +617,10 @@ enum EpisodeMenu {
             host.present(TileMenuPopupViewController(sections: sections, sourceFrame: sourceFrame), animated: false)
         }
     }
+}
+
+// MARK: - Theme music
+
+extension SeasonDetailViewController: ThemeMusicPage {
+    var themeMusicShow: MediaItemRef? { season.themeMusicShowRef }
 }

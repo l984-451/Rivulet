@@ -139,6 +139,8 @@ final class NowPlayingService: ObservableObject {
 
     /// Attach to a player view model to sync Now Playing state
     func attach(to viewModel: UniversalPlayerViewModel, inputCoordinator: PlaybackInputCoordinator? = nil) {
+        // A show's theme tune never sounds into the session this is about to configure.
+        ThemeMusic.shared.stopForVideo()
         // Detach from previous if any
         detach()
 
@@ -332,6 +334,7 @@ final class NowPlayingService: ObservableObject {
     /// through the same deduping coordinator its own button presses use, so a
     /// press that arrives both ways still toggles once.
     func attachLive(inputCoordinator: PlaybackInputCoordinator) {
+        ThemeMusic.shared.stopForVideo()
         detach()
         self.inputCoordinator = inputCoordinator
         refreshSkipIntervals()

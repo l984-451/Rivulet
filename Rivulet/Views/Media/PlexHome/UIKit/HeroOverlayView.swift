@@ -14,6 +14,10 @@ private let heroLog = Logger(subsystem: "com.rivulet.app", category: "HeroOverla
 @MainActor
 final class HeroOverlayView: UIView {
 
+    /// Button row and dot row held off the hero's bottom edge, at Apple's measured rows (707.5 and 868 pt on a 1080 screen).
+    static let buttonRowBottomInset: CGFloat = 106.5
+    static let dotsBottomInset: CGFloat = 0
+
     // MARK: - Inputs
 
     private(set) var items: [PlexMetadata] = []
@@ -85,21 +89,17 @@ final class HeroOverlayView: UIView {
         pagingDotsBackground.isHidden = true
 
         NSLayoutConstraint.activate([
-            // Slide + buttons pinned bottom-left at 32pt, aligned with the home
-            // rows' content-left margin. Held off the very bottom by 94pt (the
-            // metadata stack sits ~50px lower than the old 144), dots below them.
+            // Slide + buttons pinned bottom-left on the rows' margin, dots below them.
             slideView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: MediaRowMetrics.rowLeading),
             slideView.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -120),
 
             buttonRow.leadingAnchor.constraint(equalTo: leadingAnchor, constant: MediaRowMetrics.rowLeading),
-            buttonRow.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -94),
+            buttonRow.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -HeroOverlayView.buttonRowBottomInset),
             buttonRow.topAnchor.constraint(equalTo: slideView.bottomAnchor, constant: 28),
             buttonRow.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -120),
 
             pagingDotsBackground.centerXAnchor.constraint(equalTo: centerXAnchor),
-            // Low at rest: ~50px above Continue Watching (10pt above the hero
-            // bottom + the hero section's 40pt bottom gap to the first row).
-            pagingDotsBackground.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
+            pagingDotsBackground.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -HeroOverlayView.dotsBottomInset),
 
             pagingDots.topAnchor.constraint(equalTo: pagingDotsBackground.topAnchor, constant: 8),
             pagingDots.bottomAnchor.constraint(equalTo: pagingDotsBackground.bottomAnchor, constant: -8),
@@ -585,12 +585,12 @@ final class MediaItemHeroOverlayView: UIView {
             slideView.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -120),
 
             buttonRow.leadingAnchor.constraint(equalTo: leadingAnchor, constant: MediaRowMetrics.rowLeading),
-            buttonRow.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -94),
+            buttonRow.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -HeroOverlayView.buttonRowBottomInset),
             buttonRow.topAnchor.constraint(equalTo: slideView.bottomAnchor, constant: 28),
             buttonRow.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -120),
 
             pagingDotsBackground.centerXAnchor.constraint(equalTo: centerXAnchor),
-            pagingDotsBackground.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
+            pagingDotsBackground.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -HeroOverlayView.dotsBottomInset),
 
             pagingDots.topAnchor.constraint(equalTo: pagingDotsBackground.topAnchor, constant: 8),
             pagingDots.bottomAnchor.constraint(equalTo: pagingDotsBackground.bottomAnchor, constant: -8),
@@ -863,26 +863,26 @@ private final class MediaItemSlideView: UIView {
         fallbackTitleLabel.shadowOffset = CGSize(width: 0, height: 3)
         fallbackTitleLabel.isHidden = true
 
-        // Apple's genres row: Caption1 (25) medium at full white, 6 pt to the badge.
-        metadataLabel.font = .systemFont(ofSize: 25, weight: .medium)
+        // Apple's genres row, shared with the Plex slide.
+        metadataLabel.font = HeroSlideView.metadataFont
         metadataLabel.textColor = .white
         metadataLabel.numberOfLines = 1
 
         metadataRow.axis = .horizontal
-        metadataRow.spacing = 6
+        metadataRow.spacing = HeroSlideView.metadataSpacing
         metadataRow.alignment = .center
         metadataRow.addArrangedSubview(sourceBadge)
         metadataRow.addArrangedSubview(metadataLabel)
         metadataRow.addArrangedSubview(ratingBadge)
         ratingBadge.isHidden = true
 
-        taglineLabel.font = .systemFont(ofSize: 22, weight: .regular)
-        taglineLabel.textColor = UIColor.white.withAlphaComponent(0.85)
+        taglineLabel.font = HeroSlideView.taglineFont
+        taglineLabel.textColor = HeroSlideView.taglineColor
         taglineLabel.numberOfLines = 2
 
         stack.axis = .vertical
         stack.alignment = .leading
-        stack.spacing = 18
+        stack.spacing = HeroSlideView.rowSpacing
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.addArrangedSubview(logoImageView)
         stack.addArrangedSubview(fallbackTitleLabel)
@@ -896,10 +896,10 @@ private final class MediaItemSlideView: UIView {
             stack.topAnchor.constraint(equalTo: topAnchor),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor),
 
-            logoImageView.heightAnchor.constraint(lessThanOrEqualToConstant: 180),
-            logoImageView.widthAnchor.constraint(lessThanOrEqualToConstant: 520),
+            logoImageView.heightAnchor.constraint(lessThanOrEqualToConstant: HeroSlideView.maxLogoHeight),
+            logoImageView.widthAnchor.constraint(lessThanOrEqualToConstant: HeroSlideView.maxLogoWidth),
 
-            taglineLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 720)
+            taglineLabel.widthAnchor.constraint(lessThanOrEqualToConstant: HeroSlideView.maxTaglineWidth)
         ])
     }
 

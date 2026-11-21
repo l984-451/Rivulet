@@ -180,14 +180,14 @@ final class SearchRecentsCell: UICollectionViewCell {
 
         let subtitle = UILabel()
         subtitle.text = subtitleText(for: item)
-        subtitle.font = .preferredFont(forTextStyle: .caption1)
+        subtitle.font = .preferredFont(forTextStyle: .caption2)
         subtitle.textColor = UIColor.white.withAlphaComponent(0.5)
         subtitle.numberOfLines = 2
         subtitle.lineBreakMode = .byTruncatingTail
 
         let text = UIStackView(arrangedSubviews: [title, subtitle])
         text.axis = .vertical
-        text.spacing = 6
+        text.spacing = 0
         text.alignment = .leading
         text.isUserInteractionEnabled = false
         text.translatesAutoresizingMaskIntoConstraints = false

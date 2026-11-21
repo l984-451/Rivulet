@@ -155,7 +155,9 @@ enum MediaRowMetrics {
     static var headerFont: UIFont { .systemFont(ofSize: 31, weight: .semibold) }
     /// Bold section titles (hub headers, playlist header).
     static let sectionTitleSize: CGFloat = 30
-    static var headerColor: UIColor { UIColor.white.withAlphaComponent(0.55) }
+    static var headerColor: UIColor { UIColor.white.withAlphaComponent(0.49) }
+    /// Detail page and Person headers read 0.55 in the Apple TV app; Home's read 0.49.
+    static var pageHeaderColor: UIColor { UIColor.white.withAlphaComponent(0.55) }
 
     /// Section insets (top, bottom) of a titled shelf row of `tile`s. The row's flow layout
     /// centres the frames in their focus padding, so half of it plus half the growth sits

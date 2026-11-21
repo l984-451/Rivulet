@@ -3089,18 +3089,17 @@ final class PlexHomeViewController: UIViewController {
         // is measured from the panel edge). Insets stay zero — the overlay
         // cell already owns its own vertical composition.
         section.contentInsetsReference = .none
-        // Small bottom gap so the first row (Continue Watching) sits a bit
-        // lower, separated from the hero.
+        // The first row starts under the hero's bottom edge, where Apple's does.
         section.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 0, bottom: Self.heroShelfGap, trailing: 0)
         return section
     }
 
-    /// The hero section: the screen less 200 pt, then a 40 pt gap to the first shelf.
+    /// The hero section: the screen less 200 pt. The first shelf starts 4 pt inside its bottom edge
+    /// (negative gap), which puts the first row title at Apple's y 887.5 on a 1080 pt screen.
     private static var heroHeight: CGFloat { max(400, UIScreen.main.bounds.height - 200) }
-    private static let heroShelfGap: CGFloat = 40
-    /// The line the backdrop's bottom catches up with: 40 pt above the hero's
-    /// bottom, leaving Apple's ~100 pt between the art and the first row title.
-    private static var heroBackdropFloor: CGFloat { heroHeight - 40 }
+    private static let heroShelfGap: CGFloat = -4
+    /// The line the backdrop's bottom catches up with, 80 pt above the first shelf's top.
+    private static var heroBackdropFloor: CGFloat { heroHeight + heroShelfGap - 80 }
 
     /// Nothing covers Home, so a hero page change would be seen. Checks the
     /// window's root: the carousel and player present from the shell, not here.
@@ -3132,9 +3131,11 @@ final class PlexHomeViewController: UIViewController {
         layoutSection.contentInsetsReference = .none
         // Titled rows: header baseline to artwork and artwork to next artwork follow Apple's
         // measured spacing (`shelfInsets`). The row's flow layout centres the tiles in their padding.
-        let insets = section.title != nil
+        var insets = section.title != nil
             ? MediaRowMetrics.shelfInsets(for: tile)
             : (top: MediaRowMetrics.rowTopInset, bottom: MediaRowMetrics.rowBottomInset)
+        // An episode card's frame holds its 20 pt focus reserve above the artwork, which its tile does not count.
+        if section.isEpisodeRow, section.title != nil { insets.top -= MediaRowMetrics.focusGrowth / 2 }
         layoutSection.contentInsets = NSDirectionalEdgeInsets(
             top: insets.top,
             leading: 0,

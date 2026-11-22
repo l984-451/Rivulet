@@ -93,7 +93,7 @@ actor PersonalizedRecommendationService {
         }
 
         // Build feature profile from the current item
-        let itemFeatures = await WatchProfileBuilder.buildFeatures(for: item)
+        let itemFeatures = await WatchProfileBuilder.buildFeatures(for: WatchedTitle(item))
         var itemProfile = FeatureProfile()
         itemProfile.add(features: itemFeatures, weight: 1.0)
 
@@ -131,7 +131,7 @@ actor PersonalizedRecommendationService {
 
         // Score candidates
         var scored: [(PlexMetadata, Double)] = []
-        let candidateFeatures = await WatchProfileBuilder.buildFeatures(for: candidates)
+        let candidateFeatures = await WatchProfileBuilder.buildFeatures(for: candidates.map(WatchedTitle.init))
         for (candidate, features) in zip(candidates, candidateFeatures) {
             let itemScore = score(features: features, profile: profile, metadata: candidate)
             scored.append((candidate, itemScore))
@@ -207,10 +207,10 @@ actor PersonalizedRecommendationService {
         // Build profile from most recently watched items
         let recentWatched = watchedItems.sorted { ($0.lastViewedAt ?? 0) > ($1.lastViewedAt ?? 0) }
         let watchedSample = Array(recentWatched.prefix(maxWatchedForProfile))
-        let profile = await WatchProfileBuilder.build(from: watchedSample)
+        let profile = await WatchProfileBuilder.build(from: watchedSample.map(WatchedTitle.init))
 
         var scored: [(PlexMetadata, Double)] = []
-        let unwatchedFeatures = await WatchProfileBuilder.buildFeatures(for: unwatchedItems)
+        let unwatchedFeatures = await WatchProfileBuilder.buildFeatures(for: unwatchedItems.map(WatchedTitle.init))
         for (item, features) in zip(unwatchedItems, unwatchedFeatures) {
             let score = score(features: features, profile: profile, metadata: item)
             scored.append((item, score))
@@ -340,7 +340,7 @@ actor PersonalizedRecommendationService {
                 .prefix(maxWatchedForProfile)
         )
 
-        return await WatchProfileBuilder.build(from: recentWatched)
+        return await WatchProfileBuilder.build(from: recentWatched.map(WatchedTitle.init))
     }
 
     /// Blend two profiles with specified weights

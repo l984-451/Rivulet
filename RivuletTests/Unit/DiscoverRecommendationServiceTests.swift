@@ -25,17 +25,35 @@ final class DiscoverRecommendationServiceTests: XCTestCase {
             TMDBListItem(id: 200, title: "New",   overview: nil, posterPath: nil, backdropPath: nil, releaseDate: nil, voteAverage: nil, mediaType: .movie)
         ]
 
-        let service = DiscoverRecommendationService(fetcher: stub, libraryIndex: index)
-        let items = await service.forYouRow(profile: testProfile())
+        // tvOS asks LibraryGUIDIndex; iOS and Mac ask DiscoverOwnership (DiscoverForYouTests).
+        let candidates = await DiscoverRecommendationService(fetcher: stub).candidates(profile: testProfile())
+        let items = await DiscoverRecommendationService.row(candidates) { item in
+            await index.lookup(tmdbId: item.id, type: item.mediaType) != nil
+        }
 
         XCTAssertEqual(items.map(\.id), [200])
     }
 
     func testReturnsEmptyForColdStartProfile() async {
         let stub = StubDiscoverFetcher()
-        let service = DiscoverRecommendationService(fetcher: stub, libraryIndex: LibraryGUIDIndex())
-        let items = await service.forYouRow(profile: FeatureProfile())
+        let service = DiscoverRecommendationService(fetcher: stub)
+        let items = await service.candidates(profile: FeatureProfile())
         XCTAssertTrue(items.isEmpty)
+    }
+
+    func test_underFiveWatchedTitles_TMDBIsNotAsked() async {
+        let stub = StubDiscoverFetcher()
+        stub.movies = [TMDBListItem(id: 1, title: "M1", overview: nil, posterPath: nil, backdropPath: nil, releaseDate: nil, voteAverage: nil, mediaType: .movie)]
+        let service = DiscoverRecommendationService(fetcher: stub)
+        let watched = WatchedTitle(genres: ["action", "thriller", "science fiction"])
+
+        let four = await service.candidates(watched: Array(repeating: watched, count: 4))
+        XCTAssertTrue(four.isEmpty)
+        XCTAssertEqual(stub.calls, 0)
+
+        let five = await service.candidates(watched: Array(repeating: watched, count: 5))
+        XCTAssertEqual(five.map(\.id), [1])
+        XCTAssertEqual(stub.calls, 2, "movies and shows")
     }
 
     func testIncludesTVResultsAlongsideMovies() async {
@@ -46,8 +64,8 @@ final class DiscoverRecommendationServiceTests: XCTestCase {
         stub.shows = [
             TMDBListItem(id: 2, title: "S1", overview: nil, posterPath: nil, backdropPath: nil, releaseDate: nil, voteAverage: nil, mediaType: .tv)
         ]
-        let service = DiscoverRecommendationService(fetcher: stub, libraryIndex: LibraryGUIDIndex())
-        let items = await service.forYouRow(profile: testProfile())
+        let service = DiscoverRecommendationService(fetcher: stub)
+        let items = await service.candidates(profile: testProfile())
         XCTAssertEqual(Set(items.map(\.id)), [1, 2])
     }
 
@@ -65,8 +83,8 @@ final class DiscoverRecommendationServiceTests: XCTestCase {
             TMDBListItem(id: 1, title: "Should not appear", overview: nil, posterPath: nil, backdropPath: nil, releaseDate: nil, voteAverage: nil, mediaType: .movie)
         ]
 
-        let service = DiscoverRecommendationService(fetcher: stub, libraryIndex: LibraryGUIDIndex())
-        let items = await service.forYouRow(profile: profile)
+        let service = DiscoverRecommendationService(fetcher: stub)
+        let items = await service.candidates(profile: profile)
         XCTAssertTrue(items.isEmpty)
     }
 
@@ -75,9 +93,9 @@ final class DiscoverRecommendationServiceTests: XCTestCase {
         stub.movies = (0..<30).map { i in
             TMDBListItem(id: i, title: "M\(i)", overview: nil, posterPath: nil, backdropPath: nil, releaseDate: nil, voteAverage: nil, mediaType: .movie)
         }
-        let service = DiscoverRecommendationService(fetcher: stub, libraryIndex: LibraryGUIDIndex())
-        let items = await service.forYouRow(profile: testProfile())
-        XCTAssertLessThanOrEqual(items.count, 20)
+        let candidates = await DiscoverRecommendationService(fetcher: stub).candidates(profile: testProfile())
+        let items = await DiscoverRecommendationService.row(candidates) { _ in false }
+        XCTAssertEqual(items.map(\.id), Array(0..<20))
     }
 
     private func testProfile() -> FeatureProfile {
@@ -95,7 +113,9 @@ final class DiscoverRecommendationServiceTests: XCTestCase {
 final class StubDiscoverFetcher: DiscoverFetching {
     var movies: [TMDBListItem] = []
     var shows: [TMDBListItem] = []
+    private(set) var calls = 0
     func discover(type: TMDBMediaType, withGenres: [Int], withKeywords: [Int]) async -> [TMDBListItem] {
-        type == .movie ? movies : shows
+        calls += 1
+        return type == .movie ? movies : shows
     }
 }

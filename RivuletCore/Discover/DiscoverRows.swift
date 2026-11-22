@@ -17,7 +17,7 @@ final class DiscoverRows {
     private(set) var rows: [Row] = []
     /// The last load found no row to show. No rows and not failed means still loading.
     private(set) var failed = false
-    /// Counts finished loads, so a page can redo what depends on the rows (Discover's ownership check).
+    /// Counts finished loads, so a page can redo what depends on the rows (Discover's ownership check, For You).
     private(set) var loads = 0
 
     private let source: (any MetadataSource)?

@@ -21,12 +21,8 @@ final class DiscoverViewModel: ObservableObject {
     @Published private(set) var loading = false
 
     private let discoverService = TMDBDiscoverService.shared
-    private let recommendationService = DiscoverRecommendationService.shared
+    private let recommendationService = DiscoverRecommendationService()
     private let libraryIndex = LibraryGUIDIndex.shared
-
-    /// Minimum watched items required before we try to personalize the "For You"
-    /// row. Fewer watches produce noisy recommendations that feel random.
-    private let forYouColdStartMinWatched = 5
 
     /// Cap on hero carousel items. Matches the home page's cap.
     private let heroItemCap = 9
@@ -63,11 +59,9 @@ final class DiscoverViewModel: ObservableObject {
         // the user. Hides itself on cold-start (too few watched items to
         // produce a meaningful profile).
         let watchedItems = await collectWatchHistory()
-        if watchedItems.count >= forYouColdStartMinWatched {
-            let profile = await WatchProfileBuilder.build(from: watchedItems)
-            forYou = await recommendationService.forYouRow(profile: profile)
-        } else {
-            forYou = []
+        let candidates = await recommendationService.candidates(watched: watchedItems.map(WatchedTitle.init))
+        forYou = await DiscoverRecommendationService.row(candidates) { [libraryIndex] item in
+            await libraryIndex.lookup(tmdbId: item.id, type: item.mediaType) != nil
         }
     }
 

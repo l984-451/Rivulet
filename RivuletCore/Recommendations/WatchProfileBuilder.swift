@@ -6,11 +6,52 @@
 //  Rivulet
 //
 //  Builds a FeatureProfile (genre/keyword/cast/director weights) from a set of
-//  watched items. Shared by PersonalizedRecommendationService (in-library
-//  recommendations) and DiscoverRecommendationService (TMDB catalog).
+//  watched items. Shared by PersonalizedRecommendationService (tvOS in-library
+//  recommendations) and DiscoverRecommendationService (TMDB catalog, every app).
 //
 
 import Foundation
+
+/// One watched title as the profile reads it. tvOS reads Plex's own lists (`PlexMetadata`);
+/// iOS and Mac read any server's (`MediaItem`), which say less (see `init(_: MediaItem)`).
+nonisolated struct WatchedTitle: Sendable {
+    var genres: [String]
+    var cast: [String] = []
+    var directors: [String] = []
+    var tmdbID: Int?
+    var tmdbType: TMDBMediaType = .movie
+    /// Seconds since 1970.
+    var lastViewedAt: Int?
+    var viewCount: Int?
+    /// Plex's 0-10 stars.
+    var userRating: Double?
+}
+
+extension WatchedTitle {
+    init(_ meta: PlexMetadata) {
+        self.init(genres: meta.genreTags, cast: meta.castNames, directors: meta.directorNames,
+                  tmdbID: meta.tmdbId, tmdbType: meta.tmdbMediaType, lastViewedAt: meta.lastViewedAt,
+                  viewCount: meta.viewCount, userRating: meta.userRating)
+    }
+
+    /// A list item has no cast, directors or rating. A show's watched episodes stand in for its view
+    /// count (as Plex's show `viewCount`), and a favorite counts as five stars; anything else is unrated.
+    /// No TMDB id: For You reads genres, which the list already carries (tvOS's Plex scan has none either),
+    /// and TMDB's TV genre names would crowd out the ones the row can ask for.
+    init(_ item: MediaItem) {
+        self.init(genres: item.genres ?? [],
+                  lastViewedAt: item.userState.lastViewedAt.map { Int($0.timeIntervalSince1970) },
+                  viewCount: item.childProgress?.played ?? (item.userState.isPlayed ? 1 : 0),
+                  userRating: item.userState.isFavorite ? 10 : nil)
+    }
+
+    /// Watched, or a show with any episode watched: tvOS's `viewCount > 0`. Emby lists give a show only
+    /// its unplayed count, so there a show played from at all counts.
+    static func isWatched(_ item: MediaItem) -> Bool {
+        guard !item.userState.isPlayed, let progress = item.childProgress else { return item.userState.isPlayed }
+        return progress.played > 0 || (progress.unplayedOnly == true && item.userState.lastViewedAt != nil)
+    }
+}
 
 struct FeatureProfile {
     var keywords: [String: Double] = [:]
@@ -68,7 +109,7 @@ enum WatchProfileBuilder {
     /// Build a profile from a set of watched items.
     /// Each item is weighted by recency × rewatch × user rating.
     /// TMDB features are merged when available; absence is fine.
-    static func build(from items: [PlexMetadata]) async -> FeatureProfile {
+    static func build(from items: [WatchedTitle]) async -> FeatureProfile {
         var profile = FeatureProfile()
         let allFeatures = await buildFeatures(for: items)
         for (item, features) in zip(items, allFeatures) {
@@ -81,14 +122,14 @@ enum WatchProfileBuilder {
     }
 
     /// Features for each item, in input order. TMDB lookups run six at a time.
-    static func buildFeatures(for items: [PlexMetadata]) async -> [TMDBItemFeatures] {
+    static func buildFeatures(for items: [WatchedTitle]) async -> [TMDBItemFeatures] {
         let found = await BoundedFanOut.map(Array(items.enumerated()), width: 6) { index, item in
             (index, await buildFeatures(for: item))
         }
         return found.sorted { $0.0 < $1.0 }.map(\.1)
     }
 
-    static func buildFeatures(for item: PlexMetadata) async -> TMDBItemFeatures {
+    static func buildFeatures(for item: WatchedTitle) async -> TMDBItemFeatures {
         func normalize(_ genre: String) -> String {
             let lower = genre.lowercased()
             return genreNormalization[lower] ?? lower
@@ -96,15 +137,15 @@ enum WatchProfileBuilder {
 
         var features = TMDBItemFeatures(
             keywords: [],
-            cast: item.castNames,
-            directors: item.directorNames,
-            genres: item.genreTags.map(normalize),
+            cast: item.cast,
+            directors: item.directors,
+            genres: item.genres.map(normalize),
             voteAverage: nil,
             voteCount: nil
         )
 
-        if let tmdbId = item.tmdbId {
-            if let tmdbFeatures = await TMDBClient.shared.fetchFeatures(tmdbId: tmdbId, type: item.tmdbMediaType) {
+        if let tmdbId = item.tmdbID {
+            if let tmdbFeatures = await TMDBClient.shared.fetchFeatures(tmdbId: tmdbId, type: item.tmdbType) {
                 features.merge(from: tmdbFeatures)
             }
         }

@@ -149,6 +149,24 @@ final class JellyfinSeamTests: XCTestCase {
         XCTAssertEqual(listings.first?["includeItemTypes"], "Movie,Series")
     }
 
+    /// Two copies of one title (two editions, or a placeholder beside the file) both come back, together,
+    /// the copy matched on the first id by source name first; `limit` counts titles.
+    func test_titleMatch_orderedIDs_everyCopyOfATitle() {
+        let owned: [(id: String, kind: MediaKind, ids: [String: String])] = [
+            (id: "heat", kind: .movie, ids: ["tmdb": "6"]),
+            (id: "dune-4k", kind: .movie, ids: ["tmdb": "5"]),
+            (id: "dune", kind: .movie, ids: ["imdb": "tt5", "tmdb": "5"]),
+            (id: "dune-show", kind: .show, ids: ["tmdb": "5"]),
+        ]
+        let dune = TitleMatch(kind: .movie, externalIDs: ["tmdb": "5", "imdb": "tt5"], plexGUID: nil)
+        let heat = TitleMatch(kind: .movie, externalIDs: ["tmdb": "6"], plexGUID: nil)
+
+        XCTAssertEqual(TitleMatch.orderedIDs([dune, heat], among: owned, limit: 10), ["dune", "dune-4k", "heat"])
+        XCTAssertEqual(TitleMatch.orderedIDs([dune, heat], among: owned, limit: 1), ["dune", "dune-4k"])
+        XCTAssertEqual(TitleMatch.orderedIDs([dune, dune, heat], among: owned, limit: 2), ["dune", "dune-4k", "heat"],
+                       "a title asked twice adds nothing the second time and isn't counted")
+    }
+
     private let ownedIndex = """
         {"Items":[{"Id":"up","Type":"Movie","ProviderIds":{"Tmdb":"14160"}}],"TotalRecordCount":1}
         """

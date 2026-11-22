@@ -54,7 +54,8 @@ actor LibraryGUIDIndex {
         }
     }
 
-    private var byTypedTmdbId: [TypedKey: Entry] = [:]
+    /// Every copy of a title, in ingest order: Discover skips the ones in libraries left out of it.
+    private var byTypedTmdbId: [TypedKey: [Entry]] = [:]
     private var byGuid: [String: Entry] = [:]
 
     /// Per section, what the server looked like when this snapshot was built (`sectionStamp`).
@@ -182,9 +183,10 @@ actor LibraryGUIDIndex {
         byGuid.isEmpty
     }
 
-    func lookup(tmdbId: Int, type: TMDBMediaType) -> Entry? {
+    /// The last-ingested copy outside `sections`; with none excluded, what this always returned.
+    func lookup(tmdbId: Int, type: TMDBMediaType, excludingSections sections: Set<String> = []) -> Entry? {
         let plexType: PlexItemType = (type == .movie) ? .movie : .show
-        return byTypedTmdbId[TypedKey(type: plexType, key: "\(tmdbId)")]
+        return byTypedTmdbId[TypedKey(type: plexType, key: "\(tmdbId)")]?.last { !sections.contains($0.sectionID) }
     }
 
     func lookup(guid: String) -> Entry? {
@@ -202,7 +204,7 @@ actor LibraryGUIDIndex {
             byGuid[raw] = item
 
             if let tmdbId = Self.tmdbId(from: raw) {
-                byTypedTmdbId[TypedKey(type: item.type, key: "\(tmdbId)")] = item
+                byTypedTmdbId[TypedKey(type: item.type, key: "\(tmdbId)"), default: []].append(item)
             }
         }
     }

@@ -50,10 +50,10 @@ enum PlexTrendingHero {
         }.filter { !$0.isEmpty && seen.insert($0).inserted }
     }
 
-    /// `owned` in `guids` order.
-    static func ordered(_ owned: [PlexMetadata], by guids: [String]) -> [PlexMetadata] {
-        let byGUID = Dictionary(owned.compactMap { item in item.guid.map { ($0, item) } }, uniquingKeysWith: { a, _ in a })
-        return guids.compactMap { byGUID[$0] }
+    /// `owned` in `guids` order, every copy of a title together in the server's order, at most `limit` titles.
+    static func ordered(_ owned: [PlexMetadata], by guids: [String], limit: Int = .max) -> [PlexMetadata] {
+        let copies = Dictionary(grouping: owned) { $0.guid ?? "" }
+        return guids.compactMap { copies[$0] }.prefix(limit).flatMap { $0 }
     }
 
     /// Plex's metadata host: the title's plex:// guid from its TMDB id.

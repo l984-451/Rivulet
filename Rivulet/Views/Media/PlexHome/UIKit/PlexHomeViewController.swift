@@ -923,6 +923,18 @@ final class PlexHomeViewController: UIViewController {
                     }
                 }
                 .store(in: &dataStoreObservers)
+            // Use in Discover changed in Settings, or from iCloud.
+            NotificationCenter.default.publisher(for: DiscoverLibraries.changedNotification)
+                .debounce(for: .seconds(1), scheduler: DispatchQueue.main)
+                .sink { [weak self] _ in
+                    guard let self else { return }
+                    Task { @MainActor in
+                        await self.discoverModel.discoverLibrariesChanged()
+                        self.applySnapshot(animated: false)
+                        self.refreshDiscoverHeroState()
+                    }
+                }
+                .store(in: &dataStoreObservers)
         case .search:
             // Search page: no upfront content — results arrive per query.
             // Libraries are needed for the visible-library result filter.
@@ -2523,7 +2535,7 @@ final class PlexHomeViewController: UIViewController {
             guard let decoded = TMDBMediaMapper.decodeItemID(item.ref.itemID),
                   item.isMetadataOnly,
                   discoverModel.inLibraryTMDBIds.contains(decoded.tmdbId),
-                  let entry = await LibraryGUIDIndex.shared.lookup(tmdbId: decoded.tmdbId, type: decoded.type)
+                  let entry = await discoverModel.ownedEntry(tmdbId: decoded.tmdbId, type: decoded.type)
             else { continue }
             matches.append((i, entry))
         }

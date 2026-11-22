@@ -127,6 +127,9 @@ struct RivuletApp: App {
             if touched(["hiddenLibraryKeys", "libraryOrder", "librarySortOptions"]) {
                 LibrarySettingsManager.shared.reloadFromDefaults()
             }
+            if touched([DiscoverLibraries.storeBase]) {
+                NotificationCenter.default.post(name: DiscoverLibraries.changedNotification, object: nil)
+            }
             if touched(["hiddenHomeRowIdentifiers"]) {
                 NotificationCenter.default.post(name: HomeRowSettings.changedNotification, object: nil)
             }

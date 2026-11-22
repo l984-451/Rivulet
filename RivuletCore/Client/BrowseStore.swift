@@ -48,6 +48,8 @@ final class BrowseStore: ObservableObject {
             reloadPersonalRows()
         }
     }
+    /// Libraries the profile left out of Discover (`DiscoverLibraries`).
+    @Published var discoverExcludedLibraries: Set<String> = DiscoverLibraries.excluded()
     /// Bumped on a server or profile switch; the tab stacks rebuild on it.
     @Published private(set) var sessionGeneration = 0
     /// Providers where the account may delete media; asked once per session.
@@ -183,6 +185,7 @@ final class BrowseStore: ObservableObject {
     func contentSessionChanged() {
         favoriteOverrides = [:]
         hiddenSidebarLibraries = SidebarLibraryVisibility.stored()
+        discoverExcludedLibraries = DiscoverLibraries.excluded()
         sessionGeneration += 1
     }
 

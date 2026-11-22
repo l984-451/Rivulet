@@ -60,24 +60,26 @@ struct IOSDiscoverView: View {
         .task(id: ownershipKey) {
             let key = ownershipKey
             guard key != checked else { return }
-            await ownership.check(discover.rows.map(\.items), providers: browse.allProviders, isShown: browse.isShownOnHome)
+            await ownership.check(discover.rows.map(\.items), providers: browse.allProviders, isShown: browse.countsInDiscover)
             if !Task.isCancelled { checked = key }
         }
         // After the rows, so no TMDB work runs when they can't load; once per load, servers and history libraries.
         .task(id: forYouKey) {
             guard !discover.rows.isEmpty else { return }
-            await forYou.load(key: forYouKey, libraries: browse.sidebarLibraries, providers: browse.allProviders,
-                              ownership: ownership, isShown: browse.isShownOnHome)
+            await forYou.load(key: forYouKey, libraries: browse.librariesUsedInDiscover, providers: browse.allProviders,
+                              ownership: ownership, isShown: browse.countsInDiscover)
         }
     }
 
-    /// What the answers depend on: the rows (each load, Refresh included), the servers in order, hidden libraries.
+    /// What the answers depend on: the rows (each load, Refresh included), the servers in order, hidden libraries
+    /// and those left out of Discover.
     private var ownershipKey: [String] {
         [String(discover.loads)] + browse.providerOrder + browse.hiddenSidebarLibraries.sorted()
+            + browse.discoverExcludedLibraries.sorted()
     }
 
     /// For You's also depends on the libraries its watch history reads.
     private var forYouKey: [String] {
-        ownershipKey + DiscoverForYou.historyLibraries(browse.sidebarLibraries).map(SidebarLibraryVisibility.key(for:))
+        ownershipKey + DiscoverForYou.historyLibraries(browse.librariesUsedInDiscover).map(SidebarLibraryVisibility.key(for:))
     }
 }

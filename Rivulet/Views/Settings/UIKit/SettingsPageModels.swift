@@ -227,6 +227,7 @@ enum SettingsContent {
         case .emby:        return emby
         case .libraries:   return libraries
         case .homeRows:    return homeRows
+        case .discoverLibraries: return discoverLibraries
         case .cache:       return cache
         case .iptv:        return iptv
         case .liveTVSourceDetail: return liveTVSourceDetail
@@ -505,6 +506,12 @@ enum SettingsContent {
             // Leading block is unheaded, like an Apple TV Settings page's first
             // group: it sits directly under the page title.
             SettingsRowItem(id: "libraries", title: "Sidebar", kind: .navigation(.libraries)),
+        ]
+        // Only while Discover is in the sidebar: the setting changes nothing else on tvOS.
+        if SettingsStore.bool("showDiscoverTab", default: true), !discoverLibraries.isEmpty {
+            rows.append(SettingsRowItem(id: "discoverLibraries", title: "Use in Discover", kind: .navigation(.discoverLibraries)))
+        }
+        rows += [
             // App Icon row withheld on tvOS: App Store Connect rejects the alternate icons (ITMS-90471).
             // Profiles themselves are switched from the sidebar now, so this is
             // all that is left of the retired User Profiles page.
@@ -1442,6 +1449,18 @@ enum SettingsContent {
                                     kind: .info(value: { "" }))]
         }
         return rows + pinnedCollectionRows(store: PlexDataStore.shared, in: .library)
+    }
+
+    /// The selected Plex server's movie and TV libraries, each on or off for Discover. tvOS's Discover reads
+    /// only that server (`LibraryGUIDIndex`); other servers' libraries are set on iPhone, iPad or Mac.
+    private static var discoverLibraries: [SettingsRowItem] {
+        guard let providerID = MediaProviderRegistry.shared.plexProvider?.id else { return [] }
+        return PlexDataStore.shared.visibleVideoLibraries.map { library in
+            let key = DiscoverLibraries.key(providerID: providerID, libraryID: library.key, selectedPlex: .current)
+            return SettingsRowItem(id: "dl_\(key)", verbatim: library.title, kind: .toggle(
+                get: { !DiscoverLibraries.excluded().contains(key) },
+                set: { DiscoverLibraries.setUsed($0, key: key) }))
+        }
     }
 
     // MARK: Cache & Storage

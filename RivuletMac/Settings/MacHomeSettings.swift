@@ -135,8 +135,25 @@ struct MacLibrarySettingsView: View {
                 }
             }
             if !(browse.libraries + browse.photoLibraries).isEmpty { sidebarLibraries }
+            if !browse.discoverableLibraries.isEmpty { discoverLibraries }
         }
         .formStyle(.grouped)
+    }
+
+    /// Which libraries Discover treats as yours and For You learns from, for this profile.
+    private var discoverLibraries: some View {
+        Section {
+            ForEach(browse.discoverableLibraries) { library in
+                Toggle(isOn: Binding(get: { browse.usesInDiscover(library) },
+                                     set: { browse.setUsesInDiscover(library, $0) })) {
+                    Text(verbatim: browse.labels.title(library.title, providerID: library.providerID))
+                }
+            }
+        } header: {
+            Text("Use in Discover")
+        } footer: {
+            Text("Discover opens your own copy of a title in these libraries, and For You learns from what you watch in them.")
+        }
     }
 
     /// Which libraries the sidebar lists, for this profile.

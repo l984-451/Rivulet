@@ -16408,6 +16408,9 @@
         }
       }
     },
+    "Use in Discover" : {
+
+    },
     "•" : {
       "localizations" : {
         "de" : {
@@ -16821,6 +16824,9 @@
           }
         }
       }
+    },
+    "Discover opens your own copy of a title in these libraries, and For You learns from what you watch in them." : {
+
     },
     "Empty Folder" : {
       "localizations" : {

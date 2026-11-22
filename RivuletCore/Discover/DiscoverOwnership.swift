@@ -8,8 +8,8 @@ import Observation
 /// page. Tiles don't change: on tvOS too, owning a title only changes what it opens.
 @Observable @MainActor
 final class DiscoverOwnership {
-    /// Each owned title's copy, by the title's ref: the first server in the order given that has it
-    /// in a library shown on Home. A title not here isn't owned, or hasn't been asked about yet.
+    /// Each owned title's copy, by the title's ref: the first copy, servers in the order given, in a library
+    /// shown on Home and used in Discover. A title not here isn't owned, or hasn't been asked about yet.
     private(set) var copies: [MediaItemRef: MediaItem] = [:]
     /// The servers `copies` came from.
     @ObservationIgnored private var servers: [String] = []
@@ -22,6 +22,10 @@ final class DiscoverOwnership {
             copies = [:]
             servers = ids
         }
+        // A copy now refused (its library hidden, or left out of Discover) is dropped, so For You, which asks
+        // only titles not already owned, asks about that title again.
+        let kept = copies.filter { isShown($0.value) }
+        if kept.count != copies.count { copies = kept }
         // Rows share titles (Popular and Now Playing): each is asked once, so a later row can't undo its answer.
         var asked = Set<MediaItemRef>()
         for row in rows {

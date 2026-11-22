@@ -48,7 +48,7 @@ enum SettingsPage: Hashable, CaseIterable {
     case root
     case appearance, playback, music, liveTV, photos, servers, about
     case plex, plexServerDetail, jellyfin, emby, iptv, libraries, cache
-    case homeRows
+    case homeRows, discoverLibraries
     case liveTVSourceDetail, liveTVFavorites
     case addLiveTVSource, addXtream, addDispatcharr, addTvheadend, addThreadfin, addPlaylistURL
     case appIconPicker, homeHeroPicker, detailRatingPicker, autoplayCountdownPicker, skipIntervalPicker, skipBackIntervalPicker
@@ -83,6 +83,7 @@ enum SettingsPage: Hashable, CaseIterable {
         case .addPlaylistURL: return String(localized: "Playlist URL")
         case .libraries: return String(localized: "Sidebar")
         case .homeRows: return String(localized: "Home Rows")
+        case .discoverLibraries: return String(localized: "Use in Discover")
         case .cache: return String(localized: "Cache & Storage")
         case .appIconPicker: return String(localized: "App Icon")
         case .homeHeroPicker: return String(localized: "Hero")

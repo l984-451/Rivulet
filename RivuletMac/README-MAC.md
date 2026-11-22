@@ -49,7 +49,7 @@ shuffleShow, addToPlaylist, open, setWatched, setWatchlisted, setFavorite, playE
 | Area | Mac file | iOS source |
 |---|---|---|
 | Home | `Home/MacHomeView.swift`, `MacHubGridView.swift` | `Plex/Home/IOSPlexHomeView`, `IOSPlexHeroFeed`, `IOSPlexHomeHero`, `IOSPlexHubGridView`, `Plex/Components/IOSThemeVideoBackdrop`, `IOSPlexAmbientBackdrop` |
-| Discover | `Discover/MacDiscoverView.swift` | `Discover/IOSDiscoverView` (rows and the hero's titles from `RivuletCore/Discover/DiscoverRows`, in Home's `MacHeroFeed` with the rows as `below`; your own copy from `DiscoverOwnership`, opened through `MacTileButton(opens:)` and reached by the hero's Play and Details through `heroCopies`; a TMDB title's hero button is Watchlist; For You below the rows from `DiscoverForYou`, with titles you own left out) |
+| Discover | `Discover/MacDiscoverView.swift` | `Discover/IOSDiscoverView` (rows and the hero's titles from `RivuletCore/Discover/DiscoverRows`, in Home's `MacHeroFeed` with the rows as `below`; your own copy from `DiscoverOwnership`, opened through `MacTileButton(opens:)` and reached by the hero's Play and Details through `heroCopies`; a TMDB title's hero button is Watchlist; For You below the rows from `DiscoverForYou`, with titles you own left out; libraries turned off in Settings > Library > Use in Discover (`DiscoverLibraries`) don't count as yours and For You doesn't read them) |
 | Library | `Library/MacLibraryView.swift` | `Plex/Library/IOSPlexLibraryView` (Recommended + Browse, sort via `IOSLibrarySorts`) |
 | Photos | `Photos/MacPhotoLibraryView.swift` (grid, folders, clips), `MacPhotoViewer.swift` (arrows, Space slideshow, Esc, pinch) | `RivuletiOS/Photos/`; listing in `RivuletCore/Photos/` |
 | Playlists | `Library/MacPlaylistViews.swift` | `Plex/Library/IOSPlexPlaylistViews` |
@@ -58,7 +58,7 @@ shuffleShow, addToPlaylist, open, setWatched, setWatchlisted, setFavorite, playE
 | Search | `Search/MacSearchView.swift` | `Search/IOSPlexSearchView` |
 | Player | `Player/MacPlayerView.swift`, `MacPlaybackCommands.swift` | `Player/` (`IOSPlaybackController`, `IOSPlayerChrome`, `IOSCaptionOverlay`, `IOSNowPlaying`), `Plex/IOSPlexPlayerView` |
 | Live TV | `LiveTV/MacLiveTVView.swift` | `LiveTV/` (all seven files; shared logic in `RivuletCore/LiveTV/LiveClient.swift`) |
-| Settings, Account | `Settings/MacSettingsView.swift`, `MacAccountView.swift`, `MacSignInViews.swift` | `Settings/IOSAccountView`, `IOSHomeSettings`, `IOSSettingsPages`, `IOSLiveTVSettingsView`, `IOSServerSignInView`, `Shell/IOSAccountViews` (`IOSPlexConnectionSheet`) |
+| Settings, Account | `Settings/MacSettingsView.swift`, `MacHomeSettings.swift` (Home, Home Rows, and Library: Sidebar Libraries and Use in Discover), `MacAccountView.swift`, `MacSignInViews.swift` | `Settings/IOSAccountView`, `IOSHomeSettings`, `IOSSettingsPages`, `IOSLiveTVSettingsView`, `IOSServerSignInView`, `Shell/IOSAccountViews` (`IOSPlexConnectionSheet`) |
 | What's New | `Settings/MacWhatsNew.swift` | `Settings/IOSWhatsNew` (Mac entries keyed from the Mac tag) |
 | Shell | `Shell/MacRootView.swift`, `MacProfilePicker.swift`, `MacCommands.swift` | `IOSRootView`, `Shell/IOSAccountViews` |
 

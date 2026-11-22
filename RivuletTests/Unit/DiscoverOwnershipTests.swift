@@ -70,6 +70,31 @@ final class DiscoverOwnershipTests: XCTestCase {
         XCTAssertNil(ownership.copies[title(2).ref], "only in a hidden library")
     }
 
+    /// A placeholder and the real file on one server: the server answers with both, so the refused one
+    /// doesn't hide the other.
+    func test_twoCopiesOnOneServer_theFirstRefused_theSecondOpens() async {
+        let plex = StubMediaProvider(id: "plex:a", kind: .plex)
+        plex.ownedItemsResult = [copy("placeholder", on: "plex:a", ids: ["tmdb": "1"], library: "sugg"),
+                                 copy("real", on: "plex:a", ids: ["tmdb": "1"], library: "movies")]
+        let ownership = DiscoverOwnership()
+
+        await check(ownership, [[title(1)]], [plex], isShown: { $0.libraryID != "sugg" })
+
+        XCTAssertEqual(ownership.copies[title(1).ref]?.ref.itemID, "real")
+    }
+
+    /// Use in Discover turned off: an answer from that library is dropped before anything is asked.
+    func test_aCopyNowRefusedIsDropped_evenForATitleNotAskedAgain() async {
+        let plex = StubMediaProvider(id: "plex:a", kind: .plex)
+        plex.ownedItemsResult = [copy("p1", on: "plex:a", ids: ["tmdb": "1"], library: "sugg")]
+        let ownership = DiscoverOwnership()
+        await check(ownership, [[title(1)]], [plex])
+        XCTAssertNotNil(ownership.copies[title(1).ref])
+
+        await check(ownership, [], [plex], isShown: { $0.libraryID != "sugg" })
+        XCTAssertNil(ownership.copies[title(1).ref])
+    }
+
     func test_aFailingServerDoesNotSinkTheOthers() async {
         let plex = StubMediaProvider(id: "plex:a", kind: .plex)
         plex.ownedItemsError = MediaProviderError.unreachable

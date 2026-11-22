@@ -113,6 +113,8 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     private var extrasByID: [String: BelowFoldTrailer] = [:]
     private var castEntriesByID: [String: CastEntry] = [:]
     private var multiSeason = false
+    /// A one-season show titles its rail with the season instead of a pill, as Apple's does.
+    private var singleSeasonTitle: String?
     /// Full detail for the About + Information/Languages/Accessibility blocks.
     private var detail: MediaItemDetail?
     /// SHOW detail for episode/season opens (the About card describes the show);
@@ -213,9 +215,11 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             // The collection's small contentInset.top (= detailsTopY)
             // lets the focus engine land them at ~detailsTopY in details.
             case .episodes:
+                let titled = self.singleSeasonTitle != nil
                 return self.episodesRailSection(
-                    topInset: isPrimary ? peek : 0,
-                    sectionBottomInset: 36
+                    topInset: isPrimary ? (titled ? max(0, peek - 8) : peek) : 0,
+                    sectionBottomInset: 36,
+                    header: titled
                 )
             case .trailers:
                 return self.shelfSection(
@@ -323,7 +327,8 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
 
     /// A custom group, since episode cards and season dividers differ in width. Frames come
     /// eagerly from `cachedEpisodes`, so season scrolls and landings read exact attributes.
-    private func episodesRailSection(topInset: CGFloat, sectionBottomInset: CGFloat) -> NSCollectionLayoutSection {
+    private func episodesRailSection(topInset: CGFloat, sectionBottomInset: CGFloat,
+                                     header: Bool) -> NSCollectionLayoutSection {
         let gap = Self.episodeGap
         var frames: [CGRect] = []
         var x: CGFloat = 0
@@ -343,11 +348,20 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         section.orthogonalScrollingBehavior = .continuous
         section.contentInsetsReference = .none
         section.contentInsets = .init(
-            top: topInset,
+            top: (header ? 8 : 0) + topInset,
             leading: Self.rowLeading,
             bottom: sectionBottomInset,
             trailing: Self.rowTrailing
         )
+        if header {
+            // Placed as `shelfSection` places its header.
+            let headerItem = NSCollectionLayoutBoundarySupplementaryItem(
+                layoutSize: .init(widthDimension: .fractionalWidth(1), heightDimension: .absolute(44)),
+                elementKind: UICollectionView.elementKindSectionHeader, alignment: .top,
+                absoluteOffset: CGPoint(x: 0, y: topInset))
+            headerItem.contentInsets = .zero
+            section.boundarySupplementaryItems = [headerItem]
+        }
         return section
     }
 
@@ -449,11 +463,13 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
                 let row = self.collectionRow
                 self.configurePosterShelf(cell, section: .collection, title: row?.title ?? "",
                                           items: row?.members ?? [], trailing: row?.collection)
+                cell.headerAlpha = indexPath.section == 0 ? self.firstHeaderAlpha : 1
                 return cell
             case .relatedShelf:
                 let cell = cv.dequeueReusableCell(withReuseIdentifier: ShelfRowCell.reuseID, for: indexPath) as! ShelfRowCell
                 self.configurePosterShelf(cell, section: .related, title: String(localized: "Related"),
                                           items: self.relatedItems, trailing: nil)
+                cell.headerAlpha = indexPath.section == 0 ? self.firstHeaderAlpha : 1
                 return cell
             case .cast(let id):
                 let cell = cv.dequeueReusableCell(withReuseIdentifier: CastCollectionCell.reuseID, for: indexPath) as! CastCollectionCell
@@ -483,7 +499,8 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             case .extras:  header.configure(title: String(localized: "Extras"))
             case .related: header.configure(title: String(localized: "Related"))
             case .cast:    header.configure(title: String(localized: "Cast & Crew"), baseline: BelowFoldSectionHeader.castBaseline)
-            case .episodes, .collection, .about, .info: header.configure(title: "")
+            case .episodes: header.configure(title: self.singleSeasonTitle ?? "")
+            case .collection, .about, .info: header.configure(title: "")
             }
             header.alpha = indexPath.section == 0 && self.firstRowIsShelf ? self.firstHeaderAlpha : 1
             return header
@@ -768,6 +785,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         detail = content.detail
         showDetail = content.showDetail
         multiSeason = content.seasons.count > 1
+        singleSeasonTitle = content.seasons.count == 1 ? SeasonPillView.seasonLabel(for: content.seasons[0]) : nil
         episodesByID = Dictionary(content.episodes.map { ($0.ref.itemID, $0) }, uniquingKeysWith: { a, _ in a })
         trailersByID = Dictionary(content.trailers.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         extrasByID = Dictionary(content.extras.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
@@ -992,16 +1010,29 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     }
 
     private static let logoTop = ExpandedDetailContainerView.smallLogoTop
-    /// The first row's title fades in with the scroll, as the pills do: Apple's hero shows the row without it.
+    /// The first row's title fades in with the scroll, as the pills do: Apple's hero shows the row without it
+    /// (trailers, a one-season show's episodes, Related).
     var firstHeaderAlpha: CGFloat = 0 {
         didSet {
+            let first = IndexPath(item: 0, section: 0)
+            (collectionView.cellForItem(at: first) as? ShelfRowCell)?.headerAlpha = firstHeaderAlpha
             guard firstRowIsShelf else { return }
             collectionView.supplementaryView(forElementKind: UICollectionView.elementKindSectionHeader,
-                                             at: IndexPath(item: 0, section: 0))?.alpha = firstHeaderAlpha
+                                             at: first)?.alpha = firstHeaderAlpha
         }
     }
-    /// A movie's trailers or extras lead the page.
-    private var firstRowIsShelf: Bool { [.trailers, .extras].contains(sectionKinds.first) }
+    /// A titled row leads the page: a movie's trailers or extras, or a one-season show's episodes.
+    private var firstRowIsShelf: Bool {
+        sectionKinds.first.map(isTitledShelf) ?? false
+    }
+
+    private func isTitledShelf(_ kind: BelowFoldSectionKind) -> Bool {
+        switch kind {
+        case .trailers, .extras: return true
+        case .episodes: return singleSeasonTitle != nil
+        default: return false
+        }
+    }
 
     /// The small logo's fitted height, up to 100. Apple's rows follow the logo's bottom edge.
     var logoHeight: CGFloat = 100 {
@@ -1018,12 +1049,15 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     var detailsTopY: CGFloat {
         let reserve = MediaRowMetrics.focusGrowth / 2
         switch sectionKinds.first {
-        case .trailers?, .extras?:
+        case .trailers?, .extras?, .episodes? where singleSeasonTitle != nil:
             return Self.logoTop + logoHeight + 134 - reserve
         case .episodes?, nil:
             return Self.seasonPillTop(logoHeight: logoHeight) + 95.5 - reserve
+        case .related?, .collection?:
+            // Apple's posters rest 171 under the logo (Napoleon, 1997); ours sit 15 under the row's frame.
+            return Self.logoTop + logoHeight + 171 - 15
         default:
-            // Not measured against Apple: the old rest, moved with the logo.
+            // Cast or About first: Apple always leads with trailers or Related, so nothing to measure.
             return Self.logoTop + logoHeight + 64 + 96 - reserve
         }
     }
@@ -1203,7 +1237,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
            let cell = sequence(first: focused, next: \.superview).first(where: { $0 is UICollectionViewCell }) as? UICollectionViewCell,
            let path = collectionView.indexPath(for: cell),
            sectionKinds.indices.contains(path.section),
-           [.trailers, .extras].contains(sectionKinds[path.section]) {
+           isTitledShelf(sectionKinds[path.section]) {
             header = collectionView.supplementaryView(forElementKind: UICollectionView.elementKindSectionHeader,
                                                       at: IndexPath(item: 0, section: path.section)) as? BelowFoldSectionHeader
             if let header {

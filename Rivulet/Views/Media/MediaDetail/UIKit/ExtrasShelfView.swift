@@ -9,15 +9,16 @@ import UIKit
 final class ExtrasShelfView: UIView, UICollectionViewDataSource, UICollectionViewDelegate {
 
     static let headerHeight: CGFloat = 44
-
-    /// The title's baseline above the cards' frames.
-
-    private static let titleBaseline: CGFloat = 14.5
+    /// The title's baseline 1 under the cards' frames: Apple's shelf titles rest 21 above the artwork,
+    /// and lift 13 over a focused card (tvOS 27, measured on device).
+    private static let titleBaseline: CGFloat = -1
+    private static let titleLift: CGFloat = 13
     static let height = headerHeight + EpisodeCell.trailerThumbHeight
 
     var onPlay: ((BelowFoldTrailer) -> Void)?
     private(set) var tiles: [BelowFoldTrailer] = []
     private let collection: UICollectionView
+    private let title = UILabel()
 
     /// `leading` is where the first card's artwork and the title rest.
     init(leading: CGFloat) {
@@ -30,7 +31,6 @@ final class ExtrasShelfView: UIView, UICollectionViewDataSource, UICollectionVie
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
 
-        let title = UILabel()
         title.translatesAutoresizingMaskIntoConstraints = false
         title.font = MediaRowMetrics.headerFont
         title.textColor = MediaRowMetrics.pageHeaderColor
@@ -83,6 +83,18 @@ final class ExtrasShelfView: UIView, UICollectionViewDataSource, UICollectionVie
         cell.configure(trailer: tile)
         cell.onPlay = { [weak self] in self?.onPlay?(tile) }
         return cell
+    }
+
+    override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        var lift: CGFloat = 0
+        if let next = context.nextFocusedView, next.isDescendant(of: collection) {
+            let tile = next.convert(next.bounds, to: self)
+            if tile.minX < title.frame.maxX && tile.maxX > title.frame.minX { lift = Self.titleLift }
+        }
+        guard title.transform.ty != -lift else { return }
+        coordinator.addCoordinatedAnimations({ self.title.transform = CGAffineTransform(translationX: 0, y: -lift) },
+                                             completion: nil)
     }
 
     /// The cards' thumbs are the focus stops, as in the expanded detail.

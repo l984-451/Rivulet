@@ -119,6 +119,11 @@ final class ShelfRowCell: UICollectionViewCell {
 
     static let headerHeight: CGFloat = 44
 
+    /// The in-cell header's opacity: a detail page's first row fades its title in with the scroll.
+    var headerAlpha: CGFloat = 1 {
+        didSet { headerLabel.alpha = headerAlpha }
+    }
+
     private let headerLabel: UILabel = {
         let l = UILabel()
         l.translatesAutoresizingMaskIntoConstraints = false
@@ -254,6 +259,7 @@ final class ShelfRowCell: UICollectionViewCell {
     override func prepareForReuse() {
         super.prepareForReuse()
         pendingFocusIndex = nil
+        headerAlpha = 1
         liftedHeader?.transform = .identity
         liftedHeader = nil
         // Belongs to the row this cell WAS showing; carrying it into a

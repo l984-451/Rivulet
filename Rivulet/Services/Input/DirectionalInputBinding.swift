@@ -35,6 +35,10 @@ final class DirectionalInputBinding: NSObject {
 
     /// Arrow-press tap OR indirect-touch swipe in this direction.
     private let onTap: (Direction) -> Void
+    /// Takes the swipes from `onTap` when set, for a surface whose swipe means
+    /// something other than its click. Reachable only from a touch remote, so
+    /// whatever it opens needs another way in for press-only remotes.
+    private let onSwipe: ((Direction) -> Void)?
     /// Arrow press held past `InputConfig.holdThreshold` (press path only —
     /// a touch surface expresses "hold" as repeated swipes instead).
     private let onHold: ((Direction) -> Void)?
@@ -56,9 +60,11 @@ final class DirectionalInputBinding: NSObject {
         onTap: @escaping (Direction) -> Void,
         onHold: ((Direction) -> Void)? = nil,
         onHoldEnd: ((Direction) -> Void)? = nil,
-        swipeGate: ((Direction) -> Bool)? = nil
+        swipeGate: ((Direction) -> Bool)? = nil,
+        onSwipe: ((Direction) -> Void)? = nil
     ) {
         self.onTap = onTap
+        self.onSwipe = onSwipe
         self.onHold = onHold
         self.onHoldEnd = onHoldEnd
         self.shouldHandle = swipeGate
@@ -99,6 +105,7 @@ final class DirectionalInputBinding: NSObject {
         onSwipe: @escaping (Direction) -> Void
     ) {
         self.onTap = onSwipe
+        self.onSwipe = nil
         self.onHold = nil
         self.onHoldEnd = nil
         self.shouldHandle = shouldHandle
@@ -127,7 +134,7 @@ final class DirectionalInputBinding: NSObject {
 
     @objc func handleSwipe(_ recognizer: UIGestureRecognizer) {
         guard let direction = direction(of: recognizer) else { return }
-        onTap(direction)
+        (onSwipe ?? onTap)(direction)
     }
 
     @objc func handleLong(_ recognizer: UIGestureRecognizer) {

@@ -219,9 +219,14 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// presses via the focused view; a fullscreen video with no focusable
     /// content would swallow them).
     private final class FocusCatcherView: UIView {
-        override var canBecomeFocused: Bool { true }
+        /// Off while the channel list is up, so Left from a row can never land here.
+        var isFocusEnabled = true
+        override var canBecomeFocused: Bool { isFocusEnabled }
     }
     private let focusCatcher = FocusCatcherView()
+
+    /// The channel list a right swipe brings in over the picture.
+    private var channelSidebar: LiveChannelSidebarView?
 
     /// One front door for transport input. A Play/Pause can reach this VC as a
     /// press and ALSO as a system remote command for the same click; both go
@@ -867,7 +872,14 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         directionalBinding = DirectionalInputBinding(
             view: focusCatcher,
             directions: [.left, .right, .up, .down],
-            onTap: { [weak self] direction in self?.handleHiddenChromeDirection(direction) }
+            onTap: { [weak self] direction in self?.handleHiddenChromeDirection(direction) },
+            // A right swipe brings in the channel list; a Right click still
+            // skips. Paused, the swipe keeps scrubbing as Apple's player does.
+            onSwipe: { [weak self] direction in
+                guard let self else { return }
+                if direction == .right, !self.isUserPaused, self.openChannelSidebar() { return }
+                self.handleHiddenChromeDirection(direction)
+            }
         )
 
         // AVKit's control dimming, behind the rail and the timeline. Below the
@@ -980,7 +992,10 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
         // The guide's "current programme" rolls over on its own clock.
         programInfoTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.updateRailContent() }
+            Task { @MainActor [weak self] in
+                self?.updateRailContent()
+                self?.channelSidebar?.refreshPrograms()
+            }
         }
     }
 
@@ -1248,6 +1263,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
+        if let channelSidebar { return [channelSidebar] }
         if let descriptionOverlay { return [descriptionOverlay] }
         // A pane leaves focus on its pill, as AVKit's tabs do.
         if let activePanel { return activePanel.isPane ? [railView] : [activePanel] }
@@ -1906,6 +1922,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// Do not dismiss and re-present: the presenting SwiftUI host is out of the
     /// window while the player covers it, so a new player never appears.
     private func switchChannel(to newChannel: UnifiedChannel) {
+        closeChannelSidebar()
         guard newChannel.id != channel.id else { return }
         cancelRetune()
         retuneBudget = LiveRetuneBudget()
@@ -1915,6 +1932,66 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         // new one resolves.
         updateRailContent()
         startPlayback()
+    }
+
+    // MARK: - Channel list (right swipe)
+
+    /// Brings the channel list in from the left, over the picture, with focus
+    /// on the playing channel. Only from the bare picture; false when there is
+    /// nothing to list. Press-only remotes reach the same lineup from the
+    /// rail's Channels pane.
+    @discardableResult
+    private func openChannelSidebar() -> Bool {
+        guard channelSidebar == nil, !railVisible, activePanel == nil, descriptionOverlay == nil,
+              scrubTarget == nil else { return false }
+        let store = LiveTVDataStore.shared
+        let sections = LiveChannelSections.sections(
+            of: store.channels, favorites: store.favorites(in: store.channels),
+            sourceOrder: store.sources.map(\.id))
+        guard !sections.isEmpty else { return false }
+
+        let sidebar = LiveChannelSidebarView(sections: sections, currentChannelId: channel.id,
+                                             programProvider: { store.getCurrentProgram(for: $0) })
+        sidebar.onSelect = { [weak self] selected in self?.switchChannel(to: selected) }
+        sidebar.onClose = { [weak self] in self?.closeChannelSidebar() }
+        // Below the 1pt focus catcher, as every full-height layer here is, and
+        // inset from the corner it sits in so the two never overlap.
+        view.insertSubview(sidebar, belowSubview: focusCatcher)
+        sidebar.translatesAutoresizingMaskIntoConstraints = false
+        let inset = LiveChannelSidebarView.Metrics.inset
+        NSLayoutConstraint.activate([
+            sidebar.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: inset),
+            sidebar.topAnchor.constraint(equalTo: view.topAnchor, constant: inset),
+            sidebar.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -inset),
+            sidebar.widthAnchor.constraint(equalToConstant: LiveChannelSidebarView.Metrics.width),
+        ])
+        view.layoutIfNeeded()
+        sidebar.alpha = 0
+        sidebar.transform = CGAffineTransform(translationX: -60, y: 0)
+
+        channelSidebar = sidebar
+        focusCatcher.isFocusEnabled = false
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
+        UIView.animate(withDuration: 0.3, delay: 0, options: .curveEaseOut) {
+            sidebar.alpha = 1
+            sidebar.transform = .identity
+        }
+        return true
+    }
+
+    private func closeChannelSidebar() {
+        guard let sidebar = channelSidebar else { return }
+        channelSidebar = nil
+        // Unfocusable at once, so focus returns to the picture while it fades.
+        sidebar.isUserInteractionEnabled = false
+        focusCatcher.isFocusEnabled = true
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
+        UIView.animate(withDuration: 0.2, delay: 0, options: .curveEaseIn, animations: {
+            sidebar.alpha = 0
+            sidebar.transform = CGAffineTransform(translationX: -60, y: 0)
+        }, completion: { _ in sidebar.removeFromSuperview() })
     }
 
     // MARK: - Recording
@@ -2153,6 +2230,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 dismiss(animated: true)
                 return
             case .select:
+                // The list's own row selection plays the channel.
+                if channelSidebar != nil { break }
                 if scrubTarget != nil {
                     // Click to play from the scrubbed spot.
                     resumePlayback()
@@ -2219,6 +2298,12 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         }
         if blockNextDismiss {
             blockNextDismiss = false
+            completion?()
+            return
+        }
+        if channelSidebar != nil {
+            closeChannelSidebar()
+            armDismissEchoBlock()
             completion?()
             return
         }

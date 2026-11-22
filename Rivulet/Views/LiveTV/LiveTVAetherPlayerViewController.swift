@@ -1951,9 +1951,16 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         guard !sections.isEmpty else { return false }
 
         let sidebar = LiveChannelSidebarView(sections: sections, currentChannelId: channel.id,
-                                             programProvider: { store.getCurrentProgram(for: $0) })
+                                             programProvider: { store.getCurrentProgram(for: $0) },
+                                             guideProvider: { store.epg[$0.id] ?? [] })
         sidebar.onSelect = { [weak self] selected in self?.switchChannel(to: selected) }
         sidebar.onClose = { [weak self] in self?.closeChannelSidebar() }
+        // A programme in the schedule opens the guide's own programme menu.
+        sidebar.onProgramSelected = { [weak self] program, programChannel, frame in
+            guard let self else { return }
+            LiveProgramMenu.present(program: program, channel: programChannel, from: self, sourceFrame: frame,
+                                    onWatch: { [weak self] in self?.switchChannel(to: $0) })
+        }
         // Below the 1pt focus catcher, as every full-height layer here is, and
         // inset from the corner it sits in so the two never overlap.
         view.insertSubview(sidebar, belowSubview: focusCatcher)
@@ -1962,8 +1969,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         NSLayoutConstraint.activate([
             sidebar.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: inset),
             sidebar.topAnchor.constraint(equalTo: view.topAnchor, constant: inset),
+            // No width: the list sets its own, wider while its groups are up.
             sidebar.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -inset),
-            sidebar.widthAnchor.constraint(equalToConstant: LiveChannelSidebarView.Metrics.width),
         ])
         view.layoutIfNeeded()
         sidebar.alpha = 0
@@ -2301,8 +2308,9 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             completion?()
             return
         }
-        if channelSidebar != nil {
-            closeChannelSidebar()
+        if let channelSidebar {
+            // One column back at a time; from the channels alone, the list closes.
+            if !channelSidebar.handleMenu() { closeChannelSidebar() }
             armDismissEchoBlock()
             completion?()
             return

@@ -75,6 +75,15 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
     var favoritesByLibrary: [String: [MediaItem]] = [:]
     func favorites(in library: MediaLibrary, limit: Int) async throws -> [MediaItem] { favoritesByLibrary[library.id] ?? [] }
 
+    var audioAnswers: [MediaItemRef: Bool] = [:]
+    private var recordedAudioAsks: [[String]] = []
+    /// The item ids of each `audioLanguageAvailability` call, in order.
+    var audioAsks: [[String]] { callLock.withLock { recordedAudioAsks } }
+    func audioLanguageAvailability(_ language: String, for items: [MediaItem]) async -> [MediaItemRef: Bool] {
+        callLock.withLock { recordedAudioAsks.append(items.map(\.ref.itemID)) }
+        return audioAnswers.filter { answer in items.contains { $0.ref == answer.key } }
+    }
+
     var supportsPlaylists = false
     var playlistList: [MediaPlaylist] = []
     /// Awaited before `videoPlaylists()` answers, so a test can hold a refresh open.

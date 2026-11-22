@@ -16,6 +16,16 @@
     "Doesn't have this title" : {},
     "Enter the code from the person hosting." : {},
     "Get a code to share. Playback pauses here until someone presses play." : {},
+    "Hides titles without your Audio Language from Continue Watching and Favorites. Shows return once the next episode is available in your Audio Language." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Blendet Titel ohne deine Audiosprache in „Weiter ansehen“ und „Favoriten“ aus. Serien kommen zurück, sobald die nächste Folge in deiner Audiosprache verfügbar ist."
+          }
+        }
+      }
+    },
     "Host • %@" : {},
     "Join" : {},
     "Join Watch Together…" : {},
@@ -119,6 +129,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ce jour-là"
+          }
+        }
+      }
+    },
+    "Only My Audio Language" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur meine Audiosprache"
           }
         }
       }

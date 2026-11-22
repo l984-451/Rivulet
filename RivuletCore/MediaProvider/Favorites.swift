@@ -34,7 +34,7 @@ enum FavoritesFeed {
     }
 
     /// Every server's favorite movies and shows, by title. A server or library that fails drops out.
-    /// The same title on two servers appears twice.
+    /// The same title on two servers appears twice. Only My Audio Language applies (`AudioLanguageGate`).
     static func load(from providers: [any MediaProvider]) async -> [MediaItem] {
         let limit = Self.limit
         let found = await withTaskGroup(of: [MediaItem].self) { group in
@@ -51,7 +51,7 @@ enum FavoritesFeed {
             }
             return await group.reduce(into: [MediaItem]()) { $0 += $1 }
         }
-        return FavoritesOrder.byTitle(found)
+        return FavoritesOrder.byTitle(await AudioLanguageGate.filter(found))
     }
 
     /// Whether a menu or the detail page offers the heart for this item.

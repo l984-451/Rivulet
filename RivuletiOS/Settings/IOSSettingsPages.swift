@@ -64,12 +64,20 @@ struct IOSPlaybackSettingsView: View {
     @AppStorage(StreamingQuality.awayKey) private var awayQuality = StreamingQuality.awayDefault
     @AppStorage(AetherPlayer.upscaleKey) private var upscales = false
     @AppStorage(StereoWithSubwoofer.key) private var stereoWithSubwoofer = false
+    @AppStorage(AudioLanguageGate.enabledKey) private var onlyMyAudioLanguage = false
+    @EnvironmentObject private var browse: BrowseStore
     /// Bumped on every track-intent write: `TrackIntentStore` is not observable.
     @State private var trackRevision = 0
 
     var body: some View {
         Form {
             audioAndSubtitles
+
+            Section {
+                Toggle("Only My Audio Language", isOn: $onlyMyAudioLanguage)
+            } footer: {
+                Text("Hides titles without your Audio Language from Continue Watching and Favorites. Shows return once the next episode is available in your Audio Language.")
+            }
 
             Section {
                 Picker(String(localized: "streaming.home", defaultValue: "Home"), selection: $homeQuality) { qualityOptions }
@@ -132,6 +140,8 @@ struct IOSPlaybackSettingsView: View {
             }
         }
         .navigationTitle("Playback")
+        // Continue Watching and Favorites refetch, now with or without the check.
+        .onChange(of: onlyMyAudioLanguage) { Task { await browse.refresh() } }
     }
 
     /// Same intents as the tvOS Audio & Subtitles settings, saved per Plex profile.

@@ -1594,11 +1594,22 @@ class PlexDataStore: ObservableObject {
             try Task.checkCancellation()
             return try await PlexNetworkManager.shared.getContinueWatching(serverURL: serverURL, authToken: token, userId: userId)
         }.value
+        let gated = await withoutOtherAudioLanguages(fetched, serverURL: serverURL, token: token)
         #if DEBUG
-        return TVScreenshotMode.demoHub(fetched)
+        return TVScreenshotMode.demoHub(gated)
         #else
-        return fetched
+        return gated
         #endif
+    }
+
+    /// The hub without the titles Only My Audio Language leaves out (`AudioLanguageGate`).
+    private func withoutOtherAudioLanguages(_ hub: PlexHub?, serverURL: String, token: String) async -> PlexHub? {
+        guard var hub, let metas = hub.Metadata, AudioLanguageGate.language != nil else { return hub }
+        let providerID = MediaProviderRegistry.shared.plexProvider?.id ?? "plex:\(serverURL)"
+        let items = metas.map { PlexMediaMapper.item($0, providerID: providerID, serverURL: serverURL, authToken: token) }
+        let kept = Set(await AudioLanguageGate.filter(items).map(\.ref.itemID))
+        hub.Metadata = metas.filter { meta in meta.ratingKey.map(kept.contains) ?? true }
+        return hub
     }
 
     private func continueWatchingHubsAreEqual(_ lhs: PlexHub?, _ rhs: PlexHub?) -> Bool {

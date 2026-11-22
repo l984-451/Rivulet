@@ -91,12 +91,15 @@ enum NowPlayingLanguageOptions {
                 guard let value = varint() else { return nil }
                 if key >> 3 == 1 { type = UInt(value) }
             case 2:
-                guard let length = varint().map(Int.init), length <= bytes.count - index else { return nil }
+                guard let raw = varint(), let length = Int(exactly: raw), length <= bytes.count - index
+                else { return nil }
                 let string = String(decoding: bytes[index..<index + length], as: UTF8.self)
                 index += length
                 if key >> 3 == 3 { characteristics.append(string) } else { strings[key >> 3] = string }
-            case 1: index += 8
-            case 5: index += 4
+            case 1, 5:
+                let width = key & 7 == 1 ? 8 : 4
+                guard width <= bytes.count - index else { return nil }
+                index += width
             default: return nil
             }
         }

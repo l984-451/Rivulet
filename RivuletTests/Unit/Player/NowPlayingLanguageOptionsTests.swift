@@ -92,5 +92,9 @@ final class NowPlayingLanguageOptionsTests: XCTestCase {
         XCTAssertNil(NowPlayingLanguageOptions.option(protobuf: Data([0x08, 0x01, 0x12, 0x02, 0x6e, 0x6c])))
         XCTAssertNil(NowPlayingLanguageOptions.option(protobuf: Data([0x2a, 0x05, 0x31])))
         XCTAssertNil(NowPlayingLanguageOptions.option(protobuf: Data()))
+        // A length past Int.max or the data, and a cut fixed-width field, fail instead of trapping.
+        XCTAssertNil(NowPlayingLanguageOptions.option(protobuf: Data([0x22] + Array(repeating: 0xff, count: 9) + [0x01])))
+        XCTAssertNil(NowPlayingLanguageOptions.option(protobuf: Data([0x22, 0x7f, 0x41])))
+        XCTAssertNil(NowPlayingLanguageOptions.option(protobuf: Data([0x2a, 0x01, 0x31, 0x09, 0x00])))
     }
 }

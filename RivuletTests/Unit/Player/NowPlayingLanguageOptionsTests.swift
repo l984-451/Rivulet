@@ -67,4 +67,30 @@ final class NowPlayingLanguageOptionsTests: XCTestCase {
                                                    displayName: "", identifier: "99")
         XCTAssertNil(NowPlayingLanguageOptions.trackId(for: stale, in: audio))
     }
+
+    /// Bytes a pyatv client sent for "Hollandsk (SRT)", captured from tvOS (#458).
+    func test_optionFromProtobuf() throws {
+        let data = Data([0x08, 0x01, 0x12, 0x02, 0x6e, 0x6c, 0x22, 0x0f] + Array("Hollandsk (SRT)".utf8)
+                        + [0x2a, 0x01, 0x33])
+        let option = try XCTUnwrap(NowPlayingLanguageOptions.option(protobuf: data))
+        XCTAssertEqual(option.languageOptionType, .legible)
+        XCTAssertEqual(option.languageTag, "nl")
+        XCTAssertEqual(option.displayName, "Hollandsk (SRT)")
+        XCTAssertEqual(option.identifier, "3")
+    }
+
+    func test_optionFromProtobuf_identifierOnlyAndCharacteristics() throws {
+        let trait = Array(MPLanguageOptionCharacteristicIsMainProgramContent.utf8)
+        let data = Data([0x1a, UInt8(trait.count)] + trait + [0x2a, 0x01, 0x31])
+        let option = try XCTUnwrap(NowPlayingLanguageOptions.option(protobuf: data))
+        XCTAssertEqual(option.languageOptionType, .audible)
+        XCTAssertEqual(option.identifier, "1")
+        XCTAssertEqual(option.languageOptionCharacteristics, [MPLanguageOptionCharacteristicIsMainProgramContent])
+    }
+
+    func test_optionFromProtobuf_rejectsMissingIdentifierAndTruncated() {
+        XCTAssertNil(NowPlayingLanguageOptions.option(protobuf: Data([0x08, 0x01, 0x12, 0x02, 0x6e, 0x6c])))
+        XCTAssertNil(NowPlayingLanguageOptions.option(protobuf: Data([0x2a, 0x05, 0x31])))
+        XCTAssertNil(NowPlayingLanguageOptions.option(protobuf: Data()))
+    }
 }

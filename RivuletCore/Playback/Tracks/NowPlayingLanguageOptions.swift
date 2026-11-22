@@ -59,6 +59,54 @@ enum NowPlayingLanguageOptions {
         return (matching.first { !$0.isForced } ?? matching.first)?.id
     }
 
+    /// MediaRemote's options key for a language command sent from another device
+    /// (the TV Remote app, Home Assistant, Unfolded Circle remotes). tvOS leaves
+    /// `MPChangeLanguageOptionCommandEvent.languageOption` nil for these and only
+    /// passes the option on as protobuf bytes under this key.
+    static let mediaRemoteOptionDataKey = "kMRMediaRemoteOptionLanguageOptionData"
+
+    /// The option in MediaRemote's `LanguageOption` protobuf: type = 1, languageTag = 2,
+    /// characteristics = 3, displayName = 4, identifier = 5. Nil without an identifier.
+    static func option(protobuf data: Data) -> MPNowPlayingInfoLanguageOption? {
+        let bytes = [UInt8](data)
+        var index = 0
+        func varint() -> UInt64? {
+            var value: UInt64 = 0, shift: UInt64 = 0
+            while index < bytes.count, shift < 64 {
+                let byte = bytes[index]
+                index += 1
+                value |= UInt64(byte & 0x7f) << shift
+                if byte & 0x80 == 0 { return value }
+                shift += 7
+            }
+            return nil
+        }
+        var type: UInt = 0
+        var strings: [UInt64: String] = [:]
+        var characteristics: [String] = []
+        while index < bytes.count {
+            guard let key = varint() else { return nil }
+            switch key & 7 {
+            case 0:
+                guard let value = varint() else { return nil }
+                if key >> 3 == 1 { type = UInt(value) }
+            case 2:
+                guard let length = varint().map(Int.init), length <= bytes.count - index else { return nil }
+                let string = String(decoding: bytes[index..<index + length], as: UTF8.self)
+                index += length
+                if key >> 3 == 3 { characteristics.append(string) } else { strings[key >> 3] = string }
+            case 1: index += 8
+            case 5: index += 4
+            default: return nil
+            }
+        }
+        guard let identifier = strings[5], let optionType = MPNowPlayingInfoLanguageOptionType(rawValue: type)
+        else { return nil }
+        return MPNowPlayingInfoLanguageOption(
+            type: optionType, languageTag: strings[2] ?? "und", characteristics: characteristics,
+            displayName: strings[4] ?? identifier, identifier: identifier)
+    }
+
     /// BCP 47 for the option: "en" from "eng" or "English", "und" when unknown.
     static func languageTag(_ track: MediaTrack) -> String {
         let code = track.languageCode ?? track.language

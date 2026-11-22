@@ -3,8 +3,8 @@
 
 import SwiftUI
 
-/// Discover: TMDB's curated rows, as on tvOS. A title opens its page, or your own copy when a
-/// server has it. Parity source: RivuletiOS/Discover/IOSDiscoverView.swift.
+/// Discover: a hero over TMDB's curated rows, as on tvOS. A title opens its page, or your own copy
+/// when a server has it; in the hero, Play and Details reach that copy. Parity source: RivuletiOS/Discover/IOSDiscoverView.swift.
 struct MacDiscoverView: View {
     @State private var discover = DiscoverRows()
     @State private var ownership = DiscoverOwnership()
@@ -15,10 +15,12 @@ struct MacDiscoverView: View {
     var body: some View {
         // Read here, not in a tile, so every row redraws as answers arrive.
         let copies = ownership.copies
+        // TMDB's titles, as on tvOS: owning one changes what Play and Details reach, not the slide.
+        let hero = DiscoverRows.heroTitles(discover.rows)
         Group {
             if !discover.rows.isEmpty {
-                ScrollView {
-                    // Not lazy: eight rows at most, each lazy inside.
+                MacHeroFeed(rows: [], heroItems: hero, banners: [], below: {
+                    // One child of the feed's lazy stack, so not lazy: eight rows at most, each lazy inside.
                     VStack(alignment: .leading, spacing: 28) {
                         ForEach(discover.rows) { row in
                             MacRail(title: row.section.title, kind: .poster, items: row.items) { item, width in
@@ -26,8 +28,9 @@ struct MacDiscoverView: View {
                             }
                         }
                     }
-                    .padding(.vertical, 24)
-                }
+                })
+                .environment(\.heroCopies, copies)
+                .safeAreaPadding(.top, hero.isEmpty ? 24 : 0)
             } else if discover.failed {
                 MacErrorView(title: "Couldn't Load Discover", message: String(localized: "Try again in a moment.")) {
                     await discover.reload()

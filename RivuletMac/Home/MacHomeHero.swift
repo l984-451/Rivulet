@@ -24,6 +24,7 @@ struct MacHomeHero: View {
     private static let parallax: CGFloat = 0.3
     @EnvironmentObject private var playback: MacPlaybackController
     @Environment(\.macOpen) private var open
+    @Environment(\.heroCopies) private var copies
     @Environment(\.scenePhase) private var scenePhase
 
     private var height: CGFloat { min(max(width * 0.42, 300), 520) }
@@ -108,8 +109,8 @@ struct MacHomeHero: View {
                             // Click and right-click live on the pages, inside the scroll view: a gesture
                             // around the pager hid it from hit testing, so a trackpad swipe never reached it.
                             .contentShape(Rectangle())
-                            .onTapGesture { open(.detail(item)) }
-                            .macContextMenu(item)
+                            .onTapGesture { open(.detail(copies[item.ref] ?? item)) }
+                            .macContextMenu(copies[item.ref] ?? item)
                             .id(item.id)
                     }
                 }
@@ -168,7 +169,7 @@ struct MacHomeHero: View {
         .frame(maxHeight: .infinity, alignment: .bottom)
     }
 
-    /// Left and Right page the hero while Home is showing.
+    /// Left and Right page the hero while the page is showing.
     private var pagingKeys: some View {
         Group {
             Button("Previous") { page(by: -1) }.keyboardShortcut(.leftArrow, modifiers: [])
@@ -247,6 +248,10 @@ private struct MacHeroControls: View {
     let item: MediaItem
     @Environment(\.macActions) private var actions
     @Environment(\.macOpen) private var open
+    @Environment(\.heroCopies) private var copies
+
+    /// What Play and Details reach: your copy of a Discover title when a server has it.
+    private var target: MediaItem { copies[item.ref] ?? item }
 
     private var metadataLine: String {
         [item.episodeCode ?? item.year.map(String.init), item.genres?.first].compactMap { $0 }.joined(separator: " · ")
@@ -271,19 +276,48 @@ private struct MacHeroControls: View {
             .allowsHitTesting(false)
 
             HStack(spacing: 10) {
-                if IOSPlaybackGate.canPlay(item.ref) {
-                    Button { actions.play(item) } label: {
-                        Label(item.isInProgress ? "Resume" : "Play", systemImage: "play.fill")
-                            .overlay { if actions.preparingID == item.ref.actionKey { ProgressView().controlSize(.small) } }
+                if IOSPlaybackGate.canPlay(target.ref) {
+                    Button { actions.play(target) } label: {
+                        Label(target.isInProgress ? "Resume" : "Play", systemImage: "play.fill")
+                            .overlay { if actions.preparingID == target.ref.actionKey { ProgressView().controlSize(.small) } }
                     }
                     .buttonStyle(.borderedProminent)
+                } else if target.isMetadataOnly {
+                    MacHeroWatchlistButton(item: item)
                 }
-                Button { open(.detail(item)) } label: { Label("Details", systemImage: "info.circle") }
+                Button { open(.detail(target)) } label: { Label("Details", systemImage: "info.circle") }
                     .buttonStyle(.bordered)
             }
             .controlSize(.large)
         }
         .padding(.horizontal, MacMetrics.pageMargin)
         .padding(.bottom, 36)
+    }
+}
+
+extension EnvironmentValues {
+    /// Discover: your copy of a hero title (TMDB's), which its Play, Details, click and menu reach. Empty elsewhere.
+    @Entry var heroCopies: [MediaItemRef: MediaItem] = [:]
+}
+
+/// A TMDB title's main button (Discover's hero): it has nothing to play, as on its page.
+private struct MacHeroWatchlistButton: View {
+    let item: MediaItem
+    @EnvironmentObject private var browse: BrowseStore
+    @Environment(\.macActions) private var actions
+    /// Redraws when the list changes, which is where a TMDB title's answer comes from.
+    @ObservedObject private var watchlist = PlexWatchlistService.shared
+
+    var body: some View {
+        if browse.supportsWatchlist(item) {
+            let onList = browse.isOnWatchlist(item)
+            let help: LocalizedStringKey = onList ? "Remove from Watchlist" : "Add to Watchlist"
+            Button { actions.setWatchlisted(item, !onList) } label: {
+                Label("Watchlist", systemImage: onList ? "checkmark" : "plus")
+            }
+            .buttonStyle(.borderedProminent)
+            .help(help)
+            .accessibilityLabel(help)
+        }
     }
 }

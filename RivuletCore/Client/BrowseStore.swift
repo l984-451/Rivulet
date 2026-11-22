@@ -474,7 +474,13 @@ final class BrowseStore: ObservableObject {
     /// Episodes and seasons take their show's logo, which list responses omit; the provider finds
     /// and remembers it. Kept here too so a view can draw it on its first frame.
     func logoURL(for item: MediaItem) async -> URL? {
-        guard let provider = registry.provider(for: item.ref.providerID) else { return item.artwork.logo }
+        guard let provider = registry.provider(for: item.ref.providerID) else {
+            // A TMDB title (Discover) takes TMDB's own logo, as on tvOS.
+            guard item.isMetadataOnly, let tmdb = item.heroTMDB else { return item.artwork.logo }
+            let url = await TMDBLogoCache.shared.logoURL(tmdbId: tmdb.id, type: tmdb.type)
+            if let url { logos[item.logoOwner] = url }
+            return url
+        }
         let url = await provider.logoURL(for: item)
         if let url { logos[item.logoOwner] = url }
         return url

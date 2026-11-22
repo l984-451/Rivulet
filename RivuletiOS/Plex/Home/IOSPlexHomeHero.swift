@@ -161,6 +161,10 @@ private struct IOSPlexHeroControls: View {
     let item: MediaItem
     let isWide: Bool
     @Environment(\.plexActions) private var actions
+    @Environment(\.heroCopies) private var copies
+
+    /// What Play and Details reach: your copy of a Discover title when a server has it.
+    private var target: MediaItem { copies[item.ref] ?? item }
 
     private var metadataLine: String {
         [item.episodeCode ?? item.year.map(String.init), item.genres?.first]
@@ -181,14 +185,16 @@ private struct IOSPlexHeroControls: View {
 
             HStack(spacing: 12) {
                 // Play shows only where `IOSPlaybackGate` allows it.
-                if IOSPlaybackGate.canPlay(item.ref) {
-                    Button { actions.play(item) } label: {
-                        Label(item.isInProgress ? "Resume" : "Play", systemImage: "play.fill")
-                            .overlay { if actions.preparingID == item.ref.actionKey { ProgressView() } }
+                if IOSPlaybackGate.canPlay(target.ref) {
+                    Button { actions.play(target) } label: {
+                        Label(target.isInProgress ? "Resume" : "Play", systemImage: "play.fill")
+                            .overlay { if actions.preparingID == target.ref.actionKey { ProgressView() } }
                     }
                     .buttonStyle(.glassProminent)
+                } else if target.isMetadataOnly {
+                    IOSHeroWatchlistButton(item: item)
                 }
-                NavigationLink(value: IOSPlexDetailRoute(item: item, scope: "hero")) {
+                NavigationLink(value: IOSPlexDetailRoute(item: target, scope: "hero", source: item)) {
                     Label("Details", systemImage: "info.circle")
                 }
                 .buttonStyle(.glass)
@@ -215,6 +221,32 @@ private struct IOSPlexHeroControls: View {
                 .font(.subheadline)
                 .foregroundStyle(.white.opacity(0.85))
                 .lineLimit(1)
+        }
+    }
+}
+
+extension EnvironmentValues {
+    /// Discover: your copy of a hero title (TMDB's), which its Play and Details reach. Empty elsewhere.
+    @Entry var heroCopies: [MediaItemRef: MediaItem] = [:]
+}
+
+/// A TMDB title's main button (Discover's hero): it has nothing to play, as on its page.
+private struct IOSHeroWatchlistButton: View {
+    let item: MediaItem
+    @EnvironmentObject private var browse: BrowseStore
+    @Environment(\.plexActions) private var actions
+    /// Redraws when the list changes, which is where a TMDB title's answer comes from.
+    @ObservedObject private var watchlist = PlexWatchlistService.shared
+
+    var body: some View {
+        if browse.supportsWatchlist(item) {
+            let onList = browse.isOnWatchlist(item)
+            let label: LocalizedStringKey = onList ? "Remove from Watchlist" : "Add to Watchlist"
+            Button { actions.setWatchlisted(item, !onList) } label: {
+                Label("Watchlist", systemImage: onList ? "checkmark" : "plus")
+            }
+            .buttonStyle(.glassProminent)
+            .accessibilityLabel(label)
         }
     }
 }

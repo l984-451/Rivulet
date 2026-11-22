@@ -49,7 +49,7 @@ shuffleShow, addToPlaylist, open, setWatched, setWatchlisted, setFavorite, playE
 | Area | Mac file | iOS source |
 |---|---|---|
 | Home | `Home/MacHomeView.swift`, `MacHubGridView.swift` | `Plex/Home/IOSPlexHomeView`, `IOSPlexHeroFeed`, `IOSPlexHomeHero`, `IOSPlexHubGridView`, `Plex/Components/IOSThemeVideoBackdrop`, `IOSPlexAmbientBackdrop` |
-| Discover | `Discover/MacDiscoverView.swift` | `Discover/IOSDiscoverView` (rows from `RivuletCore/Discover/DiscoverRows`; your own copy from `DiscoverOwnership`, opened through `MacTileButton(opens:)`) |
+| Discover | `Discover/MacDiscoverView.swift` | `Discover/IOSDiscoverView` (rows and the hero's titles from `RivuletCore/Discover/DiscoverRows`, in Home's `MacHeroFeed` with the rows as `below`; your own copy from `DiscoverOwnership`, opened through `MacTileButton(opens:)` and reached by the hero's Play and Details through `heroCopies`; a TMDB title's hero button is Watchlist) |
 | Library | `Library/MacLibraryView.swift` | `Plex/Library/IOSPlexLibraryView` (Recommended + Browse, sort via `IOSLibrarySorts`) |
 | Photos | `Photos/MacPhotoLibraryView.swift` (grid, folders, clips), `MacPhotoViewer.swift` (arrows, Space slideshow, Esc, pinch) | `RivuletiOS/Photos/`; listing in `RivuletCore/Photos/` |
 | Playlists | `Library/MacPlaylistViews.swift` | `Plex/Library/IOSPlexPlaylistViews` |

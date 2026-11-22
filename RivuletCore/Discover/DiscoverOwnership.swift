@@ -22,8 +22,11 @@ final class DiscoverOwnership {
             copies = [:]
             servers = ids
         }
+        // Rows share titles (Popular and Now Playing): each is asked once, so a later row can't undo its answer.
+        var asked = Set<MediaItemRef>()
         for row in rows {
             let titles = row.compactMap { item in Self.title(item).map { (ref: item.ref, match: $0) } }
+                .filter { asked.insert($0.ref).inserted }
             guard !titles.isEmpty else { continue }
             let asked = titles.map(\.match)
             let found = await withTaskGroup(of: (Int, [MediaItem]).self) { group in

@@ -107,6 +107,18 @@ final class DiscoverOwnershipTests: XCTestCase {
         XCTAssertTrue(ownership.copies.isEmpty, "dropped before any server answers")
     }
 
+    /// Popular and Now Playing share titles: each is asked once, so a later row can't undo its answer.
+    func test_aTitleInTwoRowsIsAskedOnce() async {
+        let plex = StubMediaProvider(id: "plex:a", kind: .plex)
+        plex.ownedItemsResult = [copy("p1", on: "plex:a", ids: ["tmdb": "1"])]
+        let ownership = DiscoverOwnership()
+
+        await check(ownership, [[title(1)], [title(1), title(2)]], [plex])
+
+        XCTAssertEqual(plex.ownedRequests.map { $0.map(\.externalIDs) }, [[["tmdb": "1"]], [["tmdb": "2"]]])
+        XCTAssertEqual(ownership.copies[title(1).ref]?.ref.itemID, "p1")
+    }
+
     func test_eachRowIsAskedOnItsOwn_inPageOrder() async {
         let plex = StubMediaProvider(id: "plex:a", kind: .plex)
         plex.ownedItemsResult = [copy("p3", on: "plex:a", .show, ids: ["tmdb": "3"])]

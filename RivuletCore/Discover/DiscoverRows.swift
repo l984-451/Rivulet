@@ -56,3 +56,17 @@ final class DiscoverRows {
         await load()
     }
 }
+
+extension DiscoverRows {
+    /// Discover's hero, as tvOS's `computeHeroItems`: Popular Movies and Popular TV taken in turn,
+    /// the titles with a backdrop first (so no page goes without art), at most `cap`.
+    static func heroTitles(_ rows: [Row], cap: Int = 9) -> [MediaItem] {
+        let movies = rows.first { $0.section == .moviePopular }?.items ?? []
+        let shows = rows.first { $0.section == .tvPopular }?.items ?? []
+        let mixed = (0..<max(movies.count, shows.count)).flatMap { index in
+            [movies, shows].compactMap { $0.indices.contains(index) ? $0[index] : nil }
+        }.prefix(cap * 2)
+        let withBackdrop = mixed.filter { $0.artwork.backdrop != nil }
+        return Array((withBackdrop + mixed.filter { $0.artwork.backdrop == nil }).prefix(cap))
+    }
+}

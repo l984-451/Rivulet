@@ -66,7 +66,7 @@ struct MacHomeView: View {
 }
 
 /// The hero over a stack of rows, with the ambient wash from the shown title behind both.
-struct MacHeroFeed: View {
+struct MacHeroFeed<Below: View>: View {
     let rows: [MediaHub]
     let heroItems: [MediaItem]
     let banners: [BrowseStore.FailedServer]
@@ -74,6 +74,8 @@ struct MacHeroFeed: View {
     var onHeroShown: (() -> Void)?
     /// The hero's own lists (trending, watchlist) have arrived, so its first page will not change.
     var heroSettled = true
+    /// Under the hub rows: Discover's own rows, which aren't hubs.
+    @ViewBuilder let below: Below
     @EnvironmentObject private var browse: BrowseStore
     @Environment(\.displayScale) private var displayScale
     @State private var selection: MediaItemRef?
@@ -102,6 +104,7 @@ struct MacHeroFeed: View {
                         MacShelfView(hub: hub)
                     }
                 }
+                below
             }
             .padding(.bottom, 28)
         }
@@ -122,6 +125,14 @@ struct MacHeroFeed: View {
             toldLaunch = true
             onHeroShown()
         }
+    }
+}
+
+extension MacHeroFeed where Below == EmptyView {
+    init(rows: [MediaHub], heroItems: [MediaItem], banners: [BrowseStore.FailedServer],
+         onHeroShown: (() -> Void)? = nil, heroSettled: Bool = true) {
+        self.init(rows: rows, heroItems: heroItems, banners: banners, onHeroShown: onHeroShown, heroSettled: heroSettled,
+                  below: { EmptyView() })
     }
 }
 

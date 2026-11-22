@@ -3,8 +3,8 @@
 
 import SwiftUI
 
-/// Discover tab root: TMDB's curated rows, as on tvOS. A title opens its page, or your own copy
-/// when a server has it. The root supplies the NavigationStack.
+/// Discover tab root: a hero over TMDB's curated rows, as on tvOS. A title opens its page, or your
+/// own copy when a server has it; in the hero, Play and Details reach that copy. The root supplies the NavigationStack.
 struct IOSDiscoverView: View {
     @State private var discover = DiscoverRows()
     @State private var ownership = DiscoverOwnership()
@@ -15,11 +15,13 @@ struct IOSDiscoverView: View {
     var body: some View {
         // Read here, not in a tile, so every row redraws as answers arrive.
         let copies = ownership.copies
+        // TMDB's titles, as on tvOS: owning one changes what Play and Details reach, not the slide.
+        let hero = DiscoverRows.heroTitles(discover.rows)
         Group {
             if !discover.rows.isEmpty {
-                ScrollView {
-                    // Not lazy: eight rows at most, each lazy inside. A lazy stack rebuilt rows as they
-                    // scrolled back in, and each first laid out header-only, so the page jumped.
+                IOSPlexHeroFeed(rows: [], heroItems: hero, refresh: { await discover.reload() }, below: {
+                    // One child of the feed's lazy stack, so not lazy: eight rows at most, each lazy inside. A lazy
+                    // stack rebuilt rows as they scrolled back in, and each first laid out header-only, so the page jumped.
                     VStack(alignment: .leading, spacing: 30) {
                         ForEach(discover.rows) { row in
                             IOSPlexRail(title: row.section.title, kind: .poster, items: row.items,
@@ -28,9 +30,8 @@ struct IOSDiscoverView: View {
                             }
                         }
                     }
-                    .padding(.bottom, 24)
-                }
-                .refreshable { await discover.reload() }
+                })
+                .environment(\.heroCopies, copies)
             } else if discover.failed {
                 IOSPlexErrorView(title: "Couldn't Load Discover", message: String(localized: "Try again in a moment.")) {
                     await discover.reload()
@@ -39,7 +40,7 @@ struct IOSDiscoverView: View {
                 ProgressView()
             }
         }
-        .navigationTitle("Discover")
+        .iosPlexHeroChrome(hero: !hero.isEmpty, title: String(localized: "Discover"))
         .toolbar {
             IOSAccountToolbarItem()
         }

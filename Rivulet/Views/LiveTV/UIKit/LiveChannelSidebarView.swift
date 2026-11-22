@@ -92,6 +92,14 @@ final class LiveChannelSidebarView: UIView {
     private var schedulePrograms: [UnifiedProgram] = []
     /// The focused row, grown to say what is next. nil when it has nothing next.
     private var expandedRow: IndexPath?
+    /// The remote gesture that last moved focus to another column. The focus
+    /// engine moves focus before that same press or swipe reaches the Left and
+    /// Right handling here, so without this one Right from a group would land
+    /// on a channel and then open its schedule too.
+    private var columnMoveGesture: Int?
+    private var gestureAlreadyMovedColumn: Bool {
+        columnMoveGesture == MenuPressInterceptor.remoteGestures.count
+    }
     /// A one-shot target for the next focus update.
     private weak var focusRedirect: UIView?
 
@@ -210,8 +218,8 @@ final class LiveChannelSidebarView: UIView {
             shouldHandle: { [weak self] direction in
                 guard let self else { return false }
                 switch direction {
-                case .left: return !self.focusIsIn(self.schedule)
-                case .right: return self.focusIsIn(self.channels) && !self.showsSchedule
+                case .left: return !self.gestureAlreadyMovedColumn && !self.focusIsIn(self.schedule)
+                case .right: return !self.gestureAlreadyMovedColumn && self.focusIsIn(self.channels) && !self.showsSchedule
                 default: return false
                 }
             },
@@ -252,6 +260,11 @@ final class LiveChannelSidebarView: UIView {
 
     private func headerHeight(of section: Int) -> CGFloat {
         sections[safe: section]?.title == nil ? 0 : Metrics.headerHeight
+    }
+
+    /// Which column a view is in: the groups, the channels or the schedule.
+    private func column(of view: UIView?) -> UICollectionView? {
+        [groups, channels, schedule].first { view?.isDescendant(of: $0) == true }
     }
 
     private var focusedView: UIView? { UIFocusSystem.focusSystem(for: self)?.focusedItem as? UIView }
@@ -445,6 +458,7 @@ final class LiveChannelSidebarView: UIView {
     /// Left: the schedule goes first, then the groups come in; Left from the
     /// groups, or from a lineup with nothing to group, closes.
     private func handleLeft() {
+        guard !gestureAlreadyMovedColumn else { return }
         if showsSchedule {
             hideSchedule()
         } else if hasGroups, !showsGroups {
@@ -457,7 +471,7 @@ final class LiveChannelSidebarView: UIView {
 
     /// Right from a channel: its schedule.
     private func handleRight() {
-        guard !showsSchedule, let row = focusedChannelRow else { return }
+        guard !gestureAlreadyMovedColumn, !showsSchedule, let row = focusedChannelRow else { return }
         showSchedule(for: row)
     }
 
@@ -548,6 +562,9 @@ final class LiveChannelSidebarView: UIView {
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
         super.didUpdateFocus(in: context, with: coordinator)
         let next = context.nextFocusedView
+        if column(of: context.previouslyFocusedView) != column(of: next) {
+            columnMoveGesture = MenuPressInterceptor.remoteGestures.count
+        }
         let inChannels = next?.isDescendant(of: channels) == true
         if showsGroups, inChannels { hideGroups() }
         scheduleEntry.isEnabled = showsSchedule && inChannels

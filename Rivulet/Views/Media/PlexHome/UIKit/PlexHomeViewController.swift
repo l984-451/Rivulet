@@ -2466,35 +2466,13 @@ final class PlexHomeViewController: UIViewController {
         }
     }
 
-    /// Toggle the Plex Discover watchlist for a TMDB-mapped MediaItem.
-    /// Shared by the hero pill and tile context menus.
+    /// The hero's Watchlist button for a TMDB title: Discover's slides and Home's Watchlist slides.
     private func toggleDiscoverWatchlist(for item: MediaItem, completion: (() -> Void)? = nil) {
-        guard let tmdbID = item.tmdbID else { return }
-        // Resolve the original TMDB item for full add-payload fields.
-        let tmdbItem = discoverListItems.values.lazy
-            .compactMap { $0.first(where: { $0.id == tmdbID }) }
-            .first
-        let guid = "tmdb://\(tmdbID)"
+        guard let entry = PlexWatchlistItem(tmdb: item), let guid = entry.primaryGUID else { return }
         Task { @MainActor in
             if watchlistService.contains(guid: guid) {
                 await watchlistService.remove(guid: guid)
-            } else if let tmdbItem {
-                let watchType: PlexWatchlistItem.WatchlistType = tmdbItem.mediaType == .movie ? .movie : .show
-                let yearInt: Int? = {
-                    guard let raw = tmdbItem.releaseDate?.prefix(4), !raw.isEmpty else { return nil }
-                    return Int(raw)
-                }()
-                let posterURL: URL? = tmdbItem.posterPath.flatMap {
-                    URL(string: "https://image.tmdb.org/t/p/w500\($0)")
-                }
-                let entry = PlexWatchlistItem(
-                    id: guid,
-                    title: tmdbItem.title,
-                    year: yearInt,
-                    type: watchType,
-                    posterURL: posterURL,
-                    guids: [guid]
-                )
+            } else {
                 await watchlistService.add(guid: guid, item: entry)
             }
             completion?()
@@ -4674,22 +4652,7 @@ final class PlexHomeViewController: UIViewController {
             })
         } else {
             actions.append(TileMenuAction(title: "Add to Watchlist", systemImage: "bookmark") { [weak self] in
-                let watchType: PlexWatchlistItem.WatchlistType = item.mediaType == .movie ? .movie : .show
-                let yearInt: Int? = {
-                    guard let raw = item.releaseDate?.prefix(4), !raw.isEmpty else { return nil }
-                    return Int(raw)
-                }()
-                let posterURL: URL? = item.posterPath.flatMap {
-                    URL(string: "https://image.tmdb.org/t/p/w500\($0)")
-                }
-                let entry = PlexWatchlistItem(
-                    id: guid,
-                    title: item.title,
-                    year: yearInt,
-                    type: watchType,
-                    posterURL: posterURL,
-                    guids: [guid]
-                )
+                guard let entry = PlexWatchlistItem(tmdb: TMDBMediaMapper.item(item)) else { return }
                 Task { await self?.watchlistService.add(guid: guid, item: entry) }
             })
         }

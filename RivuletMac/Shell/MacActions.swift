@@ -43,13 +43,23 @@ extension View {
     func macActionHost() -> some View { modifier(MacActionHost()) }
 
     /// Right-click menu shared by every poster, card and row.
-    @ViewBuilder
     func macContextMenu(_ item: MediaItem, showsDetails: Bool = false) -> some View {
-        // A catalog title (TMDB) is on no server, so it has none of these actions.
-        if item.isMetadataOnly {
-            self
+        modifier(MacContextMenu(item: item, showsDetails: showsDetails))
+    }
+}
+
+private struct MacContextMenu: ViewModifier {
+    let item: MediaItem
+    let showsDetails: Bool
+    @EnvironmentObject private var browse: BrowseStore
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        // A TMDB title's only action is the watchlist: no menu when this profile has none.
+        if item.isMetadataOnly, !browse.supportsWatchlist(item) {
+            content
         } else {
-            contextMenu { MacItemMenu(item: item, showsPlay: true, showsDetails: showsDetails) }
+            content.contextMenu { MacItemMenu(item: item, showsPlay: true, showsDetails: showsDetails) }
         }
     }
 }
@@ -208,6 +218,16 @@ struct MacItemMenu: View {
     private var isTitle: Bool { item.kind.plexType != nil }
 
     var body: some View {
+        // A catalog title (TMDB) is on no server: the Plex watchlist is all it has.
+        if item.isMetadataOnly {
+            watchlistButton
+        } else {
+            serverItems
+        }
+    }
+
+    @ViewBuilder
+    private var serverItems: some View {
         if showsPlay, canPlay {
             Button(item.isInProgress ? "Resume" : "Play", systemImage: "play.fill") { actions.play(item) }
         }
@@ -229,14 +249,7 @@ struct MacItemMenu: View {
             if browse.canRemoveFromContinueWatching(item) {
                 Button("Remove from Continue Watching", systemImage: "xmark.circle") { actions.removeFromContinueWatching(item) }
             }
-            if showsWatchlist, WatchlistMembership.canAnswer(item), browse.supportsWatchlist(item) {
-                let onList = browse.isOnWatchlist(item)
-                let standsForShow = item.kind == .episode || item.kind == .season
-                Button(
-                    onList ? "Remove from Watchlist" : (standsForShow ? "Add Show to Watchlist" : "Add to Watchlist"),
-                    systemImage: onList ? "minus.circle" : "plus.circle"
-                ) { actions.setWatchlisted(item, !onList) }
-            }
+            watchlistButton
             if showsFavorite, FavoritesFeed.canFavorite(item) {
                 let isFavorite = browse.isFavorite(item)
                 Button(
@@ -276,6 +289,19 @@ struct MacItemMenu: View {
             Section {
                 Button("Delete", systemImage: "trash", role: .destructive) { actions.delete(item) }
             }
+        }
+    }
+
+    /// An episode or season stands for its show, whose guid the Plex mapper carries.
+    @ViewBuilder
+    private var watchlistButton: some View {
+        if showsWatchlist, WatchlistMembership.canAnswer(item), browse.supportsWatchlist(item) {
+            let onList = browse.isOnWatchlist(item)
+            let standsForShow = item.kind == .episode || item.kind == .season
+            Button(
+                onList ? "Remove from Watchlist" : (standsForShow ? "Add Show to Watchlist" : "Add to Watchlist"),
+                systemImage: onList ? "minus.circle" : "plus.circle"
+            ) { actions.setWatchlisted(item, !onList) }
         }
     }
 }

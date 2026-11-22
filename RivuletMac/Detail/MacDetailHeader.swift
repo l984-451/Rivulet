@@ -119,7 +119,10 @@ struct MacDetailHeader: View {
                     .accessibilityLabel("Shuffle")
                 }
             }
-            if browse.supportsWatchlist(item) {
+            // A TMDB title (Discover) has nothing to play: Watchlist is its main button, as on tvOS.
+            if item.isMetadataOnly, browse.supportsWatchlist(item) {
+                watchlistButton
+            } else if browse.supportsWatchlist(item) {
                 let onList = onList ?? false
                 iconButton(onList ? "checkmark" : "plus", help: onList ? "Remove from Watchlist" : "Add to Watchlist") {
                     actions.setWatchlisted(item, !onList)
@@ -147,6 +150,17 @@ struct MacDetailHeader: View {
         }
         .buttonStyle(.bordered)
         .controlSize(.large)
+    }
+
+    private var watchlistButton: some View {
+        let onList = onList ?? false
+        let help: LocalizedStringKey = onList ? "Remove from Watchlist" : "Add to Watchlist"
+        return Button { actions.setWatchlisted(item, !onList) } label: {
+            Label("Watchlist", systemImage: onList ? "checkmark" : "plus")
+        }
+        .buttonStyle(.borderedProminent)
+        .help(help)
+        .accessibilityLabel(help)
     }
 
     private func iconButton(_ symbol: String, help: LocalizedStringKey, action: @escaping () -> Void) -> some View {
@@ -218,9 +232,7 @@ struct MacDetailHeader: View {
         otherCopies = found.copies
     }
 
-    /// Plex answers from its watchlist; an episode or season stands for its show.
     private func loadWatchlistState() async {
-        guard browse.supportsWatchlist(item), let provider = browse.provider(for: item.ref.providerID) else { return }
-        onList = await provider.isOnWatchlist(item.ref)
+        if let state = await browse.watchlistState(item) { onList = state }
     }
 }

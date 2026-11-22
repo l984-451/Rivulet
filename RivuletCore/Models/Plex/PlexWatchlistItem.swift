@@ -55,3 +55,14 @@ nonisolated struct PlexWatchlistItem: Identifiable, Hashable, Codable, Sendable 
         return nil
     }
 }
+
+extension PlexWatchlistItem {
+    /// A TMDB title's entry, keyed on its tmdb guid: what the list shows until the next fetch
+    /// brings Plex's own copy. Nil for an item that isn't a TMDB title.
+    init?(tmdb item: MediaItem) {
+        guard let tmdbID = item.tmdbID else { return nil }
+        let guid = "tmdb://\(tmdbID)"
+        self.init(id: guid, title: item.title, year: item.year, type: item.kind == .movie ? .movie : .show,
+                  posterURL: item.artwork.poster, guids: [guid])
+    }
+}

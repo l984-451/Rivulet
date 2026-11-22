@@ -174,6 +174,28 @@ final class PlexWatchlistService: ObservableObject {
         }
     }
 
+    /// Adds or removes a TMDB title, which no server holds, by its tmdb guid. Throws when Plex
+    /// refused: `add` and `remove` put the list back without throwing, so the guid is the answer.
+    func setListed(_ on: Bool, tmdb item: MediaItem) async throws {
+        guard let entry = PlexWatchlistItem(tmdb: item), let guid = entry.primaryGUID else {
+            throw MediaProviderError.notFound
+        }
+        guard isListed(tmdb: item) != on else { return }
+        if on { await add(guid: guid, item: entry) } else { await remove(guid: guid) }
+        guard isListed(tmdb: item) == on else {
+            throw MediaProviderError.backendSpecific(underlying: on
+                ? String(localized: "Plex rejected the watchlist add")
+                : String(localized: "Plex rejected the watchlist remove"))
+        }
+    }
+
+    /// A TMDB title is listed when an entry of its kind carries its tmdb guid: a movie and a show
+    /// can share the number (#269).
+    func isListed(tmdb item: MediaItem) -> Bool {
+        guard let entry = PlexWatchlistItem(tmdb: item), let guid = entry.primaryGUID else { return false }
+        return watchlistItems.contains { $0.type == entry.type && $0.guids.contains(guid) }
+    }
+
     func contains(guid: String) -> Bool {
         watchlistGUIDs.contains(guid)
     }

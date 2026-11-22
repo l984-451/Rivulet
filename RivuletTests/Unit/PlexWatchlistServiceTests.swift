@@ -165,6 +165,74 @@ final class PlexWatchlistServiceTests: XCTestCase {
         XCTAssertEqual(api.lastRemoveType, .show)
     }
 
+    // MARK: - TMDB titles (Discover on iOS and Mac)
+
+    func testTMDBEntryCarriesTitleYearTypePosterAndGuid() throws {
+        let title = tmdbTitle(603, .movie, date: "1999-03-31", poster: "/p.jpg")
+        let movie = try XCTUnwrap(PlexWatchlistItem(tmdb: title))
+        XCTAssertNotNil(title.artwork.poster)
+        XCTAssertEqual(movie, PlexWatchlistItem(id: "tmdb://603", title: "Title 603", year: 1999, type: .movie,
+                                                posterURL: title.artwork.poster, guids: ["tmdb://603"]))
+
+        let show = try XCTUnwrap(PlexWatchlistItem(tmdb: tmdbTitle(1399, .tv)))
+        XCTAssertEqual(show.type, .show)
+        XCTAssertEqual(show.guids, ["tmdb://1399"])
+        XCTAssertNil(show.year)
+        XCTAssertNil(show.posterURL)
+    }
+
+    func testSetListedAddsAndRemovesATMDBTitle() async throws {
+        let api = StubWatchlistAPI()
+        let service = PlexWatchlistService(api: api, cache: NullWatchlistCache())
+        let show = tmdbTitle(1399, .tv)
+
+        try await service.setListed(true, tmdb: show)
+        XCTAssertTrue(service.contains(tmdbId: 1399))
+        XCTAssertEqual(api.lastAddType, .show, "a show's tmdb id is also a movie's (#269)")
+
+        try await service.setListed(false, tmdb: show)
+        XCTAssertFalse(service.contains(tmdbId: 1399))
+        XCTAssertEqual(api.lastRemoveType, .show)
+    }
+
+    /// Show 1399 on the list says nothing about movie 1399: adding the movie still writes.
+    func testSetListedTellsAMovieFromAShowWithTheSameTMDBNumber() async throws {
+        let api = StubWatchlistAPI()
+        let service = PlexWatchlistService(api: api, cache: NullWatchlistCache())
+        try await service.setListed(true, tmdb: tmdbTitle(1399, .tv))
+        XCTAssertFalse(service.isListed(tmdb: tmdbTitle(1399, .movie)))
+
+        try await service.setListed(true, tmdb: tmdbTitle(1399, .movie))
+        XCTAssertEqual(api.lastAddType, .movie)
+        XCTAssertTrue(service.isListed(tmdb: tmdbTitle(1399, .movie)))
+    }
+
+    func testSetListedAlreadyInThatStateWritesNothing() async throws {
+        let api = StubWatchlistAPI()
+        let service = PlexWatchlistService(api: api, cache: NullWatchlistCache())
+        try await service.setListed(false, tmdb: tmdbTitle(550, .movie))
+        XCTAssertNil(api.lastRemoveType)
+        XCTAssertNil(api.lastAddType)
+    }
+
+    /// The service reverts a refused write without throwing; the caller still has to hear about it.
+    func testSetListedThrowsWhenPlexRefuses() async {
+        let api = StubWatchlistAPI()
+        api.shouldFailWrites = true
+        let service = PlexWatchlistService(api: api, cache: NullWatchlistCache())
+
+        do {
+            try await service.setListed(true, tmdb: tmdbTitle(603, .movie))
+            XCTFail("a refused add must throw")
+        } catch {}
+        XCTAssertFalse(service.contains(tmdbId: 603))
+    }
+
+    private func tmdbTitle(_ id: Int, _ type: TMDBMediaType, date: String? = nil, poster: String? = nil) -> MediaItem {
+        TMDBMediaMapper.item(TMDBListItem(id: id, title: "Title \(id)", overview: nil, posterPath: poster, backdropPath: nil,
+                                          releaseDate: date, voteAverage: nil, mediaType: type))
+    }
+
     private func makeItem(id: String, guid: String = "tmdb://1") -> PlexWatchlistItem {
         PlexWatchlistItem(
             id: id,

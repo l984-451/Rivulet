@@ -290,8 +290,8 @@ private struct IOSPlexContextMenu: ViewModifier {
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        // A catalog title (TMDB) is on no server, so it has none of these actions.
-        if item.isMetadataOnly {
+        // A TMDB title's only action is the watchlist: no menu when this profile has none.
+        if item.isMetadataOnly, !browse.supportsWatchlist(item) {
             content
         } else {
             content.contextMenu {
@@ -321,6 +321,16 @@ struct IOSPlexItemMenu: View {
     private var canPlay: Bool { IOSPlaybackGate.canPlay(item.ref) }
 
     var body: some View {
+        // A catalog title (TMDB) is on no server: the Plex watchlist is all it has.
+        if item.isMetadataOnly {
+            watchlistButton
+        } else {
+            serverItems
+        }
+    }
+
+    @ViewBuilder
+    private var serverItems: some View {
         if showsPlay, canPlay {
             Button(item.isInProgress ? "Resume" : "Play", systemImage: "play.fill") { actions.play(item) }
         }
@@ -340,15 +350,7 @@ struct IOSPlexItemMenu: View {
                 item.countsAsWatched ? "Mark as Unwatched" : "Mark as Watched",
                 systemImage: item.countsAsWatched ? "circle" : "checkmark.circle"
             ) { actions.setWatched(item, !item.countsAsWatched) }
-            // An episode or season stands for its show, whose guid the Plex mapper carries.
-            if showsWatchlist, WatchlistMembership.canAnswer(item), browse.supportsWatchlist(item) {
-                let onList = browse.isOnWatchlist(item)
-                let standsForShow = item.kind == .episode || item.kind == .season
-                Button(
-                    onList ? "Remove from Watchlist" : (standsForShow ? "Add Show to Watchlist" : "Add to Watchlist"),
-                    systemImage: onList ? "minus.circle" : "plus.circle"
-                ) { actions.setWatchlisted(item, !onList) }
-            }
+            watchlistButton
             if showsFavorite, FavoritesFeed.canFavorite(item) {
                 let isFavorite = browse.isFavorite(item)
                 Button(
@@ -395,6 +397,19 @@ struct IOSPlexItemMenu: View {
 
 extension IOSPlexItemMenu {
     private var isTitle: Bool { item.kind.plexType != nil }
+
+    /// An episode or season stands for its show, whose guid the Plex mapper carries.
+    @ViewBuilder
+    private var watchlistButton: some View {
+        if showsWatchlist, WatchlistMembership.canAnswer(item), browse.supportsWatchlist(item) {
+            let onList = browse.isOnWatchlist(item)
+            let standsForShow = item.kind == .episode || item.kind == .season
+            Button(
+                onList ? "Remove from Watchlist" : (standsForShow ? "Add Show to Watchlist" : "Add to Watchlist"),
+                systemImage: onList ? "minus.circle" : "plus.circle"
+            ) { actions.setWatchlisted(item, !onList) }
+        }
+    }
 
     @ViewBuilder
     private var downloadItems: some View {

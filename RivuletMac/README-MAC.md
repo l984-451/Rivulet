@@ -33,7 +33,7 @@ session behind it. Routing to copy: `IOSPlaybackController.startItem` in `Rivule
 
 `@Environment(\.macActions)` (`MacActions`, `Shell/MacActions.swift`): play, playFromBeginning, playQueue, shuffleLibrary,
 shuffleShow, addToPlaylist, open, setWatched, setWatchlisted, setFavorite, playExtra, refreshMetadata, delete, `preparingID`.
-`.macContextMenu(item)` or `MacItemMenu(item:)` gives the right-click menu (none for a TMDB title). No download actions.
+`.macContextMenu(item)` or `MacItemMenu(item:)` gives the right-click menu (only the watchlist for a TMDB title). No download actions.
 
 ## Components (`Shell/MacComponents.swift`, `Shell/MacArtworkCache.swift`)
 

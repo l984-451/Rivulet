@@ -22,7 +22,10 @@ struct ServerProfileSwitcherPopup: View {
     @State private var switchingID: String?
     @FocusState private var focusedID: String?
 
-    // `ProfileSwitcherPopup`'s measurements: the Apple TV app's profile panel.
+    // `ProfileSwitcherPopup`'s measurements, the Apple TV app's profile panel: 384 wide at
+    // (50, 126), rows 218 apart, 160pt avatars growing to 180.
+    private let panelOrigin = CGPoint(x: 50, y: 126)
+    private let rowHeight: CGFloat = 208
     private let columns = [
         GridItem(.fixed(180), spacing: -4),
         GridItem(.fixed(180))
@@ -40,12 +43,14 @@ struct ServerProfileSwitcherPopup: View {
                 .padding(EdgeInsets(top: 14, leading: 14, bottom: 34, trailing: 14))
             }
             .frame(width: 384)
-            .frame(maxHeight: max(0, proxy.size.height - 70 - 40))
+            .frame(maxHeight: max(0, proxy.size.height - panelOrigin.y - 40))
             .fixedSize(horizontal: false, vertical: true)
             .clipShape(.rect(cornerRadius: 50))
             .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 50))
-            .padding(.top, 70)
+            .padding(.top, panelOrigin.y)
+            .padding(.leading, panelOrigin.x)
         }
+        .ignoresSafeArea()
         .onAppear {
             focusedID = profiles.first(where: \.isActive)?.id ?? profiles.first?.id
         }
@@ -62,17 +67,12 @@ struct ServerProfileSwitcherPopup: View {
         return Button {
             select(profile)
         } label: {
-            VStack(spacing: 10) {
+            VStack(spacing: -4) {
                 ZStack {
                     avatar(for: profile)
                         .frame(width: avatarSize, height: avatarSize)
                         .clipShape(Circle())
-                        .overlay(
-                            Circle().strokeBorder(
-                                isFocused ? Color.primary.opacity(0.8) : Color.primary.opacity(0.15),
-                                lineWidth: isFocused ? 3 : 1
-                            )
-                        )
+                        .overlay(Circle().strokeBorder(Color.primary.opacity(0.15), lineWidth: 1))
                     if isSwitching {
                         Circle().fill(.black.opacity(0.5)).frame(width: avatarSize, height: avatarSize)
                         ProgressView()
@@ -84,17 +84,21 @@ struct ServerProfileSwitcherPopup: View {
                             .resizable()
                             .symbolRenderingMode(.palette)
                             .foregroundStyle(.white, .green)
-                            .frame(width: 36, height: 36)
+                            .frame(width: 40, height: 40)
+                            .offset(x: 5, y: -5)
                     }
                 }
                 .scaleEffect(isFocused ? 180 / avatarSize : 1.0)
+                .frame(width: 180, height: 180)
 
                 Text(verbatim: ShellSidebarModel.firstName(of: profile.name))
                     .font(Font(UIFont.preferredFont(forTextStyle: .caption2)).weight(isFocused ? .semibold : .regular))
                     .padding(.horizontal, 5)
-                    .foregroundStyle(Color.primary.opacity(isFocused ? 1.0 : 0.7))
+                    .foregroundStyle(Color.primary.opacity(isFocused ? 1.0 : 0.41))
                     .lineLimit(1)
+                    .offset(y: isFocused ? 10 : 0)
             }
+            .frame(height: rowHeight, alignment: .top)
         }
         .buttonStyle(ServerProfileButtonStyle())
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isFocused)
@@ -115,8 +119,11 @@ struct ServerProfileSwitcherPopup: View {
     }
 
     private func placeholder(for profile: ServerUserProfiles.Profile) -> some View {
+        // By name order, so two users never share a colour and a switch does not swap them.
         let colors: [Color] = [.blue, .purple, .pink, .orange, .green, .teal, .indigo]
-        let color = colors[profile.userID.unicodeScalars.reduce(0) { $0 + Int($1.value) } % colors.count]
+        let byName = profiles.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        let index = byName.firstIndex(of: profile) ?? 0
+        let color = colors[index % colors.count]
         return ZStack {
             Circle().fill(color.gradient)
             Text(verbatim: profile.name.prefix(1).uppercased())

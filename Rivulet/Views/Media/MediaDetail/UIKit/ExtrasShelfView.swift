@@ -9,6 +9,10 @@ import UIKit
 final class ExtrasShelfView: UIView, UICollectionViewDataSource, UICollectionViewDelegate {
 
     static let headerHeight: CGFloat = 44
+
+    /// The title's baseline above the cards' frames.
+
+    private static let titleBaseline: CGFloat = 14.5
     static let height = headerHeight + EpisodeCell.trailerThumbHeight
 
     var onPlay: ((BelowFoldTrailer) -> Void)?
@@ -46,7 +50,7 @@ final class ExtrasShelfView: UIView, UICollectionViewDataSource, UICollectionVie
         NSLayoutConstraint.activate([
             heightAnchor.constraint(equalToConstant: Self.height),
             title.leadingAnchor.constraint(equalTo: leadingAnchor, constant: leading),
-            title.lastBaselineAnchor.constraint(equalTo: collection.topAnchor, constant: -BelowFoldSectionHeader.cardBaseline),
+            title.lastBaselineAnchor.constraint(equalTo: collection.topAnchor, constant: -Self.titleBaseline),
             collection.topAnchor.constraint(equalTo: topAnchor, constant: Self.headerHeight),
             collection.leadingAnchor.constraint(equalTo: leadingAnchor),
             collection.trailingAnchor.constraint(equalTo: trailingAnchor),

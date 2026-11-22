@@ -4615,6 +4615,9 @@
         }
       }
     },
+    "Couldn't Load Discover" : {
+
+    },
     "Couldn't Load Home" : {
       "localizations" : {
         "de" : {
@@ -5480,6 +5483,9 @@
           }
         }
       }
+    },
+    "Discover" : {
+
     },
     "Dismiss" : {
       "localizations" : {

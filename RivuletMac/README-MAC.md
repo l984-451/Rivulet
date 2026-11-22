@@ -8,7 +8,7 @@ Each feature owns the files listed below; do not edit another feature's file, ex
 
 - `MacRoute`: `.detail(MediaItem)`, `.hub(MediaHub)` (See All), `.playlist(MediaPlaylist)`, `.library(MediaLibrary)`.
   `MacRootView` maps each case to its view once. A new page type is a new case plus one line there.
-- `MacSidebarItem`: `.home .search .liveTV .favorites .library(_) .playlists(providerID:)`.
+- `MacSidebarItem`: `.home .discover .search .liveTV .favorites .library(_) .playlists(providerID:)`.
 - Environment closures, set by `MacRootView`:
   - `@Environment(\.macOpen)`: `macOpen(.detail(item))` pushes on the current row's stack.
   - `@Environment(\.macSelect)`: `macSelect(.search)` switches sidebar row.
@@ -33,7 +33,7 @@ session behind it. Routing to copy: `IOSPlaybackController.startItem` in `Rivule
 
 `@Environment(\.macActions)` (`MacActions`, `Shell/MacActions.swift`): play, playFromBeginning, playQueue, shuffleLibrary,
 shuffleShow, addToPlaylist, open, setWatched, setWatchlisted, setFavorite, playExtra, refreshMetadata, delete, `preparingID`.
-`.macContextMenu(item)` or `MacItemMenu(item:)` gives the right-click menu. No download actions.
+`.macContextMenu(item)` or `MacItemMenu(item:)` gives the right-click menu (none for a TMDB title). No download actions.
 
 ## Components (`Shell/MacComponents.swift`, `Shell/MacArtworkCache.swift`)
 
@@ -49,6 +49,7 @@ shuffleShow, addToPlaylist, open, setWatched, setWatchlisted, setFavorite, playE
 | Area | Mac file | iOS source |
 |---|---|---|
 | Home | `Home/MacHomeView.swift`, `MacHubGridView.swift` | `Plex/Home/IOSPlexHomeView`, `IOSPlexHeroFeed`, `IOSPlexHomeHero`, `IOSPlexHubGridView`, `Plex/Components/IOSThemeVideoBackdrop`, `IOSPlexAmbientBackdrop` |
+| Discover | `Discover/MacDiscoverView.swift` | `Discover/IOSDiscoverView` (rows from `RivuletCore/Discover/DiscoverRows`) |
 | Library | `Library/MacLibraryView.swift` | `Plex/Library/IOSPlexLibraryView` (Recommended + Browse, sort via `IOSLibrarySorts`) |
 | Photos | `Photos/MacPhotoLibraryView.swift` (grid, folders, clips), `MacPhotoViewer.swift` (arrows, Space slideshow, Esc, pinch) | `RivuletiOS/Photos/`; listing in `RivuletCore/Photos/` |
 | Playlists | `Library/MacPlaylistViews.swift` | `Plex/Library/IOSPlexPlaylistViews` |

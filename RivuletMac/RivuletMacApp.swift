@@ -71,7 +71,7 @@ struct RivuletMacApp: App {
         // One window: one player surface, and a rivulet:// link has one place to land.
         .defaultSize(width: 1280, height: 800)
         .commands {
-            MacShellCommands(browse: plex.browse)
+            MacShellCommands(browse: plex.browse, plex: plex)
             MacPlaybackCommands(playback: playback)
         }
 

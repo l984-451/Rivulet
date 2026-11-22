@@ -131,16 +131,19 @@ struct MacDetailHeader: View {
                     actions.setFavorite(item, !isFavorite)
                 }
             }
-            Menu {
-                // No Delete: the page would be left showing what it deleted.
-                MacItemMenu(item: item, showsPlay: false, showsWatchlist: false, showsFavorite: false, showsDelete: false)
-            } label: {
-                Image(systemName: "ellipsis")
+            // Its actions (watched, refresh metadata) need the title on a server.
+            if !item.isMetadataOnly {
+                Menu {
+                    // No Delete: the page would be left showing what it deleted.
+                    MacItemMenu(item: item, showsPlay: false, showsWatchlist: false, showsFavorite: false, showsDelete: false)
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("More")
+                .accessibilityLabel("More")
             }
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help("More")
-            .accessibilityLabel("More")
         }
         .buttonStyle(.bordered)
         .controlSize(.large)

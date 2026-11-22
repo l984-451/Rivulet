@@ -43,8 +43,14 @@ extension View {
     func macActionHost() -> some View { modifier(MacActionHost()) }
 
     /// Right-click menu shared by every poster, card and row.
+    @ViewBuilder
     func macContextMenu(_ item: MediaItem, showsDetails: Bool = false) -> some View {
-        contextMenu { MacItemMenu(item: item, showsPlay: true, showsDetails: showsDetails) }
+        // A catalog title (TMDB) is on no server, so it has none of these actions.
+        if item.isMetadataOnly {
+            self
+        } else {
+            contextMenu { MacItemMenu(item: item, showsPlay: true, showsDetails: showsDetails) }
+        }
     }
 }
 

@@ -61,6 +61,16 @@
         }
       }
     },
+    "No favorites match this filter." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Favoriten passen zu diesem Filter."
+          }
+        }
+      }
+    },
     "On This Day" : {
       "localizations" : {
         "de" : {

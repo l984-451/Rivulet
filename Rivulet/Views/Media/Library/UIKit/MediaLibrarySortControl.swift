@@ -361,10 +361,11 @@ final class MediaLibrarySortControl: UICollectionViewCell {
     /// buttons hide, which also takes them out of the focus graph.
     func configure(title: String, count: Int, sortName: String, sortMenu: UIMenu,
                    view: LibraryViewMode, viewMenu: UIMenu?, filterSummary: String? = nil,
+                   sortSymbol: String = "arrow.up.arrow.down",
                    onShuffle: (() -> Void)? = nil) {
         titleLabel.text = title
         countLabel.text = view == .collections ? String(localized: "\(count) collections") : String(localized: "\(count) items")
-        sortButton.configure(sortName: sortName)
+        sortButton.configure(sortName: sortName, symbol: sortSymbol)
         sortButton.menu = sortMenu
         sortButton.showsMenuAsPrimaryAction = true
         sortButton.isHidden = view == .collections

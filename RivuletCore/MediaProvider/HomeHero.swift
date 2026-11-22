@@ -75,6 +75,20 @@ nonisolated enum HomeHero {
         rowItems(rows.filter { !$0.isContinueWatchingFamily })
     }
 
+    /// The Favorites page's slides: up to ten favorites with a backdrop, one per title, in an order
+    /// shuffled once per launch (`Hasher` is seeded per process), so each launch opens on others.
+    static func favoriteItems(_ favorites: [MediaItem]) -> [MediaItem] {
+        func rank(_ item: MediaItem) -> Int {
+            var hasher = Hasher()
+            hasher.combine(item.ref.providerID)
+            hasher.combine(item.ref.itemID)
+            return hasher.finalize()
+        }
+        return Array(deduplicated(favorites.filter { $0.isMusic != true && hasBackdrop($0) }
+            .sorted { rank($0) < rank($1) })
+            .prefix(10))
+    }
+
     /// Each title once, the first copy standing (the selected server's, since it comes first).
     /// Two copies are one title when they share an external id (per kind: a movie and a show can share a
     /// TMDB number) or, failing that, a kind, a normalized title and a year.

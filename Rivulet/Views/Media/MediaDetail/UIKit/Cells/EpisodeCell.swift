@@ -32,8 +32,8 @@ final class EpisodeDescriptionView: UIView {
     /// Focusable only while this episode holds focus, so Up from below lands on the thumb.
     var isFocusEligible = false
     var onSelect: (() -> Void)?
-    /// (isFocused, nextFocusedView, coordinator)
-    var onFocusChange: ((Bool, UIView?, UIFocusAnimationCoordinator) -> Void)?
+    /// (isFocused, context, coordinator)
+    var onFocusChange: ((Bool, UIFocusUpdateContext, UIFocusAnimationCoordinator) -> Void)?
 
     /// Side by side, the description sits beside its thumb and is always a stop.
     var isAlwaysFocusable = false
@@ -41,7 +41,7 @@ final class EpisodeDescriptionView: UIView {
 
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
         super.didUpdateFocus(in: context, with: coordinator)
-        onFocusChange?(context.nextFocusedView === self, context.nextFocusedView, coordinator)
+        onFocusChange?(context.nextFocusedView === self, context, coordinator)
     }
 
     // Consume the Select press in BOTH began/ended so the focused block owns the
@@ -167,9 +167,10 @@ final class EpisodeCell: UIView {
             guard let self else { return }
             self.thumbFocused = focused
             self.applyReachability(next: next)
-            self.updateDescriptionGlass(coordinator)
-            coordinator.addCoordinatedAnimations({ self.playbackStatus.showsFocused = focused }, completion: nil)
-            self.updateTextDrop(coordinator)
+            let clock: FocusClock = focused ? .artFocusing : .artUnfocusing
+            self.updateDescriptionGlass(coordinator, on: clock)
+            self.animate(coordinator, on: clock) { self.playbackStatus.showsFocused = focused }
+            self.updateTextDrop(coordinator, on: clock)
             self.notifyFocusKind()
         }
         addSubview(thumbnailCard)
@@ -213,12 +214,16 @@ final class EpisodeCell: UIView {
         descriptionBlock.layer.borderColor = UIColor.clear.cgColor
         descriptionBlock.onSelect = { [weak self] in self?.onShowDetails?() }
         descriptionBlock.isAlwaysFocusable = layout == .sideBySide
-        descriptionBlock.onFocusChange = { [weak self] focused, next, coordinator in
+        descriptionBlock.onFocusChange = { [weak self] focused, context, coordinator in
             guard let self else { return }
             self.descFocused = focused
-            self.applyReachability(next: next)
-            self.updateDescriptionGlass(coordinator)
-            self.updateTextDrop(coordinator)
+            self.applyReachability(next: context.nextFocusedView)
+            // A move to or from the art animates from the art's handler, on the art's clock.
+            let other = focused ? context.previouslyFocusedView : context.nextFocusedView
+            if other !== self.thumbnailCard {
+                self.updateDescriptionGlass(coordinator)
+                self.updateTextDrop(coordinator)
+            }
             self.notifyFocusKind()
         }
         addSubview(descriptionBlock)
@@ -520,7 +525,7 @@ final class EpisodeCell: UIView {
 
     /// Metadata box: full glass when the description (or a trailer's thumb) is focused,
     /// a faint tint for an episode's focused thumb, clear otherwise.
-    private func updateDescriptionGlass(_ coordinator: UIFocusAnimationCoordinator?) {
+    private func updateDescriptionGlass(_ coordinator: UIFocusAnimationCoordinator?, on clock: FocusClock = .shared) {
         let apply = { [self] in
             // Apple brightens the text under focused art; a focused description lifts only its date and rating.
             let secondary = thumbFocused ? UIColor.white.withAlphaComponent(0.6) : Self.secondaryText
@@ -551,9 +556,21 @@ final class EpisodeCell: UIView {
             }
         }
         if let coordinator {
-            coordinator.addCoordinatedAnimations({ apply() }, completion: nil)
+            animate(coordinator, on: clock, apply)
         } else {
             apply()
+        }
+    }
+
+    /// Which timing a focus change's text and platter follow. Moving between the art and its description,
+    /// they ride the art's own clock, so the platter never reaches the art before it settles (Apple's never touch).
+    private enum FocusClock { case shared, artFocusing, artUnfocusing }
+
+    private func animate(_ coordinator: UIFocusAnimationCoordinator, on clock: FocusClock, _ body: @escaping () -> Void) {
+        switch clock {
+        case .shared: coordinator.addCoordinatedAnimations(body, completion: nil)
+        case .artFocusing: coordinator.addCoordinatedFocusingAnimations({ _ in body() }, completion: nil)
+        case .artUnfocusing: coordinator.addCoordinatedUnfocusingAnimations({ _ in body() }, completion: nil)
         }
     }
 
@@ -614,13 +631,15 @@ final class EpisodeCell: UIView {
     }
 
     /// Moves a stacked card's text clear of the grown artwork, as Apple's lockup does (VideosUI 26.5 0x4df010).
-    private func updateTextDrop(_ coordinator: UIFocusAnimationCoordinator) {
-        guard let textTop else { return }
-        // Apple drops 30 and 20; our artwork grows less, so the focused art's text drops 16 (measured on device).
-        let drop: CGFloat = thumbFocused ? 16 : descFocused ? 20 : 0
-        guard textTop.constant != Self.textRestOffset + drop else { return }
-        textTop.constant = Self.textRestOffset + drop
-        coordinator.addCoordinatedAnimations({ self.layoutIfNeeded() }, completion: nil)
+    private func updateTextDrop(_ coordinator: UIFocusAnimationCoordinator, on clock: FocusClock = .shared) {
+        guard textTop != nil else { return }
+        // Read inside the animation: the art's and the description's handlers both run before it.
+        animate(coordinator, on: clock) { [self] in
+            // Apple drops 30 and 20; our artwork grows less, so the focused art's text drops 16 (measured on device).
+            let drop: CGFloat = thumbFocused ? 16 : descFocused ? 20 : 0
+            textTop?.constant = Self.textRestOffset + drop
+            layoutIfNeeded()
+        }
     }
 
     /// The summary on Apple's 30 pt line pitch.
@@ -761,8 +780,9 @@ private final class EpisodePlaybackStatusView: UIStackView {
     }
 }
 
-/// Two static gradients, as the Apple TV app's episode lockup draws them on tvOS 27: dark gray to 64%,
-/// then the artwork's tint to 90%. Colors, stops and locations are Apple's (VideosUI `EpisodeLockupLayout`).
+/// Two static gradients, as the Apple TV app's episode lockup draws them on tvOS 27: the artwork's tint
+/// to 90%, under dark gray to 64%, so a light tint still darkens. Colors, stops and locations are Apple's
+/// (VideosUI `EpisodeLockupLayout`).
 private final class EpisodeArtworkFadeView: UIView {
     private let darkening = CAGradientLayer()
     private let tinted = CAGradientLayer()
@@ -783,8 +803,8 @@ private final class EpisodeArtworkFadeView: UIView {
             gradient.cornerCurve = .continuous
         }
         tinted.locations = [0.66, 0.71, 0.77, 0.81, 0.85, 0.9, 0.94, 1]
-        layer.addSublayer(darkening)
         layer.addSublayer(tinted)
+        layer.addSublayer(darkening)
         applyTint()
     }
 

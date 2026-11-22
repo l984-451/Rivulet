@@ -111,7 +111,7 @@ struct MacPlaybackSettingsView: View {
             Section {
                 Toggle("Community Markers", isOn: $useIntroDB)
             } footer: {
-                Text("Fills in intro and credits markers that Plex is missing, from introdb.app. Only the show’s IMDb ID and episode number are sent.")
+                Text("Fills in intro and credits markers that Plex is missing, from introdb.app and TheIntroDB. Only the show’s IMDb ID and episode number are sent.")
             }
         }
         .formStyle(.grouped)

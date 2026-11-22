@@ -9225,12 +9225,12 @@
         }
       }
     },
-    "Fills in missing intro, recap and credits markers from introdb.app." : {
+    "Fills in missing intro, recap and credits markers from introdb.app and TheIntroDB." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ergänzt fehlende Intro-, Rückblick- und Abspannmarker über introdb.app."
+            "value" : "Ergänzt fehlende Intro-, Rückblick- und Abspannmarker über introdb.app und TheIntroDB."
           }
         },
         "fr" : {

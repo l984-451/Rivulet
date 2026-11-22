@@ -435,7 +435,7 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
     // MARK: - Titles by external id
 
     /// The server's items for `titles`, in title order, as Plex returns them. A title with a plex:// guid
-    /// is asked for as is; one with only a TMDB id first gets its guid from plex.tv. iOS Home's heroes read these.
+    /// is asked for as is; one with only a TMDB id first gets its guid from plex.tv. Home's heroes and Discover read these.
     func ownedMetadata(matching titles: [TitleMatch]) async throws -> [PlexMetadata] {
         let guids = await PlexTrendingHero.guids(for: titles, accountToken: await accountToken(), lookup: guidLookup)
         guard !guids.isEmpty else { return [] }

@@ -243,11 +243,13 @@ private struct MacTileHover: ViewModifier {
 /// Opens a title's detail on click or Return, with the item menu on right-click.
 struct MacTileButton<Content: View>: View {
     let item: MediaItem
+    /// What a click opens instead of `item`: Discover opens your own copy of a TMDB title.
+    var opens: MediaItem? = nil
     @ViewBuilder let content: () -> Content
     @Environment(\.macOpen) private var open
 
     var body: some View {
-        Button { open(.detail(item)) } label: { content() }
+        Button { open(.detail(opens ?? item)) } label: { content() }
             .buttonStyle(.plain)
             .macContextMenu(item)
     }

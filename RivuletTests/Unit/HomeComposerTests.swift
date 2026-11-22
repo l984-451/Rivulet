@@ -98,11 +98,13 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
         if let searchError { throw searchError }
         return searchItems
     }
-    /// What `ownedItems(matching:limit:)` answers, and the titles it was asked for.
+    /// What `ownedItems(matching:limit:)` answers (or throws), and the titles it was asked for.
     var ownedItemsResult: [MediaItem] = []
+    var ownedItemsError: Error?
     private(set) var ownedRequests: [[TitleMatch]] = []
     func ownedItems(matching titles: [TitleMatch], limit: Int) async throws -> [MediaItem] {
         ownedRequests.append(titles)
+        if let ownedItemsError { throw ownedItemsError }
         return Array(ownedItemsResult.prefix(limit))
     }
     /// What `related(for:kind:)` answers, and the kinds it was asked for.

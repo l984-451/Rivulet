@@ -38,7 +38,7 @@ shuffleShow, addToPlaylist, open, setWatched, setWatchlisted, setFavorite, playE
 ## Components (`Shell/MacComponents.swift`, `Shell/MacArtworkCache.swift`)
 
 `MacImage(url:)`, `MacItemArtwork(item:kind:width:aspectRatio:)`, `MacResolvedLogo`, `.macWatchState(item)`, `.macTileHover()`,
-`.macPill()`, `MacPosterCard(item:width:showsCaption:)`, `MacContinueCard(item:width:)`, `MacTileButton(item:) { }`
+`.macPill()`, `MacPosterCard(item:width:showsCaption:)`, `MacContinueCard(item:width:)`, `MacTileButton(item:opens:) { }`
 (click opens detail, right-click menu), `MacShelfHeader`, `MacRail(title:hub:kind:items:badge:) { item, width in }`,
 `MacShelfView(hub:)`, `MacPosterGrid(items:loadMore:)` / `(slots:slotAppeared:)`, `MacServerFailureBanner`, `MacErrorView`,
 `MacAccountAvatar`, `MacAccountButton`, `MacFeaturePlaceholder`, `MacMetrics`. Images load through `MacArtworkCache`
@@ -49,7 +49,7 @@ shuffleShow, addToPlaylist, open, setWatched, setWatchlisted, setFavorite, playE
 | Area | Mac file | iOS source |
 |---|---|---|
 | Home | `Home/MacHomeView.swift`, `MacHubGridView.swift` | `Plex/Home/IOSPlexHomeView`, `IOSPlexHeroFeed`, `IOSPlexHomeHero`, `IOSPlexHubGridView`, `Plex/Components/IOSThemeVideoBackdrop`, `IOSPlexAmbientBackdrop` |
-| Discover | `Discover/MacDiscoverView.swift` | `Discover/IOSDiscoverView` (rows from `RivuletCore/Discover/DiscoverRows`) |
+| Discover | `Discover/MacDiscoverView.swift` | `Discover/IOSDiscoverView` (rows from `RivuletCore/Discover/DiscoverRows`; your own copy from `DiscoverOwnership`, opened through `MacTileButton(opens:)`) |
 | Library | `Library/MacLibraryView.swift` | `Plex/Library/IOSPlexLibraryView` (Recommended + Browse, sort via `IOSLibrarySorts`) |
 | Photos | `Photos/MacPhotoLibraryView.swift` (grid, folders, clips), `MacPhotoViewer.swift` (arrows, Space slideshow, Esc, pinch) | `RivuletiOS/Photos/`; listing in `RivuletCore/Photos/` |
 | Playlists | `Library/MacPlaylistViews.swift` | `Plex/Library/IOSPlexPlaylistViews` |

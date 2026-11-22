@@ -108,8 +108,8 @@ protocol MediaProvider: Sendable, Identifiable {
     /// One page of a row's See All grid, through `hub.pagingKey`. Default (and a row with no key):
     /// the row's own items as the only page.
     func hubPage(_ hub: MediaHub, page: Page) async throws -> PagedResult<MediaItem>
-    /// The server's items for these titles, in title order, each once, at most `limit`.
-    /// Home's watchlist hero. Default: none.
+    /// The server's items for these titles, in title order, each once, at most `limit`, each carrying the
+    /// matched ids in `externalIDs`. Home's heroes and Discover. Default: none.
     func ownedItems(matching titles: [TitleMatch], limit: Int) async throws -> [MediaItem]
     /// `url` (one of this provider's artwork URLs) resized to fit a `width` x `height` box in pixels,
     /// by the server. Any other URL comes back unchanged. Default: unchanged.

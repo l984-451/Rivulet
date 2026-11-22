@@ -3,12 +3,18 @@
 
 import SwiftUI
 
-/// Discover tab root: TMDB's curated rows, as on tvOS. A title opens its page.
-/// The root supplies the NavigationStack.
+/// Discover tab root: TMDB's curated rows, as on tvOS. A title opens its page, or your own copy
+/// when a server has it. The root supplies the NavigationStack.
 struct IOSDiscoverView: View {
     @State private var discover = DiscoverRows()
+    @State private var ownership = DiscoverOwnership()
+    /// The `ownershipKey` the last finished check ran for.
+    @State private var checked: [String]?
+    @EnvironmentObject private var browse: BrowseStore
 
     var body: some View {
+        // Read here, not in a tile, so every row redraws as answers arrive.
+        let copies = ownership.copies
         Group {
             if !discover.rows.isEmpty {
                 ScrollView {
@@ -16,7 +22,8 @@ struct IOSDiscoverView: View {
                     // scrolled back in, and each first laid out header-only, so the page jumped.
                     VStack(alignment: .leading, spacing: 30) {
                         ForEach(discover.rows) { row in
-                            IOSPlexRail(title: row.section.title, kind: .poster, items: row.items) {
+                            IOSPlexRail(title: row.section.title, kind: .poster, items: row.items,
+                                        destination: { copies[$0.ref] ?? $0 }) {
                                 IOSPlexPosterCard(item: $0, width: $1)
                             }
                         }
@@ -40,5 +47,17 @@ struct IOSDiscoverView: View {
         .task {
             if discover.rows.isEmpty { await discover.load() }
         }
+        // Once per load and server list: coming back from a title keeps the answers.
+        .task(id: ownershipKey) {
+            let key = ownershipKey
+            guard key != checked else { return }
+            await ownership.check(discover.rows.map(\.items), providers: browse.allProviders, isShown: browse.isShownOnHome)
+            if !Task.isCancelled { checked = key }
+        }
+    }
+
+    /// What the answers depend on: the rows (each load, Refresh included), the servers in order, hidden libraries.
+    private var ownershipKey: [String] {
+        [String(discover.loads)] + browse.providerOrder + browse.hiddenSidebarLibraries.sorted()
     }
 }

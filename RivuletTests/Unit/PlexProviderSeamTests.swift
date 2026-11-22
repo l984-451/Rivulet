@@ -13,6 +13,11 @@
 import XCTest
 @testable import Rivulet
 
+private actor LookupCount {
+    private(set) var value = 0
+    func bump() { value += 1 }
+}
+
 @MainActor
 final class PlexProviderSeamTests: XCTestCase {
 
@@ -262,6 +267,24 @@ final class PlexProviderSeamTests: XCTestCase {
                       TitleMatch(kind: .movie, externalIDs: [:], plexGUID: "g/b")]
         let items = try await provider(network).ownedItems(matching: titles, limit: 1)
         XCTAssertEqual(items.map(\.ref.itemID), ["a"])
+    }
+
+    /// Discover asks every Plex server about a row at once: an uncached title goes to plex.tv once.
+    func test_ownedItems_twoServersAskingAtOnceShareOneLookup() async throws {
+        let count = LookupCount()
+        let lookup: @Sendable (TitleMatch, String) async -> String? = { _, _ in
+            await count.bump()
+            try? await Task.sleep(for: .milliseconds(200))
+            return "plex://movie/shared"
+        }
+        let first = provider(StubNetwork(), lookup: lookup)
+        let second = provider(StubNetwork(), lookup: lookup)
+        let titles = [TitleMatch(kind: .movie, externalIDs: ["tmdb": "90210"], plexGUID: nil)]
+        async let a = first.ownedItems(matching: titles, limit: 10)
+        async let b = second.ownedItems(matching: titles, limit: 10)
+        _ = try await (a, b)
+        let lookups = await count.value
+        XCTAssertEqual(lookups, 1)
     }
 
     func test_ownedItems_noGuidsMakesNoRequest() async throws {

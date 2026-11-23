@@ -8,6 +8,22 @@
 
 import Foundation
 
+/// Fetches just the diagnostic sample even when the server ignores Range.
+nonisolated enum StreamBodyProbe {
+    @concurrent static func sample(_ request: URLRequest, session: URLSession = .shared) async throws -> (Data, HTTPURLResponse) {
+        let (bytes, response) = try await session.bytes(for: request)
+        defer { bytes.task.cancel() }
+        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
+        var sample = Data()
+        sample.reserveCapacity(StreamBodyClassifier.probeByteCount)
+        for try await byte in bytes {
+            sample.append(byte)
+            if sample.count == StreamBodyClassifier.probeByteCount { break }
+        }
+        return (sample, http)
+    }
+}
+
 /// What a byte prefix fetched from a stream URL turned out to be.
 ///
 /// Every case is a compile-time constant string. Nothing derived from the

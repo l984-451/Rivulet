@@ -14,6 +14,23 @@ import XCTest
 @testable import Rivulet
 
 final class StreamBodyClassifierTests: XCTestCase {
+    func testProbeKeepsOnlyTheSampleWhenServerReturnsFullContent() async throws {
+        let url = URL(string: "https://media.test/example")!
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: config)
+        defer { MockURLProtocol.reset(); session.invalidateAndCancel() }
+
+        for (status, count) in [(200, 4096), (206, 23), (403, 0)] {
+            let body = Data((0..<count).map { UInt8(truncatingIfNeeded: $0) })
+            let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)!
+            MockURLProtocol.mockResponses[url] = (body, response)
+            let (sample, http) = try await StreamBodyProbe.sample(URLRequest(url: url), session: session)
+            XCTAssertEqual(sample, body.prefix(StreamBodyClassifier.probeByteCount))
+            XCTAssertEqual(http.statusCode, status)
+        }
+    }
+
 
     // MARK: - Helpers
 

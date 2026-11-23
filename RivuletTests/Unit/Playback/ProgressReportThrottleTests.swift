@@ -58,6 +58,17 @@ final class TimelineTerminationTests: XCTestCase {
         PlexNetworkManager.timelineTermination(in: Data(json.utf8))
     }
 
+    func testNonSuccessPreservesHTTPStatusForReplay() throws {
+        for status in [401, 404, 408, 429, 503] {
+            let response = try XCTUnwrap(HTTPURLResponse(url: URL(fileURLWithPath: "/timeline"), statusCode: status,
+                                                         httpVersion: nil, headerFields: nil))
+            XCTAssertThrowsError(try PlexNetworkManager.validateTimelineResponse(response)) { error in
+                guard case PlexAPIError.httpError(let code, _) = error else { return XCTFail("Expected HTTP error") }
+                XCTAssertEqual(code, status)
+            }
+        }
+    }
+
     func testPlainReplyIsNotATermination() {
         XCTAssertNil(text(#"{"MediaContainer":{"size":1,"playbackState":"ignore","skipCount":1,"viewCount":2,"viewOffset":70200}}"#))
         XCTAssertNil(text(""))

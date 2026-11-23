@@ -8,43 +8,23 @@ import Foundation
 enum IOSOfflineProgress {
     private static let url = IOSDownloadTransfer.directory.appending(path: "offline-progress.json")
     private(set) static var log = OfflineProgressLog.load(from: url)
-    private static var lastReached: [String: Date] = [:]
     static var isFlushing = false
     private static var isFlushingProviders = false
 
-    /// Queues a position for `providerID` (a download key), for the current profile and, on Jellyfin and
-    /// Emby, the signed-in account.
-    static func record(providerID: String, itemID: String, offsetMs: Int, durationMs: Int?, watched: Bool, at: Date) {
-        let center = ClientHost.offline
-        // A bare Plex key (server not known) would replay to whichever server is current, and never clear.
-        guard providerID != "plex:" else { return }
-        // A report that failed after a newer one landed adds nothing.
-        guard lastReached["\(providerID)|\(itemID)"].map({ $0 < at }) ?? true else { return }
-        let account = account(of: providerID)
-        log.record(.init(providerID: providerID, profileID: center.currentProfileID, accountID: account, itemID: itemID,
-                         offsetMs: offsetMs, durationMs: durationMs, watched: watched, at: at))
-        try? log.save(to: url)
+    static func record(_ entry: OfflineProgressLog.Entry) {
+        if log.record(entry) { try? log.save(to: url) }
     }
 
-    /// A report landed, so older offline entries for the item are stale.
-    static func reached(_ providerID: String, itemID: String, at: Date) {
-        let key = "\(providerID)|\(itemID)"
-        lastReached[key] = max(at, lastReached[key] ?? at)
-        let before = log.entries.count
-        log.entries.removeAll { $0.providerID == providerID && $0.itemID == itemID && $0.at <= at }
-        if log.entries.count != before { try? log.save(to: url) }
+    static func reached(_ key: OfflineProgressLog.Key, at: Date) {
+        if log.reached(key, at: at) { try? log.save(to: url) }
     }
 
-    /// Drops a replayed entry; a newer one coalesced in meanwhile stays.
-    static func remove(_ entry: OfflineProgressLog.Entry) {
-        log.entries.removeAll { $0 == entry }
-        try? log.save(to: url)
-    }
-
-    /// The signed-in account of a Jellyfin or Emby download key; Plex entries have none.
-    private static func account(of providerID: String) -> String? {
-        guard !providerID.hasPrefix("plex:") else { return nil }
-        return MediaProviderRegistry.shared.provider(for: providerID)?.accountID
+    static func remove(_ entries: [OfflineProgressLog.Entry]) {
+        var checkpoint = log
+        guard checkpoint.remove(replayed: entries) else { return }
+        // Keep these entries available for retry if the atomic write fails.
+        guard (try? checkpoint.save(to: url)) != nil else { return }
+        log = checkpoint
     }
 
     /// Sends what is queued for the signed-in Jellyfin and Emby servers. True when anything was sent.
@@ -83,13 +63,8 @@ final class IOSOfflineHost: OfflineHost {
         get { IOSOfflineProgress.isFlushing }
         set { IOSOfflineProgress.isFlushing = newValue }
     }
-    func recordProgress(providerID: String, itemID: String, offsetMs: Int, durationMs: Int?, watched: Bool, at: Date) {
-        IOSOfflineProgress.record(providerID: providerID, itemID: itemID, offsetMs: offsetMs,
-                                  durationMs: durationMs, watched: watched, at: at)
-    }
-    func progressReached(_ providerID: String, itemID: String, at: Date) {
-        IOSOfflineProgress.reached(providerID, itemID: itemID, at: at)
-    }
-    func removeProgress(_ entry: OfflineProgressLog.Entry) { IOSOfflineProgress.remove(entry) }
+    func recordProgress(_ entry: OfflineProgressLog.Entry) { IOSOfflineProgress.record(entry) }
+    func progressReached(_ key: OfflineProgressLog.Key, at: Date) { IOSOfflineProgress.reached(key, at: at) }
+    func removeProgress(_ entries: [OfflineProgressLog.Entry]) { IOSOfflineProgress.remove(entries) }
     func flushProviders() async -> Bool { await IOSOfflineProgress.flushProviders() }
 }

@@ -240,8 +240,15 @@ final class PlexSession: ObservableObject {
             if let startOffset { local.startTime = startOffset }
             return local
         }
-        let full = try await metadata(for: item)
-        let (serverURL, token) = try configuration(serverID: full.serverID)
+        let connection = try configuration(serverID: item.serverID)
+        let providerID = DownloadIdentity.reportingKey(isLocal: false, downloadProviderID: nil,
+                                                      itemServerID: item.serverID, currentMachineID: ClientHost.offline.currentServerID)
+        let progressKey = providerID.flatMap { provider in
+            item.ratingKey.map { OfflineProgressLog.Key(providerID: provider, profileID: ClientHost.offline.currentProfileID,
+                                                        accountID: nil, itemID: $0) }
+        }
+        let (serverURL, token) = connection
+        let full = try await metadata(for: item, connection: connection)
         guard full.streamKey != nil else { throw PlexSessionError.noPlayableURL }
 
         let markers = await PlexPlaybackMarkers.markers(for: full, serverURL: serverURL, token: token, network: network)
@@ -255,6 +262,7 @@ final class PlexSession: ObservableObject {
             markers: markers,
             serverURL: serverURL,
             token: token,
+            progressKey: progressKey,
             version: version,
             quality: quality,
             plan: nil,
@@ -282,6 +290,7 @@ final class PlexSession: ObservableObject {
             markers: request.markers,
             serverURL: request.serverURL,
             token: request.token,
+            progressKey: request.progressKey,
             version: request.item.Media?.first.map { .source("\($0.id)") } ?? .best,
             quality: quality,
             plan: plan,
@@ -296,6 +305,7 @@ final class PlexSession: ObservableObject {
         markers: [PlexMarker],
         serverURL: String,
         token: String,
+        progressKey: OfflineProgressLog.Key?,
         version: VersionChoice,
         quality: StreamingQuality?,
         plan forced: StreamPlan?,
@@ -372,7 +382,8 @@ final class PlexSession: ObservableObject {
             measuredKbps: measurement?.kbps,
             measuredAt: measurement?.at,
             startTime: startTime,
-            directPlaySessionID: sessionID == nil ? UUID().uuidString : nil
+            directPlaySessionID: sessionID == nil ? UUID().uuidString : nil,
+            progressKey: progressKey
         )
     }
 
@@ -382,10 +393,14 @@ final class PlexSession: ObservableObject {
         guard let key = request.item.ratingKey else { return nil }
         let at = Date()
         let offsetMs = Int(time * 1000)
+        let pending = request.progressKey?.entry(offsetMs: offsetMs, durationMs: request.item.duration, watched: false, at: at)
         if request.isLocal {
             ClientHost.offline.noteProgress(for: request, offsetMs: offsetMs, watched: false, persist: state != "playing")
         }
-        guard !request.serverURL.isEmpty else { return nil }
+        guard !request.serverURL.isEmpty else {
+            if request.isLocal, state == "stopped", let pending { ClientHost.offline.recordProgress(pending) }
+            return nil
+        }
         do {
             let terminated = try await network.reportProgress(
                 serverURL: request.serverURL,
@@ -397,22 +412,12 @@ final class PlexSession: ObservableObject {
                 sessionIdentifier: request.directPlaySessionID,
                 reportingTimeout: PlaybackReportTimeout.duration
             )
-            if let owner = plexProviderID(of: request) { ClientHost.offline.progressReached(owner, itemID: key, at: at) }
+            if let owner = request.progressKey { ClientHost.offline.progressReached(owner, at: at) }
             return terminated
         } catch {
-            if let owner = plexProviderID(of: request) {
-                ClientHost.offline.recordProgress(providerID: owner, itemID: key, offsetMs: offsetMs,
-                                          durationMs: request.item.duration, watched: false, at: at)
-            }
+            if let pending { ClientHost.offline.recordProgress(pending) }
             return nil
         }
-    }
-
-    /// The download key of the Plex server a request reports to: a download's own server (its metadata
-    /// carries none), else the item's, else the current one. Nil when no server is known.
-    func plexProviderID(of request: PlexPlaybackRequest) -> String? {
-        DownloadIdentity.reportingKey(isLocal: request.isLocal, downloadProviderID: request.downloadProviderID,
-                                      itemServerID: request.item.serverID, currentMachineID: ClientHost.offline.currentServerID)
     }
 
     static func directPlayURL(serverURL: String, token: String, partKey: String) -> URL? {
@@ -482,6 +487,9 @@ nonisolated struct PlexPlaybackRequest: Identifiable, Sendable {
     var localArtworkURL: URL? = nil
     /// The server a downloaded file came from (`DownloadRecord.providerID`), which may not be the current one.
     var downloadProviderID: String? = nil
+    /// The owner captured with the playback credentials, retained across reloads and late reports.
+    var progressKey: OfflineProgressLog.Key? = nil
+    var downloadRecordID: String? = nil
     /// Set for a Jellyfin or Emby item: `item` is then a display shim and this is the real stream.
     var providerPlayback: ProviderPlayback? = nil
 

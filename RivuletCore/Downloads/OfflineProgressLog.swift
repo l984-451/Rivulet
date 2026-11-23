@@ -5,7 +5,21 @@ import Foundation
 
 /// Progress that could not reach the server, replayed on the next connection.
 nonisolated struct OfflineProgressLog: Codable, Sendable, Equatable {
-    nonisolated struct Entry: Codable, Sendable, Equatable {
+    nonisolated struct Key: Hashable, Sendable {
+        let providerID: String
+        let profileID: String?
+        let accountID: String?
+        let itemID: String
+
+        func entry(offsetMs: Int, durationMs: Int?, watched: Bool, at: Date) -> Entry {
+            Entry(providerID: providerID, profileID: profileID, accountID: accountID, itemID: itemID,
+                  offsetMs: offsetMs, durationMs: durationMs, watched: watched, at: at)
+        }
+    }
+
+    nonisolated struct Entry: Codable, Sendable, Hashable {
+        var key: Key { Key(providerID: providerID, profileID: profileID, accountID: accountID, itemID: itemID) }
+
         /// The server, as `DownloadRecord.providerID` names it.
         var providerID: String
         var profileID: String?
@@ -77,19 +91,40 @@ nonisolated struct OfflineProgressLog: Codable, Sendable, Equatable {
 
     var entries: [Entry] = []
 
+    // Only in-flight callbacks can arrive behind an acknowledgment. This state ends with the process.
+    private var lastReached: [Key: Date] = [:]
+    private enum CodingKeys: String, CodingKey { case entries }
+
     /// One entry per server, profile, account and item: the latest position, watched if ever watched.
-    mutating func record(_ entry: Entry) {
-        guard let i = entries.firstIndex(where: {
-            $0.providerID == entry.providerID && $0.profileID == entry.profileID && $0.accountID == entry.accountID
-                && $0.itemID == entry.itemID
-        }) else {
+    @discardableResult
+    mutating func record(_ entry: Entry) -> Bool {
+        if let reached = lastReached[entry.key], reached >= entry.at { return false }
+        guard let i = entries.firstIndex(where: { $0.key == entry.key }) else {
             entries.append(entry)
-            return
+            return true
         }
         let old = entries[i]
         var merged = entry.at >= old.at ? entry : old
         merged.watched = old.watched || entry.watched
+        guard merged != old else { return false }
         entries[i] = merged
+        return true
+    }
+
+    /// A report for this owner landed. Late failures for it can no longer add an older position.
+    mutating func reached(_ key: Key, at: Date) -> Bool {
+        lastReached[key] = max(at, lastReached[key] ?? at)
+        let before = entries.count
+        entries.removeAll { $0.key == key && $0.at <= at }
+        return entries.count != before
+    }
+
+    /// Match the complete replayed snapshot so a position coalesced during the send survives.
+    mutating func remove(replayed: [Entry]) -> Bool {
+        let completed = Set(replayed)
+        let before = entries.count
+        entries.removeAll { completed.contains($0) }
+        return entries.count != before
     }
 
     /// False when the server saw a view at or after this entry, so a later view is never overwritten.
@@ -115,9 +150,20 @@ nonisolated struct OfflineProgressLog: Codable, Sendable, Equatable {
     }
 
     static func verdict(for error: Error) -> Verdict {
-        if case PlexAPIError.networkError = error { return .stop }
         if error is URLError || error is CancellationError { return .stop }
-        if case PlexAPIError.httpError(let status, _) = error { return status >= 500 ? .keep : .drop }
+        if let plex = error as? PlexAPIError {
+            switch plex {
+            case .networkError, .authenticationFailed: return .stop
+            case .httpError(let status, _):
+                switch status {
+                case 401, 408, 421, 425, 429: return .stop
+                case 500...599: return .keep
+                default: return .drop
+                }
+            case .invalidResponse, .parsingError: return .keep
+            default: return .drop
+            }
+        }
         switch error as? MediaProviderError {
         case .unreachable?, .unauthorized?: return .stop
         case .backendSpecific?: return .keep
@@ -125,18 +171,23 @@ nonisolated struct OfflineProgressLog: Codable, Sendable, Equatable {
         }
     }
 
-    /// Sends `entries` in order and returns whether any was sent. A transport error stops the run
-    /// and keeps the rest, a 5xx keeps that entry, and any other failure drops it.
+    /// Checkpoint completed entries together. A crash can repeat the last partial batch.
+    static let checkpointSize = 16
+
+    /// Sends entries in order and checkpoints completed work even when a later send stops the run.
     static func replay(
         _ entries: [Entry],
         isolation: isolated (any Actor)? = #isolation,
         serverLastViewedAt: (Entry) async throws -> Date?,
         send: (Entry) async throws -> Void,
-        remove: (Entry) -> Void
+        remove: ([Entry]) -> Void
     ) async -> Bool {
         var sent = false
+        var completed: [Entry] = []
+        defer { if !completed.isEmpty { remove(completed) } }
         for entry in entries {
             do {
+                try Task.checkCancellation()
                 if shouldReplay(entry, serverLastViewedAt: try await serverLastViewedAt(entry)) {
                     try await send(entry)
                     sent = true
@@ -148,7 +199,11 @@ nonisolated struct OfflineProgressLog: Codable, Sendable, Equatable {
                 case .drop: break
                 }
             }
-            remove(entry)
+            completed.append(entry)
+            if completed.count == checkpointSize {
+                remove(completed)
+                completed.removeAll(keepingCapacity: true)
+            }
         }
         return sent
     }
@@ -176,7 +231,7 @@ nonisolated enum ProviderProgressReplay {
         _ entries: [OfflineProgressLog.Entry],
         isolation: isolated (any Actor)? = #isolation,
         provider: any MediaProvider,
-        remove: (OfflineProgressLog.Entry) -> Void
+        remove: ([OfflineProgressLog.Entry]) -> Void
     ) async -> Bool {
         func ref(_ entry: OfflineProgressLog.Entry) -> MediaItemRef {
             MediaItemRef(providerID: provider.id, itemID: entry.itemID)

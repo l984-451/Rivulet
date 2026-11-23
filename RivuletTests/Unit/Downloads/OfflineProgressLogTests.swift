@@ -42,6 +42,27 @@ final class OfflineProgressLogTests: XCTestCase {
         XCTAssertEqual(log.entries.count, 4)
     }
 
+    func test_acknowledgmentAndLateFailureAreScopedToTheOriginalOwner() {
+        let key = OfflineProgressLog.Key(providerID: "emby:test", profileID: "a", accountID: "one", itemID: "42")
+        let otherProfile = OfflineProgressLog.Key(providerID: "emby:test", profileID: "b", accountID: "one", itemID: "42")
+        let otherAccount = OfflineProgressLog.Key(providerID: "emby:test", profileID: "a", accountID: "two", itemID: "42")
+        func pending(_ owner: OfflineProgressLog.Key) -> OfflineProgressLog.Entry {
+            owner.entry(offsetMs: 1000, durationMs: nil, watched: false, at: t0)
+        }
+        var log = OfflineProgressLog()
+        log.record(pending(key))
+        log.record(pending(otherProfile))
+        XCTAssertTrue(log.reached(key, at: t0))
+        XCTAssertFalse(log.record(pending(key)))
+        XCTAssertTrue(log.record(pending(otherAccount)))
+        XCTAssertEqual(log.entries, [pending(otherProfile), pending(otherAccount)])
+
+        let newer = key.entry(offsetMs: 2000, durationMs: nil, watched: false, at: t0.addingTimeInterval(1))
+        log.record(newer)
+        XCTAssertFalse(log.reached(key, at: t0))
+        XCTAssertTrue(log.entries.contains(newer))
+    }
+
     func test_shouldReplay_onlyWhenServerHasNoLaterView() {
         let e = entry(offset: 1, at: 100)
         XCTAssertTrue(OfflineProgressLog.shouldReplay(e, serverLastViewedAt: nil))
@@ -71,7 +92,7 @@ final class OfflineProgressLogTests: XCTestCase {
                 return e.itemID == "3" ? self.t0.addingTimeInterval(500) : nil
             },
             send: { sentKeys.append($0.itemID) },
-            remove: { removed.append($0.itemID) })
+            remove: { removed.append(contentsOf: $0.map(\.itemID)) })
         XCTAssertTrue(sent)
         XCTAssertEqual(sentKeys, ["1"])
         XCTAssertEqual(removed, ["1", "2", "3"])
@@ -92,9 +113,53 @@ final class OfflineProgressLogTests: XCTestCase {
                 default: break
                 }
             },
-            remove: { removed.append($0.itemID) })
+            remove: { removed.append(contentsOf: $0.map(\.itemID)) })
         XCTAssertTrue(sent)
         XCTAssertEqual(removed, ["403", "ok"])
+    }
+
+    func test_replay_checkpointsThePrefixAndRetainsTransientFailures() async {
+        for status in [401, 408, 421, 425, 429] {
+            let entries = ["ok", "retry", "later"].map { entry($0, offset: 1, at: 0) }
+            var attempts: [String] = []
+            var checkpoints: [[String]] = []
+            let sent = await OfflineProgressLog.replay(entries, serverLastViewedAt: { _ in nil }, send: {
+                attempts.append($0.itemID)
+                if $0.itemID == "retry" { throw PlexAPIError.httpError(statusCode: status, data: nil) }
+            }, remove: { checkpoints.append($0.map(\.itemID)) })
+            XCTAssertTrue(sent)
+            XCTAssertEqual(attempts, ["ok", "retry"])
+            XCTAssertEqual(checkpoints, [["ok"]])
+        }
+    }
+
+    func test_checkpointsSaveBoundedBatchesAndKeepAReplacedEntry() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("progress.json")
+        var log = OfflineProgressLog()
+        for id in 0..<100 { log.record(entry(String(id), offset: id, at: 0)) }
+        let snapshot = log.entries
+        try log.save(to: url)
+        var sizes: [Int] = []
+        let newer = entry("1", offset: 1000, at: 10)
+        let sent = await OfflineProgressLog.replay(snapshot, serverLastViewedAt: { _ in nil }, send: { current in
+            if current.itemID == "2" {
+                log.record(newer)
+                try log.save(to: url)
+            }
+            if current.itemID == String(OfflineProgressLog.checkpointSize) {
+                let durable = OfflineProgressLog.load(from: url)
+                XCTAssertEqual(durable.entries, [newer] + Array(snapshot.dropFirst(OfflineProgressLog.checkpointSize)))
+            }
+        }, remove: { batch in
+            sizes.append(batch.count)
+            XCTAssertTrue(log.remove(replayed: batch))
+            do { try log.save(to: url) } catch { XCTFail("Checkpoint failed: \(error)") }
+        })
+        XCTAssertTrue(sent)
+        XCTAssertEqual(sizes, [16, 16, 16, 16, 16, 16, 4])
+        XCTAssertEqual(OfflineProgressLog.load(from: url).entries, [newer])
     }
 
     func test_saveAndLoad() throws {

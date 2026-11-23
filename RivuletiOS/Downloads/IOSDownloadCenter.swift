@@ -175,10 +175,18 @@ final class IOSDownloadCenter: ObservableObject {
             media.insert(media.remove(at: index), at: 0)
             meta.Media = media
         }
+        let reportingID = record.isPlex
+            ? DownloadIdentity.reportingKey(isLocal: true, downloadProviderID: record.providerID, itemServerID: nil,
+                                            currentMachineID: currentServerID)
+            : record.providerID
+        let accountID = record.isPlex ? nil : record.accountID ?? registry.provider(for: record.providerID)?.accountID
+        let progressKey = reportingID.map {
+            OfflineProgressLog.Key(providerID: $0, profileID: currentProfileID, accountID: accountID, itemID: record.itemID)
+        }
         if let server {
             let pending = IOSOfflineProgress.log.entries.first {
                 DownloadIdentity.matches($0.providerID, record.providerID) && $0.profileID == currentProfileID
-                    && $0.itemID == record.itemID
+                    && $0.accountID == accountID && $0.itemID == record.itemID
             }
             meta.viewOffset = OfflineProgressLog.resumeOffsetMs(
                 serverOffsetMs: server.offsetMs, serverLastViewedAt: server.lastViewedAt, pending: pending)
@@ -214,13 +222,14 @@ final class IOSDownloadCenter: ObservableObject {
         }
         request.localArtworkURL = record.posterFileName.map { Self.directory.appending(path: $0) }
         request.downloadProviderID = record.providerID
+        request.progressKey = progressKey
+        request.downloadRecordID = record.id
         return request
     }
 
     /// Keeps a download's resume point current so an offline play resumes where the last one stopped.
     func noteProgress(for request: PlexPlaybackRequest, offsetMs: Int, watched: Bool, persist: Bool) {
-        guard let key = request.item.ratingKey, let providerID = request.downloadProviderID,
-              let id = record(providerID: providerID, itemID: key)?.id,
+        guard let id = request.downloadRecordID,
               let index = records.firstIndex(where: { $0.id == id }) else { return }
         // Written directly: PlexMetadata's == sees only ratingKey, so `update` would skip it.
         if watched {

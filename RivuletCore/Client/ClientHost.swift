@@ -17,9 +17,9 @@ protocol OfflineHost: AnyObject {
 
     var progressEntries: [OfflineProgressLog.Entry] { get }
     var isFlushing: Bool { get set }
-    func recordProgress(providerID: String, itemID: String, offsetMs: Int, durationMs: Int?, watched: Bool, at: Date)
-    func progressReached(_ providerID: String, itemID: String, at: Date)
-    func removeProgress(_ entry: OfflineProgressLog.Entry)
+    func recordProgress(_ entry: OfflineProgressLog.Entry)
+    func progressReached(_ key: OfflineProgressLog.Key, at: Date)
+    func removeProgress(_ entries: [OfflineProgressLog.Entry])
     /// Sends what is queued for signed-in Jellyfin and Emby servers. True when anything was sent.
     func flushProviders() async -> Bool
 }
@@ -34,9 +34,9 @@ final class NoOfflineHost: OfflineHost {
     func noteProgress(for request: PlexPlaybackRequest, offsetMs: Int, watched: Bool, persist: Bool) {}
     var progressEntries: [OfflineProgressLog.Entry] { [] }
     var isFlushing = false
-    func recordProgress(providerID: String, itemID: String, offsetMs: Int, durationMs: Int?, watched: Bool, at: Date) {}
-    func progressReached(_ providerID: String, itemID: String, at: Date) {}
-    func removeProgress(_ entry: OfflineProgressLog.Entry) {}
+    func recordProgress(_ entry: OfflineProgressLog.Entry) {}
+    func progressReached(_ key: OfflineProgressLog.Key, at: Date) {}
+    func removeProgress(_ entries: [OfflineProgressLog.Entry]) {}
     func flushProviders() async -> Bool { false }
 }
 

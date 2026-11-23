@@ -138,9 +138,9 @@ final class ProviderBackend: PlayerBackend {
         // A downloaded file keeps its own resume point; the server hears at the end, or when it is back.
         if request.isLocal {
             ClientHost.offline.noteProgress(for: request, offsetMs: Int(time * 1000), watched: false, persist: state != "playing")
-            if state == "stopped", let key = request.item.ratingKey {
-                ClientHost.offline.recordProgress(providerID: provider.id, itemID: key, offsetMs: Int(time * 1000),
-                                          durationMs: request.item.duration, watched: false, at: Date())
+            if state == "stopped", let owner = request.progressKey {
+                ClientHost.offline.recordProgress(owner.entry(offsetMs: Int(time * 1000), durationMs: request.item.duration,
+                                                              watched: false, at: Date()))
             }
             return nil
         }
@@ -181,11 +181,13 @@ final class ProviderBackend: PlayerBackend {
     // MARK: - Items
 
     func markWatched(_ request: PlexPlaybackRequest) async {
-        if request.isLocal, let key = request.item.ratingKey {
+        if request.isLocal {
             ClientHost.offline.noteProgress(for: request, offsetMs: 0, watched: true, persist: true)
             let duration = request.item.duration
-            ClientHost.offline.recordProgress(providerID: provider.id, itemID: key, offsetMs: duration ?? 0,
-                                      durationMs: duration, watched: true, at: Date())
+            if let owner = request.progressKey {
+                ClientHost.offline.recordProgress(owner.entry(offsetMs: duration ?? 0, durationMs: duration,
+                                                              watched: true, at: Date()))
+            }
             return
         }
         guard let ref = request.providerPlayback?.item.ref else { return }

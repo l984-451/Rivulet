@@ -17,9 +17,9 @@ extension PlexSession {
     }
 
     /// Full metadata: markers, chapters, extras, external guids, On Deck.
-    func metadata(for item: PlexMetadata) async throws -> PlexMetadata {
+    func metadata(for item: PlexMetadata, connection: (serverURL: String, token: String)? = nil) async throws -> PlexMetadata {
         guard let key = item.ratingKey else { return item }
-        let (serverURL, token) = try configuration(serverID: item.serverID)
+        let (serverURL, token) = try connection ?? configuration(serverID: item.serverID)
         var full = try await network.getFullMetadata(serverURL: serverURL, authToken: token, ratingKey: key)
         full.serverID = item.serverID
         // On Deck is the next episode on the same server.

@@ -9,8 +9,13 @@ extension PlexSession {
     func markWatched(_ request: PlexPlaybackRequest) async {
         guard let key = request.item.ratingKey else { return }
         let at = Date()
+        let duration = request.item.duration
+        let pending = request.progressKey?.entry(offsetMs: duration ?? 0, durationMs: duration, watched: true, at: at)
         if request.isLocal { ClientHost.offline.noteProgress(for: request, offsetMs: 0, watched: true, persist: true) }
-        guard !request.serverURL.isEmpty else { return }
+        guard !request.serverURL.isEmpty else {
+            if request.isLocal, let pending { ClientHost.offline.recordProgress(pending) }
+            return
+        }
         do {
             // The server usually counted the play itself as the timeline passed its threshold.
             let counted = (try? await PlaybackReportTimeout.run {
@@ -26,13 +31,9 @@ extension PlexSession {
                     reportingTimeout: PlaybackReportTimeout.duration
                 )
             }
-            if let owner = plexProviderID(of: request) { ClientHost.offline.progressReached(owner, itemID: key, at: at) }
+            if let owner = request.progressKey { ClientHost.offline.progressReached(owner, at: at) }
         } catch {
-            let duration = request.item.duration
-            if let owner = plexProviderID(of: request) {
-                ClientHost.offline.recordProgress(providerID: owner, itemID: key, offsetMs: duration ?? 0,
-                                          durationMs: duration, watched: true, at: at)
-            }
+            if let pending { ClientHost.offline.recordProgress(pending) }
         }
     }
 
@@ -77,7 +78,7 @@ extension PlexSession {
               let server = center.currentServerID else { return false }
         let profile = center.currentProfileID
         let key = DownloadIdentity.plexProviderID(machineID: server)
-        let due = center.progressEntries.filter { DownloadIdentity.matches($0.providerID, key) && $0.profileID == profile }
+        let due = center.progressEntries.filter { DownloadIdentity.matches($0.providerID, key) && $0.profileID == profile && $0.accountID == nil }
         guard !due.isEmpty else { return false }
         center.isFlushing = true
         defer { center.isFlushing = false }

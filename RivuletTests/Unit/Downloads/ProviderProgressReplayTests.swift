@@ -51,7 +51,7 @@ final class ProviderProgressReplayTests: XCTestCase {
         var removed: [String] = []
         let sent = await ProviderProgressReplay.replay(
             [entry("a", offset: 640_000), entry("b", offset: 1_300_000, watched: true)],
-            provider: provider, remove: { removed.append($0.itemID) })
+            provider: provider, remove: { removed.append(contentsOf: $0.map(\.itemID)) })
         XCTAssertTrue(sent)
         XCTAssertEqual(provider.progressUpdates.map { "\($0.0.itemID)@\($0.1)" }, ["a@640.0", "b@1300.0"])
         XCTAssertEqual(provider.markedPlayed.map(\.itemID), ["b"])
@@ -67,7 +67,7 @@ final class ProviderProgressReplayTests: XCTestCase {
     func test_replay_skipsWhatTheServerSawLaterAndStillRemovesIt() async {
         let provider = stub(lastViewed: ["a": t0.addingTimeInterval(500)])
         var removed: [String] = []
-        let sent = await ProviderProgressReplay.replay([entry("a", seconds: 100)], provider: provider, remove: { removed.append($0.itemID) })
+        let sent = await ProviderProgressReplay.replay([entry("a", seconds: 100)], provider: provider, remove: { removed.append(contentsOf: $0.map(\.itemID)) })
         XCTAssertFalse(sent)
         XCTAssertTrue(provider.progressUpdates.isEmpty)
         XCTAssertEqual(removed, ["a"])
@@ -75,7 +75,7 @@ final class ProviderProgressReplayTests: XCTestCase {
 
     func test_replay_dropsAnItemTheServerLost() async {
         var removed: [String] = []
-        let sent = await ProviderProgressReplay.replay([entry("gone")], provider: stub(missing: ["gone"]), remove: { removed.append($0.itemID) })
+        let sent = await ProviderProgressReplay.replay([entry("gone")], provider: stub(missing: ["gone"]), remove: { removed.append(contentsOf: $0.map(\.itemID)) })
         XCTAssertFalse(sent)
         XCTAssertEqual(removed, ["gone"])
     }
@@ -84,7 +84,7 @@ final class ProviderProgressReplayTests: XCTestCase {
         let provider = stub()
         provider.progressError = MediaProviderError.unreachable
         var removed: [String] = []
-        let sent = await ProviderProgressReplay.replay([entry("a"), entry("b")], provider: provider, remove: { removed.append($0.itemID) })
+        let sent = await ProviderProgressReplay.replay([entry("a"), entry("b")], provider: provider, remove: { removed.append(contentsOf: $0.map(\.itemID)) })
         XCTAssertFalse(sent)
         XCTAssertEqual(removed, [])
     }
@@ -93,7 +93,7 @@ final class ProviderProgressReplayTests: XCTestCase {
         let provider = stub()
         provider.progressError = MediaProviderError.unauthorized
         var removed: [String] = []
-        _ = await ProviderProgressReplay.replay([entry("a"), entry("b")], provider: provider, remove: { removed.append($0.itemID) })
+        _ = await ProviderProgressReplay.replay([entry("a"), entry("b")], provider: provider, remove: { removed.append(contentsOf: $0.map(\.itemID)) })
         XCTAssertEqual(removed, [])
     }
 
@@ -101,7 +101,7 @@ final class ProviderProgressReplayTests: XCTestCase {
         let provider = stub()
         provider.progressErrorFor = { $0.itemID == "a" ? MediaProviderError.backendSpecific(underlying: "HTTP 500") : nil }
         var removed: [String] = []
-        let sent = await ProviderProgressReplay.replay([entry("a"), entry("b")], provider: provider, remove: { removed.append($0.itemID) })
+        let sent = await ProviderProgressReplay.replay([entry("a"), entry("b")], provider: provider, remove: { removed.append(contentsOf: $0.map(\.itemID)) })
         XCTAssertTrue(sent)
         XCTAssertEqual(removed, ["b"])
     }

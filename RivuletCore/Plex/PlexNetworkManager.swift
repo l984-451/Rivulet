@@ -1247,11 +1247,15 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             (data, response) = try await session.data(for: reportRequest)
         }
 
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw PlexAPIError.invalidResponse
-        }
+        try Self.validateTimelineResponse(response)
         return Self.timelineTermination(in: data)
+    }
+
+    nonisolated static func validateTimelineResponse(_ response: URLResponse) throws {
+        guard let http = response as? HTTPURLResponse else { throw PlexAPIError.invalidResponse }
+        guard (200...299).contains(http.statusCode) else {
+            throw PlexAPIError.httpError(statusCode: http.statusCode, data: nil)
+        }
     }
 
     /// The timeline reply carries `terminationCode` / `terminationText` once the

@@ -45,6 +45,9 @@ final class IOSDownloadCenter: ObservableObject {
     private var authRetried = Set<String>()
     private var queueIDs: [String: Int] = [:]
     private var ticker: Task<Void, Never>?
+    private var manifestReady = false
+    private var canRemoveUnownedFiles = false
+    private var deferredTransferEvents: [IOSDownloadTransfer.Event] = []
     private var reconciled = false
     private var cancellables = Set<AnyCancellable>()
     /// The current server's machine id, kept across launches for offline use.
@@ -53,24 +56,16 @@ final class IOSDownloadCenter: ObservableObject {
     }
 
     private init() {
-        try? FileManager.default.createDirectory(at: Self.directory, withIntermediateDirectories: true)
-        IOSDownloadTransfer.excludeFromBackup(Self.directory)
-        let present = Set((try? FileManager.default.contentsOfDirectory(atPath: Self.directory.path)) ?? [])
-        let launch = DownloadManifest.loadForLaunch(from: Self.manifestURL)
-        let loaded = launch.manifest
-        let checked = loaded.reconciled(filesPresent: present)
-        records = checked.records
-        if checked != loaded || loaded.migratedFrom != nil { save() }
         currentServerID = UserDefaults.standard.string(forKey: Self.serverIDKey)
-        pendingRemovals = DownloadsJSONFile.load([PendingRemoval].self, from: Self.removalsURL) ?? []
-        // A delete that raced a finishing transfer leaves a file named for no record. Never behind a
-        // manifest that would not decode: those files are the only copy.
-        if launch.safeToSweep {
-            for name in DownloadRules.orphanedFiles(present, records: records) { removeFile(name) }
-        }
+        restoreManifest()
 
         NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)
-            .sink { [weak self] _ in Task { await self?.serverChanged() } }
+            .merge(with: NotificationCenter.default.publisher(for: UIApplication.protectedDataDidBecomeAvailableNotification))
+            .sink { [weak self] _ in Task { @MainActor in
+                guard let self else { return }
+                if !self.manifestReady { self.start() }
+                else { await self.serverChanged() }
+            } }
             .store(in: &cancellables)
         // willSet: the new URL is in place once the Task runs.
         auth.$selectedServerURL.dropFirst().removeDuplicates()
@@ -89,13 +84,42 @@ final class IOSDownloadCenter: ObservableObject {
         pathMonitor.start(queue: DispatchQueue(label: "rivulet.downloads.path"))
     }
 
+    private func restoreManifest() {
+        guard !manifestReady else { return }
+        let files = FileManager.default
+        do {
+            try files.createDirectory(at: Self.directory, withIntermediateDirectories: true)
+        } catch { return }
+        IOSDownloadTransfer.excludeFromBackup(Self.directory)
+        guard let names = try? files.contentsOfDirectory(atPath: Self.directory.path) else { return }
+        let launch = DownloadManifest.loadForLaunch(from: Self.manifestURL)
+        guard launch.canUpdate else { return }
+        let present = Set(names)
+        let checked = launch.manifest.reconciled(filesPresent: present)
+        records = checked.records
+        manifestReady = true
+        canRemoveUnownedFiles = launch.safeToSweep
+        if checked != launch.manifest || launch.manifest.migratedFrom != nil { save() }
+        pendingRemovals = DownloadsJSONFile.load([PendingRemoval].self, from: Self.removalsURL) ?? []
+        if launch.safeToSweep {
+            for name in DownloadRules.orphanedFiles(present, records: records) { removeFile(name) }
+        }
+        let events = deferredTransferEvents
+        deferredTransferEvents.removeAll()
+        events.forEach(handle)
+    }
+
     /// Launch: re-attach live transfers, cancel orphans, then resume everything unfinished.
     func start() {
+        restoreManifest()
+        guard manifestReady else { return }
         Task {
             // Read on main after the await: a task whose completion already ran is no longer live.
             let tasks = await transfer.allTasks().filter { $0.state == .running || $0.state == .suspended }
             let plan = DownloadRules.reconcile(records, tasks: tasks.map { ($0.taskIdentifier, $0.taskDescription) })
-            for task in tasks where plan.cancel.contains(task.taskIdentifier) { retire(task) }
+            for task in tasks where plan.cancel.contains(task.taskIdentifier) {
+                if canRemoveUnownedFiles || task.taskDescription.flatMap({ record($0) }) != nil { retire(task) }
+            }
             for (id, taskID) in plan.attach {
                 activeTasks[id] = taskID
                 update(id) { $0.state = .downloading }
@@ -237,7 +261,7 @@ final class IOSDownloadCenter: ObservableObject {
     /// Starts a download, or retries a failed one. `quality` (else the Download Quality setting) applies to
     /// Plex only: it converts on the server, while Jellyfin and Emby always send the original file.
     func download(_ item: MediaItem, quality: StreamingQuality? = nil) {
-        guard IOSDownloadGate.canDownload(item.ref),
+        guard manifestReady, IOSDownloadGate.canDownload(item.ref),
               let key = DownloadIdentity.providerID(for: item.ref, selectedPlexMachineID: currentServerID) else { return }
         let plexMachineID = DownloadIdentity.plexMachineID(of: key)
         let provider = registry.provider(for: item.ref.providerID)
@@ -327,6 +351,12 @@ final class IOSDownloadCenter: ObservableObject {
     // MARK: - Transfer events
 
     func handle(_ event: IOSDownloadTransfer.Event) {
+        guard manifestReady else {
+            // Only terminal events affect recovery. Progress updates can arrive for hours.
+            if case .progress = event { return }
+            deferredTransferEvents.append(event)
+            return
+        }
         switch event {
         case let .progress(id, taskID, received):
             guard accepts(id, taskID, progress: true) else { return }
@@ -340,7 +370,8 @@ final class IOSDownloadCenter: ObservableObject {
         case let .finished(id, taskID, fileName, bytes, etag):
             guard accepts(id, taskID), let record = record(id) else {
                 // A deleted or superseded download's file has no owner.
-                if record(id)?.fileName != fileName { removeFile(fileName) }
+                let owner = record(id)
+                if (owner != nil || canRemoveUnownedFiles) && owner?.fileName != fileName { removeFile(fileName) }
                 return
             }
             activeTasks[id] = nil
@@ -707,6 +738,7 @@ final class IOSDownloadCenter: ObservableObject {
 
     /// Foreground or a server switch: learn the server's id, and move transfers whose host is gone.
     private func serverChanged() async {
+        guard manifestReady else { return }
         await refreshServerID()
         if let (serverURL, _) = config(), let serverID = currentServerID {
             for task in await transfer.allTasks() {

@@ -51,14 +51,27 @@ nonisolated struct DownloadManifest: Codable, Sendable, Equatable {
     /// The manifest at launch, and whether the files beside it may be swept for orphans. Not when a file
     /// was there and would not decode, nor on later launches while its `.corrupt` copy sits beside it:
     /// then the files are the only copy.
-    static func loadForLaunch(from url: URL) -> (manifest: DownloadManifest, safeToSweep: Bool) {
-        let files = FileManager.default
-        let existed = files.fileExists(atPath: url.path)
-        let manifest = load(from: url)
-        // `load` moves a file it cannot decode aside.
-        let unreadable = existed && !files.fileExists(atPath: url.path)
-        let keptAside = files.fileExists(atPath: url.appendingPathExtension("corrupt").path)
-        return (manifest, !unreadable && !keptAside)
+    static func loadForLaunch(from url: URL) -> (manifest: DownloadManifest, safeToSweep: Bool, canUpdate: Bool) {
+        let corrupt = url.appendingPathExtension("corrupt")
+        let hasBackup = FileManager.default.fileExists(atPath: corrupt.path)
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+            return (DownloadManifest(), !hasBackup, true)
+        } catch {
+            return (DownloadManifest(), false, false)
+        }
+        if let manifest = try? JSONDecoder().decode(Self.self, from: data) {
+            return (manifest, !hasBackup, true)
+        }
+        do {
+            try FileManager.default.moveItem(at: url, to: corrupt)
+            return (DownloadManifest(), false, true)
+        } catch {
+            // Keep both the original and any prior recovery copy.
+            return (DownloadManifest(), false, false)
+        }
     }
 
     /// Marks completed records whose file is gone as failed. Never drops a record.

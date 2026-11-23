@@ -114,6 +114,28 @@ final class DownloadRollbackTests: XCTestCase {
         XCTAssertFalse(second.safeToSweep)
     }
 
+    func test_launchLoad_defersCleanupAndWritesOnReadError() throws {
+        let url = dir.appendingPathComponent("manifest.json")
+        // Reading a directory as Data fails even when its containing directory can be listed.
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        let launch = DownloadManifest.loadForLaunch(from: url)
+        XCTAssertFalse(launch.safeToSweep)
+        XCTAssertFalse(launch.canUpdate)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    func test_launchLoad_keepsPreviousBackupWhenQuarantineFails() throws {
+        let url = dir.appendingPathComponent("manifest.json")
+        let backup = url.appendingPathExtension("corrupt")
+        try Data("first".utf8).write(to: backup)
+        try Data("second".utf8).write(to: url)
+        let launch = DownloadManifest.loadForLaunch(from: url)
+        XCTAssertFalse(launch.safeToSweep)
+        XCTAssertFalse(launch.canUpdate)
+        XCTAssertEqual(try Data(contentsOf: backup), Data("first".utf8))
+        XCTAssertEqual(try Data(contentsOf: url), Data("second".utf8))
+    }
+
     func test_launchLoad_aReadableOrAbsentManifestMaySweep() throws {
         XCTAssertTrue(DownloadManifest.loadForLaunch(from: dir.appendingPathComponent("none.json")).safeToSweep)
         let loaded = DownloadManifest.loadForLaunch(from: try writeV2([record("a", provider: "plex:M", source: "1")]))

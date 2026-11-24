@@ -539,6 +539,16 @@ enum SettingsContent {
             .header("Details"),
             SettingsRowItem(id: "detailRating", title: "Rating",
                             kind: .navigationValue(.detailRatingPicker, value: { MediaRating.detailSource.name })),
+            SettingsRowItem(id: "themeMusic", title: "Theme Music",
+                            kind: .toggle(get: { ThemeMusicSettings.isEnabled },
+                                          set: { ThemeMusicSettings.isEnabled = $0 })),
+            SettingsRowItem(id: "themeMusicVolume", title: "Theme Music Volume",
+                            kind: .cycle(value: { ThemeMusicSettings.volumeLabel(ThemeMusicSettings.volumePercent) },
+                                         next: {
+                                             ThemeMusicSettings.volumePercent =
+                                                 ThemeMusicSettings.nextVolume(after: ThemeMusicSettings.volumePercent)
+                                         }),
+                            isEnabled: { ThemeMusicSettings.isEnabled }),
 
             .header("Live TV"),
         ] + liveTVLookRows + [

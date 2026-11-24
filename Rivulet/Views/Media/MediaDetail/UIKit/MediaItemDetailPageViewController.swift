@@ -60,6 +60,7 @@ final class MediaItemDetailPageViewController: UIViewController {
     private let dateRow = UIStackView()
     private let dateLabel = UILabel()
     private let badgeRow = UIStackView()
+    private let themeIndicator = ThemeMusicIndicatorView()
     private var playButton: FocusableActionButton?
     private weak var lastFocusedHeroButton: FocusableActionButton?
     /// The Play pill's own label, held so a post-playback refresh can flip
@@ -257,6 +258,7 @@ final class MediaItemDetailPageViewController: UIViewController {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         themeVideo.setActive(true)
+        ThemeMusic.shared.refresh()
         setNeedsFocusUpdate()
         updateFocusIfNeeded()
     }
@@ -264,6 +266,7 @@ final class MediaItemDetailPageViewController: UIViewController {
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         themeVideo.setActive(false)
+        ThemeMusic.shared.refresh()
     }
 
     @objc private func dismissSelf() { dismiss(animated: true) }
@@ -325,6 +328,8 @@ final class MediaItemDetailPageViewController: UIViewController {
         badgeRow.alignment = .center
         badgeRow.spacing = 12
         dateRow.addArrangedSubview(badgeRow)
+        themeIndicator.show = item.themeMusicShowRef
+        dateRow.addArrangedSubview(themeIndicator)
         textColumn.addArrangedSubview(dateRow)
 
         // 6. Actions.
@@ -650,6 +655,7 @@ final class MediaItemDetailPageViewController: UIViewController {
     private func applyWatchState(from refreshed: MediaItem) {
         guard refreshed.ref == item.ref else { return }
         item = refreshed
+        themeIndicator.show = item.themeMusicShowRef
         isWatched = refreshed.isWatched
         resumeOffset = refreshed.userState.viewOffset
         watchedButton?.setIcon(isWatched ? "checkmark.circle.fill" : "checkmark")
@@ -853,4 +859,10 @@ final class BlurFadeAnimator: NSObject, UIViewControllerAnimatedTransitioning {
             anim.startAnimation()
         }
     }
+}
+
+// MARK: - Theme music
+
+extension MediaItemDetailPageViewController: ThemeMusicPage {
+    var themeMusicShow: MediaItemRef? { item.themeMusicShowRef }
 }

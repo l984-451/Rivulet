@@ -51,6 +51,7 @@ private struct IOSLiveSourceDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var confirmingRemove = false
     @State private var isRefreshing = false
+    @State private var isRefreshingGuide = false
 
     private var source: LiveTVDataStore.LiveTVSourceInfo? { store.sources.first { $0.id == sourceId } }
     private var synced: Bool { CloudSync.shared.isSynced(accountID: LiveTVDataStore.syncID(forSource: sourceId)) }
@@ -89,7 +90,23 @@ private struct IOSLiveSourceDetailView: View {
                             }
                         }
                     }
-                    .disabled(isRefreshing)
+                    .disabled(isRefreshing || isRefreshingGuide)
+                    Button {
+                        isRefreshingGuide = true
+                        Task {
+                            await store.loadEPG(startDate: Date(), hours: LiveTVDataStore.refreshWindowHours)
+                            isRefreshingGuide = false
+                        }
+                    } label: {
+                        HStack {
+                            Text("Refresh Guide")
+                            if isRefreshingGuide {
+                                Spacer()
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .disabled(isRefreshing || isRefreshingGuide)
                 }
                 // A server's own Live TV leaves with its sign-in.
                 if !source.sourceType.followsServer {

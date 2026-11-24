@@ -45,6 +45,12 @@
         }
       }
     },
+    "Loading guide" : {
+
+    },
+    "Loading channels" : {
+
+    },
     "Map" : {
       "localizations" : {
         "de" : {
@@ -116,7 +122,13 @@
       }
     },
     "Plays surround soundtracks as stereo with the subwoofer channel mixed into left and right, for 2.1 speakers on a stereo connection." : {},
+    "Processing…" : {
+
+    },
     "Recording in Progress" : {
+
+    },
+    "Refresh Guide" : {
 
     },
     "Rivulet is free and open source. A tip helps keep it going." : {

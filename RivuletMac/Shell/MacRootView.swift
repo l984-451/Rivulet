@@ -55,6 +55,8 @@ struct MacRootView: View {
         .sheet(isPresented: $showingAccount) { MacAccountView(showsDone: true) }
         .sheet(isPresented: $showingWhatsNew) { MacWhatsNewView(versions: whatsNewVersions, showsContinue: true) }
         .sheet(isPresented: $choosingProfile) { MacProfilePickerSheet() }
+        // Large loads (a large channel list or guide); before the playback host, so the player covers it.
+        .overlay(alignment: .top) { LoadingPill() }
         .macPlaybackHost(playback)
         // Content is withheld until a profile is entered, and nothing of the locked profile's keeps playing.
         .onChange(of: profiles.needsProfileSelection, initial: true) { _, needed in

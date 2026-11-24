@@ -62,11 +62,11 @@ struct IOSLiveProgrammeSheet: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 IOSLiveLogo(url: channel.logoURL).frame(width: 40, height: 24)
-                Text(channel.numberAndName)
+                Text(channel.displayNumberAndName)
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
-            Text(program?.displayTitle ?? channel.name)
+            Text(program?.displayTitle ?? channel.displayName)
                 .font(.title2.bold())
             if let subtitle = program?.subtitle, !subtitle.isEmpty, subtitle != program?.title {
                 Text(subtitle).font(.headline)
@@ -100,7 +100,7 @@ struct IOSLiveProgrammeSheet: View {
                     onWatch(channel)
                     dismiss()
                 } label: {
-                    Label(airing ? "Watch" : "Watch \(channel.name) Live", systemImage: "play.fill")
+                    Label(airing ? "Watch" : "Watch \(channel.displayName) Live", systemImage: "play.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glassProminent)

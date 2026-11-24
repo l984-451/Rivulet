@@ -66,6 +66,19 @@ nonisolated enum LiveGenre: String, CaseIterable, Sendable {
         }
     }
 
+    /// An SF Symbol for the genre, where a list draws icons.
+    var symbolName: String {
+        switch self {
+        case .sports: "sportscourt"
+        case .news: "newspaper"
+        case .kids: "teddybear"
+        case .movies: "film"
+        case .documentaries: "globe.europe.africa"
+        case .music: "music.note"
+        case .entertainment: "theatermasks"
+        }
+    }
+
     private static let suffixKeywords: Set<String> = ["news", "weather"]
 
     /// What `text` (a guide category, or a channel's name) says, if anything.

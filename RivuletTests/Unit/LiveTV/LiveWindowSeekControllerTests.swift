@@ -160,6 +160,22 @@ final class LiveWindowSeekControllerTests: XCTestCase {
         XCTAssertEqual(fake.edgeSeeks, 0)
     }
 
+    func testPressesPastARecordingsHeadStayAtLive() async throws {
+        let fake = FakePlayer()
+        let controller = LiveWindowSeekController()
+        var player = fake.makePlayer()
+        // A recording joined at its start: the engine holds 200...300, the head is 500 past it.
+        fake.window = LiveSeekableWindow(lowerBound: 200, upperBound: 300)
+        fake.position = 250
+        player.reach = { (0, 500) }
+        controller.attach(player)
+
+        for _ in 0..<30 { controller.step(by: 30) }
+        XCTAssertEqual(controller.pendingRequest, .liveEdge, "past the head is live, and more presses stay there")
+        controller.step(by: -30)
+        XCTAssertEqual(controller.pendingRequest, .position(770), "back from live counts from the head")
+    }
+
     func testNoWindowCannotBeSeeked() {
         let fake = FakePlayer()
         fake.window = nil

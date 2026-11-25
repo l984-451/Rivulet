@@ -138,7 +138,8 @@ final class LiveWindowSeekController {
         guard let window else { return }
         let base: TimeInterval
         switch pendingRequest {
-        case .liveEdge: base = window.upperBound
+        // Past the window, live is the far end of the player's reach (a recording's head).
+        case .liveEdge: base = window.upperBound + player.reach().after
         case .position(let target): base = target
         case nil: base = player.position()
         }

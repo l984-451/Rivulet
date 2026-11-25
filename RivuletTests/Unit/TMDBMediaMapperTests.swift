@@ -84,4 +84,23 @@ final class TMDBMediaMapperTests: XCTestCase {
         XCTAssertEqual(item.ref.itemID, "movie:888")
         XCTAssertEqual(item.kind, .movie)
     }
+
+    // MARK: - Poster sizing
+
+    func testSizedPosterTakesTheSmallestPosterWidthThatCovers() throws {
+        let movie = TMDBListItem(id: 1, title: "M", overview: nil, posterPath: "/p.jpg", backdropPath: "/b.jpg",
+                                 releaseDate: nil, voteAverage: nil, mediaType: .movie)
+        let artwork = TMDBMediaMapper.item(movie).artwork
+        let poster = try XCTUnwrap(artwork.poster)
+        XCTAssertEqual(TMDBMediaMapper.sizedPoster(poster, width: 300).absoluteString, "https://image.tmdb.org/t/p/w342/p.jpg")
+        XCTAssertEqual(TMDBMediaMapper.sizedPoster(poster, width: 480).absoluteString, "https://image.tmdb.org/t/p/w500/p.jpg")
+        XCTAssertEqual(TMDBMediaMapper.sizedPoster(poster, width: 960), poster)
+        // Backdrops, logos, cast photos and server art keep their own size.
+        for url in [try XCTUnwrap(artwork.backdrop),
+                    try XCTUnwrap(URL(string: "https://image.tmdb.org/t/p/w500/l.png")),
+                    try XCTUnwrap(URL(string: "https://image.tmdb.org/t/p/w342/c.jpg")),
+                    try XCTUnwrap(URL(string: "http://h:32400/library/metadata/1/thumb/2?X-Plex-Token=t"))] {
+            XCTAssertEqual(TMDBMediaMapper.sizedPoster(url, width: 300), url)
+        }
+    }
 }

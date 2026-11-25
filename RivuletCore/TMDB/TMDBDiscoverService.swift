@@ -5,7 +5,7 @@
 //  TMDBDiscoverService.swift
 //  Rivulet
 //
-//  Fetches list/discover/details endpoints from the TMDB proxy with caching.
+//  Fetches list/discover/details endpoints through `TMDBTransport`, with caching.
 //
 
 import Foundation
@@ -45,6 +45,11 @@ actor TMDBDiscoverService {
         detailCacheDirectory = caches.appendingPathComponent("TMDBDiscoverDetailCache", isDirectory: true)
         try? FileManager.default.createDirectory(at: listCacheDirectory, withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(at: detailCacheDirectory, withIntermediateDirectories: true)
+    }
+
+    /// A retry the user asked for asks again at once, without waiting out `listRetryDelay`.
+    func forgetListFailures() {
+        listFailedAt = [:]
     }
 
     func fetchSection(_ section: TMDBDiscoverSection) async -> [TMDBListItem] {
@@ -172,22 +177,7 @@ actor TMDBDiscoverService {
     // MARK: - Networking
 
     private func fetchData(endpoint: String, queryItems: [URLQueryItem]) async throws -> Data {
-        guard let url = URL(string: endpoint, relativeTo: TMDBConfig.proxyBaseURL) else {
-            throw URLError(.badURL)
-        }
-        var components = URLComponents(url: url, resolvingAgainstBaseURL: true)
-        components?.queryItems = queryItems
-        guard let finalURL = components?.url else { throw URLError(.badURL) }
-
-        var request = URLRequest(url: finalURL)
-        request.httpMethod = "GET"
-        request.addValue("application/json", forHTTPHeaderField: "Accept")
-
-        let (data, response) = try await session.attestedData(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw URLError(.badServerResponse)
-        }
-        return data
+        try await TMDBTransport.data(endpoint, query: queryItems, session: session)
     }
 
     // MARK: - Disk Cache (List)

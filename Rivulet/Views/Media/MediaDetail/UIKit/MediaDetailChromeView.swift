@@ -76,6 +76,8 @@ final class MediaDetailChromeView: UIView {
     /// Action callbacks; never invoked in `.carouselStable`, where the action row is inert.
     var onPlay: (() -> Void)?
     var onPlayVersion: ((String) -> Void)?
+    /// Plays a file of another item: another copy of this title, or a show's Play episode.
+    var onPlayCopy: ((MediaItem, String) -> Void)?
     var onToggleWatchlist: (() -> Void)?
     var onShowFullDescription: ((MediaItemDetail) -> Void)?
 
@@ -376,6 +378,7 @@ final class MediaDetailChromeView: UIView {
         detail = nil
         episodeDescription = nil
         playTargetSource = nil
+        clearVersionState()
         if let prev = logoAspectConstraint {
             prev.isActive = false
             logoAspectConstraint = nil
@@ -456,6 +459,7 @@ final class MediaDetailChromeView: UIView {
         readyWaiters = []
         episodeDescription = nil
         playTargetSource = nil
+        clearVersionState()
 
         titleLogoImageView.image = nil
         titleFallbackLabel.text = nil
@@ -569,6 +573,8 @@ final class MediaDetailChromeView: UIView {
                 self.detail = fetched
                 self.resolvedGenres = genres
                 self.applyDetail(item: item, detail: fetched)
+                // A show's or season's Versions are its Play episode's, loaded with that episode.
+                if item.kind != .show, item.kind != .season { self.loadCopies(of: fetched, token: token) }
             }
         }
     }
@@ -588,9 +594,22 @@ final class MediaDetailChromeView: UIView {
                   self.loadToken == token
             else { return }
             self.setPlayTarget(episode)
-            // One fetch for both: the episode's file names the badges, and its overview fills a bare list item's.
+            self.playTargetRef = episode.ref
+            // A new target drops the last one's files at once: Versions must never list E3 under a pill that says E4.
+            if self.playTargetDetail?.item.ref != episode.ref {
+                self.playTargetDetail = nil
+                self.dropCopies()
+                self.refreshVersionsButton()
+            }
+            // One fetch for all three: the episode's file names the badges, its overview fills a bare list
+            // item's, and its files are the show's Versions.
             let episodeDetail = await Self.fetchDetail(episode.ref)
-            guard self.loadToken == token else { return }
+            // A later resolve may have moved the target while this one fetched.
+            guard self.loadToken == token, self.playTargetRef == episode.ref else { return }
+            // A failed fetch leaves no Versions button rather than another episode's.
+            self.playTargetDetail = episodeDetail
+            self.refreshVersionsButton()
+            if let episodeDetail { self.loadCopies(of: episodeDetail, token: token) }
             // A failed fetch keeps the badges already shown.
             if let source = episodeDetail?.primarySource { self.playTargetSource = source }
             if let shown = self.item { self.rebuildQualityRow(item: shown, detail: self.detail) }
@@ -638,7 +657,7 @@ final class MediaDetailChromeView: UIView {
         } else {
             castLabel.attributedText = nil
         }
-        addVersionsButton(detail)
+        refreshVersionsButton()
     }
 
     private func renderDescription(item: MediaItem, detail: MediaItemDetail) {
@@ -663,21 +682,93 @@ final class MediaDetailChromeView: UIView {
         }
     }
 
-    /// Versions button after Info, once the detail shows two or more files.
-    private func addVersionsButton(_ detail: MediaItemDetail) {
-        let versions = VersionPicker.versions(in: detail)
-        guard !versions.isEmpty, versionsButton == nil, let info = infoButton,
+    // MARK: - Versions
+
+    /// The full detail of the episode Play starts. A show has no files of its own, so its
+    /// Versions are that episode's. Cleared the moment the target changes.
+    private var playTargetDetail: MediaItemDetail?
+    private var playTargetRef: MediaItemRef?
+    /// Other copies of what Versions plays, from other libraries and servers.
+    private var otherCopies: [VersionPicker.Copy] = []
+    /// The ref `otherCopies` belong to; set only once a lookup answers completely, so a failed one is asked again.
+    private var otherCopiesKey: String?
+    private var copiesTask: Task<Void, Never>?
+    /// The menu's rows, computed once per change.
+    private var versionOptions: [VersionPicker.Option] = []
+
+    private func clearVersionState() {
+        playTargetDetail = nil
+        playTargetRef = nil
+        dropCopies()
+    }
+
+    private func dropCopies() {
+        copiesTask?.cancel()
+        copiesTask = nil
+        otherCopies = []
+        otherCopiesKey = nil
+    }
+
+    /// What Versions plays: the movie or episode itself, or for a show or season the episode Play starts.
+    private var versionSubject: (detail: MediaItemDetail, isPlayTarget: Bool)? {
+        guard let item else { return nil }
+        if item.kind == .show || item.kind == .season { return playTargetDetail.map { ($0, true) } }
+        return detail.map { ($0, false) }
+    }
+
+    /// Versions button after Info while the files and the other copies add up to two or more;
+    /// removed when a change leaves fewer.
+    private func refreshVersionsButton() {
+        versionOptions = versionSubject.map { VersionPicker.options(for: $0.detail, copies: otherCopies) } ?? []
+        if versionOptions.isEmpty {
+            versionsButton?.removeFromSuperview()
+            versionsButton = nil
+            return
+        }
+        guard versionsButton == nil, let info = infoButton,
               let index = actionButtonsStack.arrangedSubviews.firstIndex(of: info) else { return }
         let button = makeCircleButton(systemImage: "square.stack")
         button.onPrimaryAction = { [weak self, weak button] in
-            guard let self, let button, let host = self.hostViewController else { return }
-            VersionPicker.present(versions, from: host, sourceFrame: button.convert(button.bounds, to: nil)) {
-                [weak self] id in self?.onPlayVersion?(id)
+            guard let self, let button, let host = self.hostViewController,
+                  let subject = self.versionSubject, let shown = self.item else { return }
+            let target = subject.detail.item
+            let title = subject.isPlayTarget
+                ? EpisodePicker.playTitle(for: target, on: shown.kind) : String(localized: "Play Version")
+            VersionPicker.present(self.versionOptions, title: title, from: host,
+                                  sourceFrame: button.convert(button.bounds, to: nil)) { [weak self] option in
+                switch VersionPicker.pick(option, playTarget: subject.isPlayTarget ? target : nil, shown: target) {
+                case .version(let id): self?.onPlayVersion?(id)
+                case .item(let item, let id): self?.onPlayCopy?(item, id)
+                }
             }
         }
         actionButtonsStack.insertArrangedSubview(button, at: index + 1)
         versionsButton = button
     }
+
+    /// Versions' other copies of `subject`: the movie or episode itself, or a show's Play episode.
+    private func loadCopies(of subject: MediaItemDetail, token: UInt64) {
+        let key = Self.copiesKey(subject.item.ref)
+        guard otherCopiesKey != key, let shown = item else { return }
+        let servers = TitleCopies.servers(for: shown)
+        guard !servers.isEmpty else { return }
+        copiesTask?.cancel()
+        copiesTask = Task { @MainActor [weak self] in
+            let found = await TitleCopies.versions(of: subject, on: servers)
+            self?.landCopies(found, key: key, token: token)
+        }
+    }
+
+    private func landCopies(_ found: TitleCopies.Result, key: String, token: UInt64) {
+        // The Play target moved on while this was asked.
+        guard !Task.isCancelled, loadToken == token,
+              let subject = versionSubject, Self.copiesKey(subject.detail.item.ref) == key else { return }
+        if found.complete { otherCopiesKey = key }
+        otherCopies = found.copies
+        refreshVersionsButton()
+    }
+
+    private static func copiesKey(_ ref: MediaItemRef) -> String { ref.providerID + "/" + ref.itemID }
 
     // MARK: - Row builders
 
@@ -998,6 +1089,18 @@ final class MediaDetailChromeView: UIView {
             qualityRow.addArrangedSubview(Self.makeBadge(badge, alpha: Self.qualityRowAlpha,
                                                          filled: MediaSource.filledBadges.contains(badge)))
         }
+        // With more than one server signed in, which copy this is matters.
+        if let server = Self.serverName(for: item) {
+            qualityRow.addArrangedSubview(Self.makeCaptionLabel(server, alpha: Self.qualityRowAlpha))
+        }
+    }
+
+    /// The item's server by name, only while more than one server is signed in.
+    static func serverName(for item: MediaItem, in registry: MediaProviderRegistry? = nil) -> String? {
+        let registry = registry ?? .shared
+        guard !registry.secondaryProviders.isEmpty,
+              let provider = registry.provider(for: item.ref.providerID) else { return nil }
+        return provider.displayName
     }
 
     /// The score (glyph or source name, then value) and the Common Sense age with its green seal.

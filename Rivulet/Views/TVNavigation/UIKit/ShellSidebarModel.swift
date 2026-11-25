@@ -175,7 +175,7 @@ enum ShellSidebarModel {
             top.append(ShellSidebarItem(tab: .search, title: String(localized: "Search"), icon: "magnifyingglass"))
         }
         if !opensToLiveTV(hasMediaServer: hasMediaServer, liveTVSources: liveTVSources) {
-            top.append(ShellSidebarItem(tab: .home, title: String(localized: "Home"), icon: "house.fill"))
+            top.append(ShellSidebarItem(tab: .home, title: String(localized: "Home"), icon: SidebarHomeGlyph.name))
         }
 
         let rows = arrangeableRows(libraries: libraries, liveTVSources: liveTVSources, combineLiveTV: combineLiveTV,

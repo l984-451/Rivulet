@@ -1247,9 +1247,10 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             (data, response) = try await session.data(for: reportRequest)
         }
 
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw PlexAPIError.invalidResponse
+        guard let httpResponse = response as? HTTPURLResponse else { throw PlexAPIError.invalidResponse }
+        // The status decides whether the offline queue keeps an entry.
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw PlexAPIError.httpError(statusCode: httpResponse.statusCode, data: data)
         }
         return Self.timelineTermination(in: data)
     }

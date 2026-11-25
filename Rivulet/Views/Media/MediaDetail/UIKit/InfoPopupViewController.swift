@@ -414,8 +414,9 @@ enum InfoPopupContent {
             langs.append((String(localized: "Original Audio"), n))
         }
         if let audio = source?.audioTracks, !audio.isEmpty {
-            let summary = audioSummary(audio)
-            if !summary.isEmpty { langs.append((String(localized: "Audio"), summary)) }
+            if let summary = AudioLanguageSummary.text(audio, name: { InfoColumnsView.languageName($0) }) {
+                langs.append((String(localized: "Audio"), summary))
+            }
         }
         if let subs = source?.subtitleTracks, !subs.isEmpty {
             let names = uniqueOrdered(subs.compactMap { t -> String? in
@@ -491,42 +492,6 @@ enum InfoPopupContent {
 
     /// "English (Dolby Atmos, Dolby 5.1, AAC, AD), French (Canada) (…)" — group
     /// audio tracks by language and list each language's distinct formats.
-    private static func audioSummary(_ tracks: [AudioTrack]) -> String {
-        var byLang: [String: [String]] = [:]
-        var order: [String] = []
-        for t in tracks {
-            guard let name = InfoColumnsView.languageName(t.language) else { continue }
-            if byLang[name] == nil { byLang[name] = []; order.append(name) }
-            let fmt = audioFormat(t)
-            if !fmt.isEmpty, !(byLang[name]?.contains(fmt) ?? false) { byLang[name]?.append(fmt) }
-            if (t.title ?? t.extendedTitle ?? "").localizedCaseInsensitiveContains("descri"),
-               !(byLang[name]?.contains("AD") ?? false) { byLang[name]?.append("AD") }
-        }
-        return order.map { name in
-            let fmts = byLang[name] ?? []
-            return fmts.isEmpty ? name : "\(name) (\(fmts.joined(separator: ", ")))"
-        }.joined(separator: ", ")
-    }
-
-    private static func audioFormat(_ t: AudioTrack) -> String {
-        let codec = t.codec.lowercased()
-        let title = (t.extendedTitle ?? t.title ?? "").lowercased()
-        if title.contains("atmos") || (t.channelLayout ?? "").lowercased().contains("atmos") {
-            return "Dolby Atmos"
-        }
-        let layout = t.channelLayout ?? t.channels.map { $0 >= 6 ? "\($0 - 1).1" : ($0 >= 2 ? "Stereo" : "Mono") } ?? ""
-        let isDolby = (codec == "eac3" || codec == "ac3" || codec == "truehd")
-        if isDolby, !layout.isEmpty, layout != "Stereo", layout != "Mono" { return "Dolby \(layout)" }
-        switch codec {
-        case "aac": return "AAC"
-        case "dts", "dca": return "DTS"
-        case "truehd": return "Dolby TrueHD"
-        case "flac": return "FLAC"
-        case "ac3", "eac3": return layout.isEmpty ? "Dolby Digital" : "Dolby \(layout)"
-        default: return layout.isEmpty ? codec.uppercased() : layout
-        }
-    }
-
     private static func runtimeString(_ seconds: TimeInterval) -> String {
         let total = Int(seconds.rounded()); let h = total / 3600, m = (total % 3600) / 60
         if h > 0 { return m > 0 ? String(localized: "\(h) hr \(m) min") : String(localized: "\(h) hr") }

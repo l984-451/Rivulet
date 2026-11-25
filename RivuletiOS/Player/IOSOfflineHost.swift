@@ -18,21 +18,29 @@ enum IOSOfflineProgress {
         let center = ClientHost.offline
         // A bare Plex key (server not known) would replay to whichever server is current, and never clear.
         guard providerID != "plex:" else { return }
-        // A report that failed after a newer one landed adds nothing.
-        guard lastReached["\(providerID)|\(itemID)"].map({ $0 < at }) ?? true else { return }
         let account = account(of: providerID)
+        // A report that failed after a newer one landed adds nothing.
+        guard lastReached[reachedKey(providerID, itemID, account)].map({ $0 < at }) ?? true else { return }
         log.record(.init(providerID: providerID, profileID: center.currentProfileID, accountID: account, itemID: itemID,
                          offsetMs: offsetMs, durationMs: durationMs, watched: watched, at: at))
         try? log.save(to: url)
     }
 
-    /// A report landed, so older offline entries for the item are stale.
+    /// A report landed, so this profile's and account's older offline entries for the item are stale.
     static func reached(_ providerID: String, itemID: String, at: Date) {
-        let key = "\(providerID)|\(itemID)"
+        let profile = ClientHost.offline.currentProfileID, account = account(of: providerID)
+        let key = reachedKey(providerID, itemID, account)
         lastReached[key] = max(at, lastReached[key] ?? at)
         let before = log.entries.count
-        log.entries.removeAll { $0.providerID == providerID && $0.itemID == itemID && $0.at <= at }
+        log.entries.removeAll {
+            $0.providerID == providerID && $0.profileID == profile && $0.accountID == account && $0.itemID == itemID
+                && $0.at <= at
+        }
         if log.entries.count != before { try? log.save(to: url) }
+    }
+
+    private static func reachedKey(_ providerID: String, _ itemID: String, _ account: String?) -> String {
+        "\(providerID)|\(ClientHost.offline.currentProfileID ?? "")|\(account ?? "")|\(itemID)"
     }
 
     /// Drops a replayed entry; a newer one coalesced in meanwhile stays.

@@ -63,6 +63,7 @@ worktrees/
 
 # Secrets (do not commit)
 RivuletCore/Config/Secrets.swift
+RivuletCore/Config/TMDBKey.txt
 .env
 .env.*
 .dev.vars

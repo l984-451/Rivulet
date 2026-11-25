@@ -113,6 +113,8 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     private var extrasByID: [String: BelowFoldTrailer] = [:]
     private var castEntriesByID: [String: CastEntry] = [:]
     private var multiSeason = false
+    /// A one-season show titles its rail with the season instead of a pill, as Apple's does.
+    private var singleSeasonTitle: String?
     /// Full detail for the About + Information/Languages/Accessibility blocks.
     private var detail: MediaItemDetail?
     /// SHOW detail for episode/season opens (the About card describes the show);
@@ -128,7 +130,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         backgroundColor = .clear
 
         collectionView = FocusScrollControlledCollectionView(frame: bounds, collectionViewLayout: makeLayout())
-        collectionView.topBand = Self.detailsTopY
+        collectionView.topBand = detailsTopY
         collectionView.translatesAutoresizingMaskIntoConstraints = false
         collectionView.backgroundColor = .clear
         collectionView.delegate = self
@@ -178,11 +180,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         // Small top inset = where episodes land in details (so the focus engine
         // aligns them there). The carousel-stable peek offset is provided by the
         // large TOP INSET on the episodes section (see makeLayout), not by this.
-        let topInset = Self.detailsTopY
-        if collectionView.contentInset.top != topInset {
-            collectionView.contentInset = UIEdgeInsets(top: topInset, left: 0, bottom: 0, right: 0)
-            collectionView.setContentOffset(CGPoint(x: 0, y: -topInset), animated: false)
-        }
+        syncDetailsTop()
         // Position the rail at the carousel item's season BEFORE first render
         // (no visible scroll). Retry until the orthogonal scroller is built.
         if let target = pendingInitialScroll {
@@ -193,29 +191,44 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         }
     }
 
+    /// Moves the inset and focus band to `detailsTopY`, keeping the rows where they are on screen.
+    private func syncDetailsTop() {
+        let topInset = detailsTopY
+        let oldInset = collectionView.contentInset.top
+        guard oldInset != topInset else { return }
+        let y = oldInset == 0 ? -topInset : collectionView.contentOffset.y - (topInset - oldInset)
+        collectionView.contentInset = UIEdgeInsets(top: topInset, left: 0, bottom: 0, right: 0)
+        collectionView.topBand = topInset
+        collectionView.collectionViewLayout.invalidateLayout()
+        collectionView.setContentOffset(CGPoint(x: 0, y: y), animated: false)
+    }
+
     private func makeLayout() -> UICollectionViewCompositionalLayout {
         let layout = UICollectionViewCompositionalLayout { [weak self] index, env in
             guard let self, self.sectionKinds.indices.contains(index) else { return nil }
             // The first section's large top inset is both the peek and the scroll
             // distance the Down slide and hero fades ride on.
             let isPrimary = (index == 0)
-            let peek = max(0, self.bounds.height - Self.episodePeek - Self.detailsTopY)
+            let peek = max(0, self.bounds.height - Self.episodePeek - self.detailsTopY)
             switch self.sectionKinds[index] {
             // Episodes: LEFT-aligned (ATV+), first card at the metadata inset.
             // The collection's small contentInset.top (= detailsTopY)
             // lets the focus engine land them at ~detailsTopY in details.
             case .episodes:
+                let titled = self.singleSeasonTitle != nil
                 return self.episodesRailSection(
-                    topInset: isPrimary ? peek : 0,
-                    sectionBottomInset: 36
+                    topInset: isPrimary ? (titled ? max(0, peek - 8) : peek) : 0,
+                    sectionBottomInset: 36,
+                    header: titled
                 )
             case .trailers:
                 return self.shelfSection(
                     itemW: Self.trailerWidth,
                     itemH: Self.trailerHeight,
                     gap: MediaRowMetrics.tileGap,
-                    header: !isPrimary,
-                    topInset: isPrimary ? peek : 0,
+                    // Titled even as a movie's first row, as Apple's; the header pad comes out of the peek.
+                    header: true,
+                    topInset: isPrimary ? max(0, peek - 8) : 0,
                     headerTopInset: 8,
                     headerHeight: 44,
                     // Measured on device, tvOS 27: 105 from card bottom to the next header baseline.
@@ -226,8 +239,9 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
                     itemW: Self.trailerWidth,
                     itemH: Self.trailerHeight,
                     gap: MediaRowMetrics.tileGap,
-                    header: !isPrimary,
-                    topInset: isPrimary ? peek : 0,
+                    // Titled even as a movie's first row, as Apple's; the header pad comes out of the peek.
+                    header: true,
+                    topInset: isPrimary ? max(0, peek - 8) : 0,
                     headerTopInset: 8,
                     headerHeight: 44,
                     // Measured on device, tvOS 27: 105 from card bottom to the next header baseline.
@@ -313,7 +327,8 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
 
     /// A custom group, since episode cards and season dividers differ in width. Frames come
     /// eagerly from `cachedEpisodes`, so season scrolls and landings read exact attributes.
-    private func episodesRailSection(topInset: CGFloat, sectionBottomInset: CGFloat) -> NSCollectionLayoutSection {
+    private func episodesRailSection(topInset: CGFloat, sectionBottomInset: CGFloat,
+                                     header: Bool) -> NSCollectionLayoutSection {
         let gap = Self.episodeGap
         var frames: [CGRect] = []
         var x: CGFloat = 0
@@ -333,11 +348,20 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         section.orthogonalScrollingBehavior = .continuous
         section.contentInsetsReference = .none
         section.contentInsets = .init(
-            top: topInset,
+            top: (header ? 8 : 0) + topInset,
             leading: Self.rowLeading,
             bottom: sectionBottomInset,
             trailing: Self.rowTrailing
         )
+        if header {
+            // Placed as `shelfSection` places its header.
+            let headerItem = NSCollectionLayoutBoundarySupplementaryItem(
+                layoutSize: .init(widthDimension: .fractionalWidth(1), heightDimension: .absolute(44)),
+                elementKind: UICollectionView.elementKindSectionHeader, alignment: .top,
+                absoluteOffset: CGPoint(x: 0, y: topInset))
+            headerItem.contentInsets = .zero
+            section.boundarySupplementaryItems = [headerItem]
+        }
         return section
     }
 
@@ -439,11 +463,13 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
                 let row = self.collectionRow
                 self.configurePosterShelf(cell, section: .collection, title: row?.title ?? "",
                                           items: row?.members ?? [], trailing: row?.collection)
+                cell.headerAlpha = indexPath.section == 0 ? self.firstHeaderAlpha : 1
                 return cell
             case .relatedShelf:
                 let cell = cv.dequeueReusableCell(withReuseIdentifier: ShelfRowCell.reuseID, for: indexPath) as! ShelfRowCell
                 self.configurePosterShelf(cell, section: .related, title: String(localized: "Related"),
                                           items: self.relatedItems, trailing: nil)
+                cell.headerAlpha = indexPath.section == 0 ? self.firstHeaderAlpha : 1
                 return cell
             case .cast(let id):
                 let cell = cv.dequeueReusableCell(withReuseIdentifier: CastCollectionCell.reuseID, for: indexPath) as! CastCollectionCell
@@ -473,8 +499,10 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             case .extras:  header.configure(title: String(localized: "Extras"))
             case .related: header.configure(title: String(localized: "Related"))
             case .cast:    header.configure(title: String(localized: "Cast & Crew"), baseline: BelowFoldSectionHeader.castBaseline)
-            case .episodes, .collection, .about, .info: header.configure(title: "")
+            case .episodes: header.configure(title: self.singleSeasonTitle ?? "")
+            case .collection, .about, .info: header.configure(title: "")
             }
+            header.alpha = indexPath.section == 0 && self.firstRowIsShelf ? self.firstHeaderAlpha : 1
             return header
         }
     }
@@ -757,6 +785,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         detail = content.detail
         showDetail = content.showDetail
         multiSeason = content.seasons.count > 1
+        singleSeasonTitle = content.seasons.count == 1 ? SeasonPillView.seasonLabel(for: content.seasons[0]) : nil
         episodesByID = Dictionary(content.episodes.map { ($0.ref.itemID, $0) }, uniquingKeysWith: { a, _ in a })
         trailersByID = Dictionary(content.trailers.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         extrasByID = Dictionary(content.extras.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
@@ -866,6 +895,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             add(.info, [.info])
         }
         dataSource.apply(snapshot, animatingDifferences: false)
+        syncDetailsTop()
         // The primary peek row is section 0 (when any content exists). Drives the
         // focus-scroll "top section" logic for episodes OR a movie's related row.
         collectionView.topSectionIndex = sectionKinds.isEmpty ? nil : 0
@@ -976,17 +1006,64 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
 
     func resetScroll() {
         cancelSlide()
-        collectionView.setContentOffset(CGPoint(x: 0, y: -Self.detailsTopY), animated: false)
+        collectionView.setContentOffset(CGPoint(x: 0, y: -detailsTopY), animated: false)
     }
 
-    /// Screen-y where the first episode lands in details (under the logo + the
-    /// season-pills row, per the ATV+ reference). Also the collection's
-    /// contentInset.top, so the focus engine aligns the focused episode here.
-    /// Artwork rests 96 under the pill top, and a card frame carries half the focus growth above it.
-    static let detailsTopY: CGFloat = ExpandedDetailContainerView.seasonPillTop + 96 - MediaRowMetrics.focusGrowth / 2
+    private static let logoTop = ExpandedDetailContainerView.smallLogoTop
+    /// The first row's title fades in with the scroll, as the pills do: Apple's hero shows the row without it
+    /// (trailers, a one-season show's episodes, Related).
+    var firstHeaderAlpha: CGFloat = 0 {
+        didSet {
+            let first = IndexPath(item: 0, section: 0)
+            (collectionView.cellForItem(at: first) as? ShelfRowCell)?.headerAlpha = firstHeaderAlpha
+            guard firstRowIsShelf else { return }
+            collectionView.supplementaryView(forElementKind: UICollectionView.elementKindSectionHeader,
+                                             at: first)?.alpha = firstHeaderAlpha
+        }
+    }
+    /// A titled row leads the page: a movie's trailers or extras, or a one-season show's episodes.
+    private var firstRowIsShelf: Bool {
+        sectionKinds.first.map(isTitledShelf) ?? false
+    }
+
+    private func isTitledShelf(_ kind: BelowFoldSectionKind) -> Bool {
+        switch kind {
+        case .trailers, .extras: return true
+        case .episodes: return singleSeasonTitle != nil
+        default: return false
+        }
+    }
+
+    /// The small logo's fitted height, up to 100. Apple's rows follow the logo's bottom edge.
+    var logoHeight: CGFloat = 100 {
+        didSet { if logoHeight != oldValue { syncDetailsTop() } }
+    }
+
+    /// The season pills' top under a logo this tall (measured on device, tvOS 27: 63 below the logo).
+    static func seasonPillTop(logoHeight: CGFloat) -> CGFloat { logoTop + logoHeight + 63 }
+
+    /// Screen-y of the first row's frame top in details, and the collection's contentInset.top,
+    /// so the focus engine lands the focused top row here. Measured against the Apple TV app on
+    /// device (tvOS 27): episode art 95.5 under the pills, a movie's trailer art 134 under the logo
+    /// with its header between. A card frame carries half the focus growth above its art.
+    var detailsTopY: CGFloat {
+        let reserve = MediaRowMetrics.focusGrowth / 2
+        switch sectionKinds.first {
+        case .trailers?, .extras?, .episodes? where singleSeasonTitle != nil:
+            return Self.logoTop + logoHeight + 134 - reserve
+        case .episodes?, nil:
+            return Self.seasonPillTop(logoHeight: logoHeight) + 95.5 - reserve
+        case .related?, .collection?:
+            // Apple's posters rest 171 under the logo (Napoleon, 1997); ours sit 15 under the row's frame.
+            return Self.logoTop + logoHeight + 171 - 15
+        default:
+            // Cast or About first: Apple always leads with trailers or Related, so nothing to measure.
+            return Self.logoTop + logoHeight + 64 + 96 - reserve
+        }
+    }
 
     /// The `onScroll` value at the details rest, where the pills sit at their resting Y.
-    var detailsRestOff: CGFloat { max(0, bounds.height - Self.episodePeek - Self.detailsTopY) }
+    var detailsRestOff: CGFloat { max(0, bounds.height - Self.episodePeek - detailsTopY) }
 
     /// Whether focus is on the episodes (top) row vs a lower section. Drives the
     /// Up handler: episodes → pills; lower section → let the engine move up.
@@ -1039,7 +1116,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         // Scroll so the first episode lands at detailsTopY — which is the focus
         // engine's preferred position (contentInset.top == detailsTopY), so
         // handing focus in afterward causes no re-scroll bounce.
-        let targetY = max(0, bounds.height - Self.episodePeek - 2 * Self.detailsTopY)
+        let targetY = max(0, bounds.height - Self.episodePeek - 2 * detailsTopY)
         guard animated else {
             cancelSlide()
             setOffsetY(targetY)
@@ -1053,7 +1130,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     /// peek rest (drives the reverse choreography). Completion fires at the end.
     func slideToHeroRest(animated: Bool, completion: (() -> Void)? = nil) {
         collectionView.cancelFocusScroll()
-        let targetY = -Self.detailsTopY
+        let targetY = -detailsTopY
         guard animated else {
             cancelSlide()
             setOffsetY(targetY)
@@ -1160,7 +1237,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
            let cell = sequence(first: focused, next: \.superview).first(where: { $0 is UICollectionViewCell }) as? UICollectionViewCell,
            let path = collectionView.indexPath(for: cell),
            sectionKinds.indices.contains(path.section),
-           [.trailers, .extras].contains(sectionKinds[path.section]) {
+           isTitledShelf(sectionKinds[path.section]) {
             header = collectionView.supplementaryView(forElementKind: UICollectionView.elementKindSectionHeader,
                                                       at: IndexPath(item: 0, section: path.section)) as? BelowFoldSectionHeader
             if let header {

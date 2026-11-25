@@ -282,6 +282,15 @@ final class AccountSyncCoordinatorTests: XCTestCase {
         XCTAssertNotNil(vault.stored["plex"])
     }
 
+    func test_aSwitchOfAccountDuringTheFetchUploadsNothing() async throws {
+        device.accounts["plex"] = export("plex")
+        var current = true
+        vault.raceWrite = { current = false }
+        try await coordinator().sync(isCurrent: { current })
+        XCTAssertEqual(vault.saves, 0)
+        XCTAssertNil(vault.stored["plex"])
+    }
+
     func test_stateSurvivesARelaunch() async throws {
         let c = coordinator()
         c.signedOut(id: "livetv:a", identity: nil, everywhere: false)

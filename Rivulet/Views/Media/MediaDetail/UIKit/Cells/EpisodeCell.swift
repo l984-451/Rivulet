@@ -5,23 +5,61 @@
 //  over a description block. An episode has two focus stops: the thumb plays, the description opens details.
 
 import UIKit
-import TVUIKit
 
 /// Which sub-target of an episode card currently holds focus. Episodes split
 /// into two focus stops (thumb = play, description = details); trailers stay
 /// single-target (`.thumb` only).
 enum EpisodeFocusKind { case none, thumb, description }
 
-/// A TVCardView thumbnail that reports focus. Select comes from EpisodeCell's
-/// tap recognizer, which waits out the hold that opens the episode menu; the
-/// presses still reach TVCardView for its native press-down motion.
-final class EpisodeThumbCardView: TVCardView {
+/// The thumbnail's focus stop: resting artwork in `contentView`, inset by the focus growth so the
+/// image's own focus effect has room. Select comes from EpisodeCell's tap recognizer, which waits
+/// out the hold that opens the episode menu.
+final class EpisodeThumbCardView: UIView {
+    let contentView = UIView()
+    override var canBecomeFocused: Bool { true }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(contentView)
+        let reserve = MediaRowMetrics.focusGrowth / 2
+        NSLayoutConstraint.activate([
+            contentView.topAnchor.constraint(equalTo: topAnchor, constant: reserve),
+            contentView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: reserve),
+            contentView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -reserve),
+            contentView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -reserve),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("EpisodeThumbCardView is not Storyboard-backed") }
+
     /// (isFocused, nextFocusedView, coordinator)
     var onFocusChange: ((Bool, UIView?, UIFocusAnimationCoordinator) -> Void)?
 
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
         super.didUpdateFocus(in: context, with: coordinator)
         onFocusChange?(context.nextFocusedView === self, context.nextFocusedView, coordinator)
+    }
+
+    // A highlighted image view presses its focus effect down, as Apple's lockup presses its artwork.
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        if presses.contains(where: { $0.type == .select }) { setArtworkPressed(true) }
+        super.pressesBegan(presses, with: event)
+    }
+
+    override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        if presses.contains(where: { $0.type == .select }) { setArtworkPressed(false) }
+        super.pressesEnded(presses, with: event)
+    }
+
+    override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        if presses.contains(where: { $0.type == .select }) { setArtworkPressed(false) }
+        super.pressesCancelled(presses, with: event)
+    }
+
+    private func setArtworkPressed(_ pressed: Bool) {
+        contentView.subviews.compactMap { $0 as? UIImageView }.forEach { $0.isHighlighted = pressed }
     }
 }
 
@@ -32,8 +70,8 @@ final class EpisodeDescriptionView: UIView {
     /// Focusable only while this episode holds focus, so Up from below lands on the thumb.
     var isFocusEligible = false
     var onSelect: (() -> Void)?
-    /// (isFocused, nextFocusedView, coordinator)
-    var onFocusChange: ((Bool, UIView?, UIFocusAnimationCoordinator) -> Void)?
+    /// (isFocused, context, coordinator)
+    var onFocusChange: ((Bool, UIFocusUpdateContext, UIFocusAnimationCoordinator) -> Void)?
 
     /// Side by side, the description sits beside its thumb and is always a stop.
     var isAlwaysFocusable = false
@@ -41,7 +79,7 @@ final class EpisodeDescriptionView: UIView {
 
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
         super.didUpdateFocus(in: context, with: coordinator)
-        onFocusChange?(context.nextFocusedView === self, context.nextFocusedView, coordinator)
+        onFocusChange?(context.nextFocusedView === self, context, coordinator)
     }
 
     // Consume the Select press in BOTH began/ended so the focused block owns the
@@ -87,6 +125,11 @@ final class EpisodeCell: UIView {
     private static let cornerRadius: CGFloat = 16
     /// The Apple TV app's episode artwork radius on tvOS 27 (VideosUI `EpisodeLockupLayout.borderRadii`).
     private static let artworkRadius: CGFloat = 20
+    /// The focus effect grows the art 40 wide; Apple's episode lockup sets 50 (VideosUI `mainImageFocusSizeIncrease`).
+    private static let focusGrowthTrim: CGAffineTransform = {
+        let scale = (cardWidth + 50) / (cardWidth + 40)
+        return CGAffineTransform(scaleX: scale, y: scale)
+    }()
     /// The text under a stacked card: four summary lines end about 232 below the artwork, plus Apple's 30 focus drop.
     static let textBlockHeight: CGFloat = 262
     /// Apple's summary line pitch under an episode card.
@@ -94,9 +137,9 @@ final class EpisodeCell: UIView {
 
     // MARK: - Subviews
 
-    /// TVUIKit card around the thumbnail — gives Apple's native tvOS focus
-    /// treatment (parallax tilt + scale + specular EDGE SHEEN), like the
-    /// home-screen cards. Image + overlays live in `thumbnailCard.contentView`.
+    /// The thumbnail's focus stop. Its image view takes the system's layered-image focus effect, the
+    /// same `_UIStackedImageContainerView` the Apple TV app's episode lockup uses (VideosUI, tvOS 27);
+    /// the fade and badges ride it in `overlayContentView`.
     private let thumbnailCard = EpisodeThumbCardView()
     private let thumbnailImageView = UIImageView()
 
@@ -155,10 +198,11 @@ final class EpisodeCell: UIView {
         backgroundColor = .clear
         clipsToBounds = false
 
-        // Image and overlays go in contentView so they ride the card's focus motion.
         thumbnailCard.translatesAutoresizingMaskIntoConstraints = false
-        thumbnailCard.contentSize = CGSize(width: Self.cardWidth + MediaRowMetrics.focusGrowth, height: Self.thumbHeight)
-        thumbnailCard.contentView.backgroundColor = .clear
+        // The placeholder until the artwork loads; the image view itself doesn't clip.
+        thumbnailCard.contentView.backgroundColor = UIColor(white: 0.15, alpha: 1)
+        thumbnailCard.contentView.layer.cornerRadius = Self.artworkRadius
+        thumbnailCard.contentView.layer.cornerCurve = .continuous
         let hold = TileLongPress.makeRecognizer(target: self, action: #selector(handleHold(_:)))
         addGestureRecognizer(hold)
         thumbnailCard.addGestureRecognizer(
@@ -167,43 +211,47 @@ final class EpisodeCell: UIView {
             guard let self else { return }
             self.thumbFocused = focused
             self.applyReachability(next: next)
-            self.updateDescriptionGlass(coordinator)
-            coordinator.addCoordinatedAnimations({ self.playbackStatus.showsFocused = focused }, completion: nil)
-            self.updateTextDrop(coordinator)
+            let clock: FocusClock = focused ? .artFocusing : .artUnfocusing
+            self.updateDescriptionGlass(coordinator, on: clock)
+            self.animate(coordinator, on: clock) {
+                self.playbackStatus.showsFocused = focused
+                let grows = focused && self.splitFocus
+                self.thumbnailImageView.transform = grows ? Self.focusGrowthTrim : .identity
+            }
+            self.updateTextDrop(coordinator, on: clock)
             self.notifyFocusKind()
         }
         addSubview(thumbnailCard)
 
         thumbnailImageView.translatesAutoresizingMaskIntoConstraints = false
         thumbnailImageView.contentMode = .scaleAspectFill
-        thumbnailImageView.clipsToBounds = true
-        thumbnailImageView.layer.cornerRadius = Self.artworkRadius
-        thumbnailImageView.layer.cornerCurve = .continuous
-        thumbnailImageView.backgroundColor = UIColor(white: 0.15, alpha: 1)
+        // The system's layered focus effect, as Apple's lockup: tilt, shine, shadow, a 20 radius.
+        thumbnailImageView.adjustsImageWhenAncestorFocused = true
         thumbnailCard.contentView.addSubview(thumbnailImageView)
+        let overlay = thumbnailImageView.overlayContentView
         artworkFade.translatesAutoresizingMaskIntoConstraints = false
-        thumbnailCard.contentView.addSubview(artworkFade)
+        overlay.addSubview(artworkFade)
 
         // A trailer's title rides inside the artwork, over a scrim.
         trailerScrim.translatesAutoresizingMaskIntoConstraints = false
         trailerScrim.isHidden = true
-        thumbnailCard.contentView.addSubview(trailerScrim)
+        overlay.addSubview(trailerScrim)
         trailerTitleLabel.translatesAutoresizingMaskIntoConstraints = false
         trailerTitleLabel.font = .systemFont(ofSize: 22, weight: .semibold)
         trailerTitleLabel.textColor = .white
         trailerTitleLabel.isHidden = true
-        thumbnailCard.contentView.addSubview(trailerTitleLabel)
+        overlay.addSubview(trailerTitleLabel)
 
         playbackStatus.translatesAutoresizingMaskIntoConstraints = false
         playbackStatus.isHidden = true
-        thumbnailCard.contentView.addSubview(playbackStatus)
+        overlay.addSubview(playbackStatus)
 
         // Subtype icon (top-leading) — shown on trailer/extra tiles only.
         subtypeIcon.translatesAutoresizingMaskIntoConstraints = false
         subtypeIcon.contentMode = .scaleAspectFit
         subtypeIcon.tintColor = .white
         subtypeIcon.isHidden = true
-        thumbnailCard.contentView.addSubview(subtypeIcon)
+        overlay.addSubview(subtypeIcon)
 
         // Description block — gets a subtle rounded box only when focused (ATV+).
         descriptionBlock.translatesAutoresizingMaskIntoConstraints = false
@@ -213,12 +261,16 @@ final class EpisodeCell: UIView {
         descriptionBlock.layer.borderColor = UIColor.clear.cgColor
         descriptionBlock.onSelect = { [weak self] in self?.onShowDetails?() }
         descriptionBlock.isAlwaysFocusable = layout == .sideBySide
-        descriptionBlock.onFocusChange = { [weak self] focused, next, coordinator in
+        descriptionBlock.onFocusChange = { [weak self] focused, context, coordinator in
             guard let self else { return }
             self.descFocused = focused
-            self.applyReachability(next: next)
-            self.updateDescriptionGlass(coordinator)
-            self.updateTextDrop(coordinator)
+            self.applyReachability(next: context.nextFocusedView)
+            // A move to or from the art animates from the art's handler, on the art's clock.
+            let other = focused ? context.previouslyFocusedView : context.nextFocusedView
+            if other !== self.thumbnailCard {
+                self.updateDescriptionGlass(coordinator)
+                self.updateTextDrop(coordinator)
+            }
             self.notifyFocusKind()
         }
         addSubview(descriptionBlock)
@@ -290,7 +342,7 @@ final class EpisodeCell: UIView {
 
         thumbHeightConstraint = thumbnailCard.heightAnchor.constraint(equalToConstant: Self.thumbHeight)
 
-        // Apple's text sits 18 in from the card under an episode, as its artwork padding does.
+        // Apple's text sits 18 in from both sides of the card under an episode, as its artwork padding does.
         let inset: CGFloat = layout == .stacked ? 18 : 20
         // Apple's platter, measured: 23.5 above the EPISODE caps and 20 below the footer at rest.
         let topPad: CGFloat = layout == .stacked ? 18 : 12
@@ -331,31 +383,31 @@ final class EpisodeCell: UIView {
             thumbnailCard.leadingAnchor.constraint(equalTo: leadingAnchor, constant: -reserve),
             thumbHeightConstraint,
 
-            trailerScrim.leadingAnchor.constraint(equalTo: thumbnailCard.contentView.leadingAnchor),
-            trailerScrim.trailingAnchor.constraint(equalTo: thumbnailCard.contentView.trailingAnchor),
-            trailerScrim.bottomAnchor.constraint(equalTo: thumbnailCard.contentView.bottomAnchor),
+            trailerScrim.leadingAnchor.constraint(equalTo: overlay.leadingAnchor),
+            trailerScrim.trailingAnchor.constraint(equalTo: overlay.trailingAnchor),
+            trailerScrim.bottomAnchor.constraint(equalTo: overlay.bottomAnchor),
             trailerScrim.heightAnchor.constraint(equalToConstant: 120),
             trailerTitleLabel.leadingAnchor.constraint(equalTo: playbackStatus.leadingAnchor),
-            trailerTitleLabel.trailingAnchor.constraint(equalTo: thumbnailCard.contentView.trailingAnchor, constant: -16),
+            trailerTitleLabel.trailingAnchor.constraint(equalTo: overlay.trailingAnchor, constant: -16),
             trailerTitleLabel.bottomAnchor.constraint(equalTo: playbackStatus.topAnchor, constant: -2),
 
             thumbnailImageView.topAnchor.constraint(equalTo: thumbnailCard.contentView.topAnchor),
             thumbnailImageView.leadingAnchor.constraint(equalTo: thumbnailCard.contentView.leadingAnchor),
             thumbnailImageView.trailingAnchor.constraint(equalTo: thumbnailCard.contentView.trailingAnchor),
             thumbnailImageView.bottomAnchor.constraint(equalTo: thumbnailCard.contentView.bottomAnchor),
-            artworkFade.topAnchor.constraint(equalTo: thumbnailCard.contentView.topAnchor),
-            artworkFade.leadingAnchor.constraint(equalTo: thumbnailCard.contentView.leadingAnchor),
-            artworkFade.trailingAnchor.constraint(equalTo: thumbnailCard.contentView.trailingAnchor),
-            artworkFade.bottomAnchor.constraint(equalTo: thumbnailCard.contentView.bottomAnchor),
+            artworkFade.topAnchor.constraint(equalTo: overlay.topAnchor),
+            artworkFade.leadingAnchor.constraint(equalTo: overlay.leadingAnchor),
+            artworkFade.trailingAnchor.constraint(equalTo: overlay.trailingAnchor),
+            artworkFade.bottomAnchor.constraint(equalTo: overlay.bottomAnchor),
 
             // Apple's padding: 18 from the leading edge, the time's baseline 18 above the bottom.
-            playbackStatus.leadingAnchor.constraint(equalTo: thumbnailCard.contentView.leadingAnchor, constant: 18),
-            playbackStatus.trailingAnchor.constraint(lessThanOrEqualTo: thumbnailCard.contentView.trailingAnchor, constant: -18),
-            playbackStatus.lastBaselineAnchor.constraint(equalTo: thumbnailCard.contentView.bottomAnchor, constant: -18),
+            playbackStatus.leadingAnchor.constraint(equalTo: overlay.leadingAnchor, constant: 18),
+            playbackStatus.trailingAnchor.constraint(lessThanOrEqualTo: overlay.trailingAnchor, constant: -18),
+            playbackStatus.lastBaselineAnchor.constraint(equalTo: overlay.bottomAnchor, constant: -18),
 
             // Subtype icon: top-leading corner of the thumbnail.
-            subtypeIcon.leadingAnchor.constraint(equalTo: thumbnailCard.contentView.leadingAnchor, constant: 10),
-            subtypeIcon.topAnchor.constraint(equalTo: thumbnailCard.contentView.topAnchor, constant: 10),
+            subtypeIcon.leadingAnchor.constraint(equalTo: overlay.leadingAnchor, constant: 10),
+            subtypeIcon.topAnchor.constraint(equalTo: overlay.topAnchor, constant: 10),
             subtypeIcon.widthAnchor.constraint(equalToConstant: 22),
             subtypeIcon.heightAnchor.constraint(equalToConstant: 22),
 
@@ -364,19 +416,19 @@ final class EpisodeCell: UIView {
             // under the title instead of vertical-centering in a fixed box.
             episodeLabel.topAnchor.constraint(equalTo: descriptionBlock.topAnchor, constant: topPad),
             episodeLeading,
-            episodeLabel.trailingAnchor.constraint(equalTo: descriptionBlock.trailingAnchor, constant: -20),
+            episodeLabel.trailingAnchor.constraint(equalTo: descriptionBlock.trailingAnchor, constant: -inset),
 
             titleLabel.topAnchor.constraint(equalTo: episodeLabel.bottomAnchor, constant: 2),
             titleLeading,
-            titleLabel.trailingAnchor.constraint(equalTo: descriptionBlock.trailingAnchor, constant: -20),
+            titleLabel.trailingAnchor.constraint(equalTo: descriptionBlock.trailingAnchor, constant: -inset),
 
             summaryLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor),
             summaryLeading,
-            summaryLabel.trailingAnchor.constraint(equalTo: descriptionBlock.trailingAnchor, constant: -20),
+            summaryLabel.trailingAnchor.constraint(equalTo: descriptionBlock.trailingAnchor, constant: -inset),
 
             footerRow.topAnchor.constraint(equalTo: summaryLabel.bottomAnchor, constant: 5),
             footerLeading,
-            footerRow.trailingAnchor.constraint(lessThanOrEqualTo: descriptionBlock.trailingAnchor, constant: -20),
+            footerRow.trailingAnchor.constraint(lessThanOrEqualTo: descriptionBlock.trailingAnchor, constant: -inset),
             descriptionBlock.bottomAnchor.constraint(equalTo: footerRow.bottomAnchor, constant: bottomPad),
         ])
     }
@@ -509,7 +561,6 @@ final class EpisodeCell: UIView {
     private func setTrailerLayout(_ trailer: Bool) {
         let height = trailer ? Self.trailerThumbHeight : Self.thumbHeight
         thumbHeightConstraint.constant = height
-        thumbnailCard.contentSize = CGSize(width: Self.cardWidth + MediaRowMetrics.focusGrowth, height: height)
         trailerScrim.isHidden = !trailer
         trailerTitleLabel.isHidden = !trailer
         descriptionBlock.isHidden = trailer
@@ -520,7 +571,7 @@ final class EpisodeCell: UIView {
 
     /// Metadata box: full glass when the description (or a trailer's thumb) is focused,
     /// a faint tint for an episode's focused thumb, clear otherwise.
-    private func updateDescriptionGlass(_ coordinator: UIFocusAnimationCoordinator?) {
+    private func updateDescriptionGlass(_ coordinator: UIFocusAnimationCoordinator?, on clock: FocusClock = .shared) {
         let apply = { [self] in
             // Apple brightens the text under focused art; a focused description lifts only its date and rating.
             let secondary = thumbFocused ? UIColor.white.withAlphaComponent(0.6) : Self.secondaryText
@@ -529,9 +580,10 @@ final class EpisodeCell: UIView {
             [dateLabel, ratingBadge].forEach { $0.textColor = footer }
             ratingBadge.layer.borderColor = footer.cgColor
             if layout == .stacked && splitFocus {
-                // Measured on Apple's 4K capture: the platter is the card's width and the whole block
-                // scales 1.085, so the text stays about 17 from the platter's edge.
-                descriptionBlock.transform = descFocused ? CGAffineTransform(scaleX: 1.085, y: 1.085) : .identity
+                // Measured on Apple's 4K captures: the whole block scales 1.085 while it is focused,
+                // and 1.05 under focused art (text pitch 30 to 31.5, platter 430 wide).
+                let scale: CGFloat = descFocused ? 1.085 : thumbFocused ? 1.05 : 1
+                descriptionBlock.transform = CGAffineTransform(scaleX: scale, y: scale)
                 descriptionBlock.layoutIfNeeded()
             }
             if descFocused {
@@ -551,9 +603,21 @@ final class EpisodeCell: UIView {
             }
         }
         if let coordinator {
-            coordinator.addCoordinatedAnimations({ apply() }, completion: nil)
+            animate(coordinator, on: clock, apply)
         } else {
             apply()
+        }
+    }
+
+    /// Which timing a focus change's text and platter follow. Moving between the art and its description,
+    /// they ride the art's own clock, so the platter never reaches the art before it settles (Apple's never touch).
+    private enum FocusClock { case shared, artFocusing, artUnfocusing }
+
+    private func animate(_ coordinator: UIFocusAnimationCoordinator, on clock: FocusClock, _ body: @escaping () -> Void) {
+        switch clock {
+        case .shared: coordinator.addCoordinatedAnimations(body, completion: nil)
+        case .artFocusing: coordinator.addCoordinatedFocusingAnimations({ _ in body() }, completion: nil)
+        case .artUnfocusing: coordinator.addCoordinatedUnfocusingAnimations({ _ in body() }, completion: nil)
         }
     }
 
@@ -595,6 +659,8 @@ final class EpisodeCell: UIView {
         playbackStatus.showsFocused = false
         textTop?.constant = Self.textRestOffset
         descriptionBlock.transform = .identity
+        thumbnailImageView.transform = .identity
+        thumbnailImageView.isHighlighted = false
         let secondary = Self.secondaryText
         [episodeLabel, summaryLabel, dateLabel, ratingBadge].forEach { $0.textColor = secondary }
         ratingBadge.layer.borderColor = secondary.cgColor
@@ -614,13 +680,15 @@ final class EpisodeCell: UIView {
     }
 
     /// Moves a stacked card's text clear of the grown artwork, as Apple's lockup does (VideosUI 26.5 0x4df010).
-    private func updateTextDrop(_ coordinator: UIFocusAnimationCoordinator) {
-        guard let textTop else { return }
-        // Apple drops 30 and 20; our artwork grows less, so the focused art's text drops 16 (measured on device).
-        let drop: CGFloat = thumbFocused ? 16 : descFocused ? 20 : 0
-        guard textTop.constant != Self.textRestOffset + drop else { return }
-        textTop.constant = Self.textRestOffset + drop
-        coordinator.addCoordinatedAnimations({ self.layoutIfNeeded() }, completion: nil)
+    private func updateTextDrop(_ coordinator: UIFocusAnimationCoordinator, on clock: FocusClock = .shared) {
+        guard textTop != nil else { return }
+        // Read inside the animation: the art's and the description's handlers both run before it.
+        animate(coordinator, on: clock) { [self] in
+            // Apple drops 30 under focused art and 20 while the text is focused.
+            let drop: CGFloat = thumbFocused ? 30 : descFocused ? 20 : 0
+            textTop?.constant = Self.textRestOffset + drop
+            layoutIfNeeded()
+        }
     }
 
     /// The summary on Apple's 30 pt line pitch.
@@ -761,8 +829,9 @@ private final class EpisodePlaybackStatusView: UIStackView {
     }
 }
 
-/// Two static gradients, as the Apple TV app's episode lockup draws them on tvOS 27: dark gray to 64%,
-/// then the artwork's tint to 90%. Colors, stops and locations are Apple's (VideosUI `EpisodeLockupLayout`).
+/// Two static gradients, as the Apple TV app's episode lockup draws them on tvOS 27: the artwork's tint
+/// to 90%, under dark gray to 64%, so a light tint still darkens. Colors, stops and locations are Apple's
+/// (VideosUI `EpisodeLockupLayout`).
 private final class EpisodeArtworkFadeView: UIView {
     private let darkening = CAGradientLayer()
     private let tinted = CAGradientLayer()
@@ -783,8 +852,8 @@ private final class EpisodeArtworkFadeView: UIView {
             gradient.cornerCurve = .continuous
         }
         tinted.locations = [0.66, 0.71, 0.77, 0.81, 0.85, 0.9, 0.94, 1]
-        layer.addSublayer(darkening)
         layer.addSublayer(tinted)
+        layer.addSublayer(darkening)
         applyTint()
     }
 

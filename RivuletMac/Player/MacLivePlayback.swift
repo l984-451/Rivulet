@@ -91,7 +91,7 @@ final class MacLivePlayback: ObservableObject, MacPlaybackSession {
                forSessionPosition: target,
                in: LiveSeekableWindow(lowerBound: range.lowerBound, upperBound: window.edgeTime),
                edgeWall: Date().addingTimeInterval(-liveLag)) {
-            reloadRecording(start.joining(atOffset: offset))
+            await reloadRecording(start.joining(atOffset: offset))
             return
         }
         await player.seekLive(to: target)
@@ -99,26 +99,26 @@ final class MacLivePlayback: ObservableObject, MacPlaybackSession {
 
     /// Loads the same recorder session from a later (or earlier) offset. The tune and its
     /// keepalive stay, so a skip costs one playlist fetch, not a re-tune.
-    private func reloadRecording(_ start: LiveRecordingStart) {
+    private func reloadRecording(_ start: LiveRecordingStart) async {
         recordingStart = start
         liveLag = start.lag(at: Date())
-        reloadEngine(start.url, joinsAtRecordingStart: true)
+        await reloadEngine(start.url, joinsAtRecordingStart: true)
     }
 
     /// The same recorder session joined at its head, which is live: no re-tune.
-    private func reloadAtLive(_ start: LiveRecordingStart) {
+    private func reloadAtLive(_ start: LiveRecordingStart) async {
         let head = start.joining(atOffset: Date().timeIntervalSince(start.firstSegmentAired) - LiveRecordingStart.headMargin)
         recordingStart = nil
         liveLag = 0
-        windowSeeker.cancelPending()
-        reloadEngine(head.url, joinsAtRecordingStart: false)
+        await reloadEngine(head.url, joinsAtRecordingStart: false)
     }
 
-    /// Reloads the engine on the session already tuned.
-    private func reloadEngine(_ url: URL, joinsAtRecordingStart: Bool) {
+    /// Reloads the engine on the session already tuned. Awaited, so the skip control holds
+    /// presses until the new window exists.
+    private func reloadEngine(_ url: URL, joinsAtRecordingStart: Bool) async {
         let headers = LiveTVClientIdentity.streamHeaders(for: channel)
         loadTask?.cancel()
-        loadTask = Task {
+        let task = Task {
             do {
                 try await player.loadLive(url: url, headers: headers,
                                           forceEngineDemux: true, joinsAtRecordingStart: joinsAtRecordingStart)
@@ -129,12 +129,14 @@ final class MacLivePlayback: ObservableObject, MacPlaybackSession {
                 retry()
             }
         }
+        loadTask = task
+        await task.value
     }
 
     /// The controller's far end. Behind a recording's head, live is the recording's head.
     private func seekToLiveEdge() async {
         if liveLag > 0, let start = recordingStart {
-            reloadAtLive(start)
+            await reloadAtLive(start)
         } else {
             await player.seekToLiveEdge()
         }
@@ -142,7 +144,8 @@ final class MacLivePlayback: ObservableObject, MacPlaybackSession {
 
     func goLive() {
         if liveLag > 0, let start = recordingStart {
-            reloadAtLive(start)
+            windowSeeker.cancelPending()
+            Task { await reloadAtLive(start) }
             return
         }
         if liveLag > 0 {

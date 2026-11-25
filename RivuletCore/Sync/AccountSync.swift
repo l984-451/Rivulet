@@ -206,10 +206,12 @@ final class AccountSyncCoordinator {
 
     /// True when it signed anything in or out here.
     @discardableResult
-    func sync() async throws -> Bool {
+    func sync(isCurrent: () -> Bool = { true }) async throws -> Bool {
         var changed = false
         for _ in 0..<3 {
             let snapshot = try await vault.fetch()
+            // The Apple account may have changed while this was out: its vault is not this one's.
+            guard isCurrent() else { return changed }
             let plan = AccountSyncPlanner.plan(
                 exports: kinds.flatMap { $0.export() },
                 handled: Set(kinds.map(\.kind)), updatesInPlace: Set(kinds.filter(\.updatesInPlace).map(\.kind)),
@@ -244,6 +246,7 @@ final class AccountSyncCoordinator {
             save()
 
             guard plan.needsUpload else { markShared(in: plan.merged); return changed }
+            guard isCurrent() else { return changed }
             if try await vault.save(plan.merged, over: snapshot) == .saved {
                 markShared(in: plan.merged)
                 return changed

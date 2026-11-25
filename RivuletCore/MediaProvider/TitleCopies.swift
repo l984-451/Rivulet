@@ -30,10 +30,13 @@ enum TitleCopies {
     /// Complete results by title and server set, for `lifetime`. A failed request leaves its
     /// title out, so the next open asks again. The host empties it when watch state changes
     /// (a copy's resume point is in its result) and libraries can change under it, hence the expiry.
+    @MainActor
     final class Cache {
         static let shared = Cache()
         static let lifetime: TimeInterval = 600
         private var results: [String: (result: Result, stored: Date)] = [:]
+        private var running: [String: Task<Result, Never>] = [:]
+        private var generation = 0
 
         func result(for key: String, now: Date = Date()) -> Result? {
             guard let entry = results[key] else { return nil }
@@ -51,7 +54,27 @@ enum TitleCopies {
             results[key] = (result, now)
         }
 
-        func removeAll() { results.removeAll() }
+        func removeAll() {
+            results.removeAll()
+            running.removeAll()
+            generation += 1
+        }
+
+        /// The cached result, else the lookup already running for `key`, else `lookup` started now.
+        /// A caller's cancellation leaves a shared lookup running for the others.
+        func result(for key: String, lookup: @escaping @MainActor () async -> Result) async -> Result {
+            if let cached = result(for: key) { return cached }
+            if let task = running[key] { return await task.value }
+            let task = Task { await lookup() }
+            running[key] = task
+            let started = generation
+            let result = await task.value
+            // Emptied meanwhile: the answer may predate the change, so it is returned but not kept.
+            guard generation == started else { return result }
+            running[key] = nil
+            store(result, for: key)
+            return result
+        }
     }
 
     /// The servers that can hold another copy: the shown item's own needs a second library of its
@@ -70,8 +93,15 @@ enum TitleCopies {
                       cache: Cache? = nil,
                       owners: @escaping Owners = PlexOwnedLookup.owners(of:on:)) async -> Result {
         let registry = registry ?? .shared, cache = cache ?? .shared
-        let key = cacheKey(subject, servers)
-        if let cached = cache.result(for: key) { return cached }
+        return await cache.result(for: cacheKey(subject, servers)) {
+            await lookUpMovie(subject, guid: guid, externalIDs: externalIDs, on: servers,
+                              registry: registry, owners: owners)
+        }
+    }
+
+    private static func lookUpMovie(_ subject: MediaItem, guid: String, externalIDs: [String: String],
+                                    on servers: [PlexOwnedLookup.Server], registry: MediaProviderRegistry,
+                                    owners: @escaping Owners) async -> Result {
         let found = await titles(guid: guid, of: subject, externalIDs: externalIDs,
                                  on: servers, registry: registry, owners: owners)
         var result = Result(library: found.found.first { $0.ref == subject.ref }?.library, complete: found.complete)
@@ -86,7 +116,6 @@ enum TitleCopies {
             case .none: result.complete = false
             }
         }
-        cache.store(result, for: key)
         return result
     }
 
@@ -98,8 +127,16 @@ enum TitleCopies {
                         owners: @escaping Owners = PlexOwnedLookup.owners(of:on:)) async -> Result {
         guard let seasonNumber = episode.seasonNumber, let episodeNumber = episode.episodeNumber else { return Result() }
         let registry = registry ?? .shared, cache = cache ?? .shared
-        let key = cacheKey(episode, servers)
-        if let cached = cache.result(for: key) { return cached }
+        return await cache.result(for: cacheKey(episode, servers)) {
+            await lookUpEpisode(episode, season: seasonNumber, number: episodeNumber, of: show,
+                                showDetail: showDetail, on: servers, registry: registry, owners: owners)
+        }
+    }
+
+    private static func lookUpEpisode(_ episode: MediaItem, season seasonNumber: Int, number episodeNumber: Int,
+                                      of show: MediaItem, showDetail: MediaItemDetail,
+                                      on servers: [PlexOwnedLookup.Server], registry: MediaProviderRegistry,
+                                      owners: @escaping Owners) async -> Result {
         let found = await titles(guid: showDetail.plexGUID, of: show, externalIDs: showDetail.externalIDs,
                                  on: servers, registry: registry, owners: owners)
         var result = Result(library: found.found.first { $0.ref == show.ref }?.library, complete: found.complete)
@@ -129,7 +166,6 @@ enum TitleCopies {
             case .none: result.complete = false
             }
         }
-        cache.store(result, for: key)
         return result
     }
 

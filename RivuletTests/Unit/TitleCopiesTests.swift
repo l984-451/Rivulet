@@ -231,6 +231,31 @@ final class TitleCopiesTests: XCTestCase {
         XCTAssertEqual(officeProvider.playbackCalls, ["detail(9)"], "the second open asked nothing")
     }
 
+    /// Two views opening the same title at once share one lookup.
+    func test_movie_lookupsAtOnce_shareOne() async {
+        let shown = item("1", on: home)
+        let other = item("9", on: office)
+        serve(officeProvider, ["9": detail(other, files: ["b"])])
+        let cache = TitleCopies.Cache()
+        let asked = Counter()
+        let answer = owners([(office, "9", nil)])
+        let lookup: TitleCopies.Owners = { guids, servers in
+            await asked.add()
+            try? await Task.sleep(for: .milliseconds(50))
+            return await answer(guids, servers)
+        }
+        async let first = TitleCopies.movie(shown, guid: "g", externalIDs: [:], on: [home, office],
+                                            registry: registry, cache: cache, owners: lookup)
+        async let second = TitleCopies.movie(shown, guid: "g", externalIDs: [:], on: [home, office],
+                                             registry: registry, cache: cache, owners: lookup)
+        let (a, b) = await (first, second)
+        XCTAssertEqual(a.copies.map(\.item.ref), [other.ref])
+        XCTAssertEqual(b.copies.map(\.item.ref), [other.ref])
+        let count = await asked.value
+        XCTAssertEqual(count, 1)
+        XCTAssertEqual(officeProvider.playbackCalls, ["detail(9)"])
+    }
+
     func test_cache_expiresAndEmpties() {
         let cache = TitleCopies.Cache()
         let start = Date(timeIntervalSince1970: 0)
@@ -307,4 +332,9 @@ private final class Flag: @unchecked Sendable {
     private var raised = false
     var value: Bool { lock.withLock { raised } }
     func set() { lock.withLock { raised = true } }
+}
+
+private actor Counter {
+    private(set) var value = 0
+    func add() { value += 1 }
 }

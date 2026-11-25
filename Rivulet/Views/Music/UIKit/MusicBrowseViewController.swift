@@ -341,8 +341,8 @@ final class MusicBrowseViewController: UIViewController, UICollectionViewDelegat
 
     /// The pane starts at x 400; its content at x 440.
     private static let leading: CGFloat = 40
-    /// First grid row, 121 below the header's top.
-    private static let gridTop: CGFloat = 181
+    /// First grid row, 106 below the header's pill top.
+    private static let gridTop: CGFloat = MusicMetrics.libraryTop + 106
 
     private var hasHeader: Bool { destination != .recentlyAdded }
     private var tileLines: Int { destination == .artists || destination == .playlists ? 1 : 2 }
@@ -363,7 +363,7 @@ final class MusicBrowseViewController: UIViewController, UICollectionViewDelegat
             // Insets are from the collection's edges; the default reference adds the tvOS safe area.
             section.contentInsetsReference = .none
             section.contentInsets = NSDirectionalEdgeInsets(
-                top: index == 1 && !hasHeader ? MusicMetrics.top : 0, leading: Self.leading,
+                top: index == 1 && !hasHeader ? MusicMetrics.libraryTop : 0, leading: Self.leading,
                 bottom: index == 1 ? 60 : 0, trailing: MusicMetrics.margin)
             return section
         }

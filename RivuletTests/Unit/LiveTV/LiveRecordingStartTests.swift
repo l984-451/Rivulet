@@ -57,6 +57,34 @@ final class LiveRecordingStartTests: XCTestCase {
                                                             in: [recording(.recording, from: -600, to: -1)], at: now))
     }
 
+    func test_joining_asksTheListFromThatOffsetAndMeasuresLagFromIt() throws {
+        let start = LiveRecordingStart(recording: recording(.recording),
+                                       url: try XCTUnwrap(LiveRecordingStart.playlistFromStart(grant)),
+                                       firstSegmentAired: now.addingTimeInterval(-900))
+        XCTAssertEqual(start.lag(at: now), 900)
+        let later = start.joining(atOffset: 600)
+        XCTAssertEqual(URLComponents(url: later.url, resolvingAgainstBaseURL: false)?
+            .queryItems?.filter { $0.name == "offset" }.map(\.value), ["600"])
+        XCTAssertEqual(later.lag(at: now), 300)
+        XCTAssertEqual(later.reach(lag: 300).before, 600)
+        XCTAssertEqual(later.reach(lag: 300).after, 280)
+        XCTAssertEqual(start.reach(lag: 10).after, 0)
+    }
+
+    func test_rejoinOffset_onlyOutsideWhatTheEngineHolds() throws {
+        let start = LiveRecordingStart(recording: recording(.recording), url: grant,
+                                       firstSegmentAired: now.addingTimeInterval(-900))
+        let window = LiveSeekableWindow(lowerBound: 10, upperBound: 40)
+        // The edge (session 40) is 880 s into the recording.
+        let edgeWall = now.addingTimeInterval(-20)
+        XCTAssertNil(start.rejoinOffset(forSessionPosition: 30, in: window, edgeWall: edgeWall))
+        XCTAssertEqual(start.rejoinOffset(forSessionPosition: 100, in: window, edgeWall: edgeWall), 940)
+        // No offset behind the first join: the window already reaches the start.
+        XCTAssertNil(start.rejoinOffset(forSessionPosition: 5, in: window, edgeWall: edgeWall))
+        XCTAssertEqual(start.joining(atOffset: 600).rejoinOffset(forSessionPosition: 5, in: window,
+                                                                 edgeWall: edgeWall), 845)
+    }
+
     /// A programme that airs every two hours lists all its airings under one grab
     /// (measured, PMS 1.43); `mediaIndex` names the one being recorded.
     func test_plexGrab_takesTheAiringMediaIndexNames() throws {

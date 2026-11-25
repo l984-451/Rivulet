@@ -46,7 +46,7 @@ struct ContentView: View {
             }
         .onChange(of: authManager.hasCredentials) { _, hasCredentials in
             splashLog.info("hasCredentials changed to \(hasCredentials)")
-            if !hasCredentials {
+            if !hasCredentials && !ServerDataStore.shared.isSignedIn {
                 splashLog.info("No credentials — dismissing splash")
                 showSplash = false
             }
@@ -89,8 +89,10 @@ struct ContentView: View {
             PlexExtraServers.shared.refreshForAccount()
             StartupTimer.mark("registries bootstrapped")
 
-            splashLog.info("Splash task started — hasCredentials=\(self.authManager.hasCredentials)")
-            if !authManager.hasCredentials {
+            // A Jellyfin or Emby server counts too, as in TVSidebarView.
+            let signedIn = authManager.hasCredentials || ServerDataStore.shared.isSignedIn
+            splashLog.info("Splash task started — hasCredentials=\(self.authManager.hasCredentials) signedIn=\(signedIn)")
+            if !signedIn {
                 splashLog.info("No credentials on launch — dismissing splash immediately")
                 showSplash = false
                 return

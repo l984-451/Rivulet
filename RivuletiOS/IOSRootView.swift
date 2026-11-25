@@ -19,6 +19,9 @@ struct IOSRootView: View {
     @AppStorage("lastSeenBuild") private var lastSeenBuild = ""
     @AppStorage(IOSLibrarySettingsView.showPlaylistsKey) private var showPlaylists = true
     @AppStorage("showFavoritesTab") private var showFavorites = false
+    /// The iPad sidebar's own tab customization: a library dragged into the top bar stays there.
+    @AppStorage("iosTabCustomization") private var tabCustomization = TabViewCustomization()
+    @ObservedObject private var liveTV = LiveTVDataStore.shared
     @State private var backgroundedAt: Date?
     /// The Library tab's selection, column and detail path, so "Go to Downloads" can open it from any tab.
     @State private var librarySelection: IOSLibrarySelection?
@@ -33,6 +36,7 @@ struct IOSRootView: View {
     /// The library menu on the top bar's Library item.
     @State private var showingLibraryMenu = false
     @Namespace private var homeZoom
+    @Namespace private var discoverZoom
     @Namespace private var libraryZoom
     @Namespace private var sidebarZoom
     @Namespace private var searchZoom
@@ -55,6 +59,14 @@ struct IOSRootView: View {
                     IOSPlexHomeView().environment(\.launchHeroReady) { splashGate.heroIsReady() }
                 }
             }
+            .customizationID("home")
+            .customizationBehavior(.disabled, for: .sidebar, .tabBar)
+            if showsDiscover {
+                Tab("Discover", systemImage: "sparkles", value: "discover") {
+                    tabStack(discoverZoom) { IOSDiscoverView() }
+                }
+                .customizationID("discover")
+            }
             // iPhone flattens sections into the tab bar, so libraries live only in the iPad sidebar.
             TabSection("Library") {
                 // First in the section, so the iPad top bar's Library opens the list, not the last page picked.
@@ -68,17 +80,21 @@ struct IOSRootView: View {
                 // The sidebar lists each library itself, so the list tab would repeat it.
                 // On iPad at full width this tab hands its library to the library's own tab.
                 .defaultVisibility(.hidden, for: .sidebar)
+                .customizationID("library")
+                .customizationBehavior(.disabled, for: .sidebar, .tabBar)
                 if showsSidebarLibraries {
                     Tab("Downloads", systemImage: "arrow.down.circle", value: "downloads") {
                         sidebarStack("downloads") { IOSDownloadsView(showsAccount: true) }
                     }
                     .defaultVisibility(.hidden, for: .tabBar)
+                    .customizationID("downloads")
                 }
                 if showsSidebarLibraries, showsFavorites {
                     Tab("Favorites", systemImage: "heart", value: "favorites") {
                         sidebarStack("favorites") { IOSFavoritesView(showsAccount: true) }
                     }
                     .defaultVisibility(.hidden, for: .tabBar)
+                    .customizationID("favorites")
                 }
                 // Not by `id`: that is the server's own section number, so two servers collide and UIKit's sidebar throws.
                 ForEach(showsSidebarLibraries ? videoLibraries : [], id: \.self) { library in
@@ -87,6 +103,7 @@ struct IOSRootView: View {
                         sidebarStack(libraryTab(library)) { IOSLibraryPage(library: library, showsAccount: true) }
                     }
                     .defaultVisibility(.hidden, for: .tabBar)
+                    .customizationID(libraryTab(library))
                 }
                 ForEach(showsSidebarLibraries ? playlistServers : [], id: \.self) { providerID in
                     Tab(browse.labels.title(String(localized: "Playlists"), providerID: providerID), systemImage: "list.and.film",
@@ -94,22 +111,31 @@ struct IOSRootView: View {
                         sidebarStack(playlistsTab(providerID)) { IOSPlexPlaylistsView(providerID: providerID, showsAccount: true) }
                     }
                     .defaultVisibility(.hidden, for: .tabBar)
+                    .customizationID(playlistsTab(providerID))
                 }
             }
+            .customizationID("librarySection")
             // The top bar shows the whole section as one Library item, so the menu hangs from it.
             .popover(isPresented: $showingLibraryMenu) {
                 IOSLibraryMenu(selection: librarySelection(forTab: selectedTab) ?? librarySelection, pick: pickLibrary)
                     .iosSessionObjects(plex)
             }
-            Tab("Live TV", systemImage: "play.tv", value: "live-tv") {
-                NavigationStack { IOSLiveTVView() }
-                    .reportsTabBarPlacement($tabBarPlacement)
+            // Only with a source, as tvOS's sidebar: adding the first one is under Account > Live TV.
+            if showsLiveTV {
+                Tab("Live TV", systemImage: "play.tv", value: "live-tv") {
+                    NavigationStack { IOSLiveTVView() }
+                        .reportsTabBarPlacement($tabBarPlacement)
+                }
+                .customizationID("live-tv")
             }
             Tab(value: "search", role: .search) {
                 tabStack(searchZoom) { IOSPlexSearchView() }
             }
+            .customizationID("search")
+            .customizationBehavior(.disabled, for: .sidebar, .tabBar)
         }
         .tabViewStyle(.sidebarAdaptable)
+        .tabViewCustomization($tabCustomization)
         .tabViewSearchActivation(.searchTabSelection)
         .tabBarMinimizeBehavior(.onScrollDown)
         .environment(\.openAccount) { showingAccount = true }
@@ -178,6 +204,14 @@ struct IOSRootView: View {
         .onChange(of: selectedTab) { placeLibraryTab() }
         .onChange(of: sidebarTabs) { placeLibraryTab() }
         .onChange(of: browse.isLoadingContent) { placeLibraryTab() }
+        // Without Plex there is no Discover tab, at launch or after signing out: Home takes its place.
+        .onChange(of: showsDiscover, initial: true) { _, shows in
+            if !shows, selectedTab == "discover" { selectedTab = "home" }
+        }
+        // Not at launch: sources from a server arrive after it, and the tab then comes back on its own.
+        .onChange(of: showsLiveTV) { _, shows in
+            if !shows, selectedTab == "live-tv" { selectedTab = "home" }
+        }
         .onChange(of: browse.sessionGeneration) {
             librarySelection = nil
             libraryColumn = .sidebar
@@ -203,10 +237,12 @@ struct IOSRootView: View {
     /// The tab view's selection. Only a tap in the tab bar or sidebar writes through it; the
     /// root's own switches set `selectedTab`. Under the top bar, a tap on Library, from another
     /// tab or on Library itself, also opens the library menu. That item is the whole section and
-    /// selects whichever of its tabs was picked last, so any of them counts.
+    /// selects whichever of its tabs was picked last, so any of them counts, except a library
+    /// dragged into the top bar as its own item: a tap there just opens it.
     private var tabSelection: Binding<String> {
         Binding(get: { selectedTab }, set: { tab in
-            if tab == "library" || Self.isSidebarTab(tab), showsSidebarLibraries, tabBarPlacement == .topBar {
+            if tab == "library" || Self.isSidebarTab(tab), showsSidebarLibraries, tabBarPlacement == .topBar,
+               tabCustomization[tab: tab].tabBarVisibility != .visible {
                 showingLibraryMenu = true
             }
             selectedTab = tab
@@ -237,8 +273,14 @@ struct IOSRootView: View {
     /// Home is on screen: its own tab, or a stored tab this window does not have (a tab from an
     /// older build, or a library not loaded yet), for which the tab view shows its first tab, Home.
     private var showsHome: Bool {
-        selectedTab == "home" || !(["library", "live-tv", "search"] + sidebarTabs).contains(selectedTab)
+        selectedTab == "home" || !(["library", "search"] + (showsDiscover ? ["discover"] : [])
+            + (showsLiveTV ? ["live-tv"] : []) + sidebarTabs).contains(selectedTab)
     }
+
+    /// TMDB's rows, offered with Plex signed in, as on tvOS.
+    private var showsDiscover: Bool { plex.isSignedIn }
+
+    private var showsLiveTV: Bool { !liveTV.sources.isEmpty }
 
     /// A sidebar library tab vanishes on a server without that library.
     private func dropOrphanedLibraryTab() {

@@ -21,12 +21,24 @@ final class HeroSlideView: UIView {
     private let taglineLabel = UILabel()
     private let stack = UIStackView()
 
-    static let maxLogoHeight: CGFloat = 180, maxTaglineWidth: CGFloat = 720, rowSpacing: CGFloat = 18
-    private static let metadataFont = UIFont.systemFont(ofSize: 25, weight: .medium)
-    private static let taglineFont = UIFont.systemFont(ofSize: 25, weight: .regular)
+    // Apple's measured slide values; `MediaItemSlideView` (non-Plex hero sources) reads the same ones.
+    static let maxLogoHeight: CGFloat = 180, maxLogoWidth: CGFloat = 420, maxTaglineWidth: CGFloat = 580
+    static let rowSpacing: CGFloat = 18, metadataSpacing: CGFloat = 8.5
+    static let metadataFont = UIFont.systemFont(ofSize: 25, weight: .medium)
+    static let taglineFont = UIFont.systemFont(ofSize: 25, weight: .regular)
+    static let taglineColor = UIColor.white.withAlphaComponent(0.5)
+    /// Apple's tagline line pitch.
+    static let taglineLineHeight: CGFloat = 32
+    private static let taglineStyle: NSParagraphStyle = {
+        let p = NSMutableParagraphStyle()
+        p.minimumLineHeight = taglineLineHeight
+        p.maximumLineHeight = taglineLineHeight
+        p.lineBreakMode = .byTruncatingTail
+        return p
+    }()
     /// The stack at its tallest: a full-height logo, the metadata row, two tagline lines.
     static var maxHeight: CGFloat {
-        maxLogoHeight + rowSpacing + ceil(metadataFont.lineHeight) + rowSpacing + 2 * ceil(taglineFont.lineHeight)
+        maxLogoHeight + rowSpacing + ceil(metadataFont.lineHeight) + rowSpacing + 2 * taglineLineHeight
     }
 
     // MARK: - Image loading state
@@ -61,14 +73,14 @@ final class HeroSlideView: UIView {
         fallbackTitleLabel.isHidden = true
 
         // Metadata text (type · genre)
-        // Apple's genres row: Caption1 (25) medium at full white, 12 pt to the badge.
+        // Apple's genres row: Caption1 (25) medium at full white.
         metadataLabel.font = Self.metadataFont
         metadataLabel.textColor = .white
         metadataLabel.numberOfLines = 1
 
         // Metadata row container (text + rating badge inline)
         metadataRow.axis = .horizontal
-        metadataRow.spacing = 12
+        metadataRow.spacing = Self.metadataSpacing
         metadataRow.alignment = .center
         metadataRow.addArrangedSubview(metadataLabel)
         metadataRow.addArrangedSubview(ratingBadge)
@@ -76,7 +88,7 @@ final class HeroSlideView: UIView {
 
         // Tagline
         taglineLabel.font = Self.taglineFont
-        taglineLabel.textColor = UIColor.white.withAlphaComponent(0.85)
+        taglineLabel.textColor = Self.taglineColor
         taglineLabel.numberOfLines = 2
 
         // 18 pt between rows, Apple's banner margin for the genres row and
@@ -98,7 +110,7 @@ final class HeroSlideView: UIView {
             stack.bottomAnchor.constraint(equalTo: bottomAnchor),
 
             logoImageView.heightAnchor.constraint(lessThanOrEqualToConstant: Self.maxLogoHeight),
-            logoImageView.widthAnchor.constraint(lessThanOrEqualToConstant: 420),
+            logoImageView.widthAnchor.constraint(lessThanOrEqualToConstant: Self.maxLogoWidth),
 
             taglineLabel.widthAnchor.constraint(lessThanOrEqualToConstant: Self.maxTaglineWidth)
         ])
@@ -149,7 +161,10 @@ final class HeroSlideView: UIView {
         }
 
         // Tagline
-        taglineLabel.text = tagline(for: item)
+        taglineLabel.attributedText = tagline(for: item).map {
+            NSAttributedString(string: $0, attributes: [.font: Self.taglineFont, .foregroundColor: Self.taglineColor,
+                                                        .paragraphStyle: Self.taglineStyle])
+        }
 
         // Logo / fallback title. Loaded LAST so `onReady` fires only after every
         // piece of content (metadata, tagline, logo) is final. Callers gate a

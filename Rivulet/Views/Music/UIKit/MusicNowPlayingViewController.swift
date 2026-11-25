@@ -25,13 +25,18 @@ final class MusicNowPlayingViewController: UIViewController, UIGestureRecognizer
         static let lyricsArtX: CGFloat = 148
         static let lyricsX: CGFloat = 840
         static let button: CGFloat = 72
+        /// The upper row's circles: 70pt on a 94 pitch (tvOS 27.2.1).
+        static let circle: CGFloat = 70
+        static let circlePitch: CGFloat = 94
         /// The controls' container starts under the queue cards' text, so it never covers a card.
         static let controlsTop: CGFloat = 786
-        static let upperTop: CGFloat = 802
+        static let upperTop: CGFloat = 803
         static let barCenter: CGFloat = 911
         static let bottomTop: CGFloat = 975
-        /// Apple moves the artwork down when the controls leave (measured in its lyrics stage).
+        /// With the controls gone the artwork grows to 565 about a centre 40pt lower, and the header drops 20.
         static let hiddenShift: CGFloat = 40
+        static let hiddenArt: CGFloat = 565
+        static let hiddenHeaderDrop: CGFloat = 20
         /// AVKit's timeouts: 5s with focus on the timeline, 8s with it on a button.
         static let autoHide: TimeInterval = 5
         static let autoHideInButtons: TimeInterval = 8
@@ -130,10 +135,10 @@ final class MusicNowPlayingViewController: UIViewController, UIGestureRecognizer
     private let lyricsPane = MusicLyricsPaneView()
     private let strip = MusicQueueStripView()
     private let controls = UIView()
-    private let shuffleButton = MusicChrome.pill(title: nil, symbol: "shuffle", height: Metrics.button)
-    private let repeatButton = MusicChrome.pill(title: nil, symbol: "repeat", height: Metrics.button)
-    private let favoriteButton = MusicChrome.pill(title: nil, symbol: "star", height: Metrics.button)
-    private let moreButton = MusicChrome.pill(title: nil, symbol: "ellipsis", height: Metrics.button)
+    private let shuffleButton = MusicChrome.pill(title: nil, symbol: "shuffle", height: Metrics.circle)
+    private let repeatButton = MusicChrome.pill(title: nil, symbol: "repeat", height: Metrics.circle)
+    private let favoriteButton = MusicChrome.pill(title: nil, symbol: "star", height: Metrics.circle)
+    private let moreButton = MusicChrome.pill(title: nil, symbol: "ellipsis", height: Metrics.circle)
     private let infoButton = MusicChrome.pill(title: String(localized: "Info"), symbol: nil, height: Metrics.button)
     private let modeSwitch = MusicModeSwitchView()
     private let progressBar = PlayerProgressBarView()
@@ -165,8 +170,7 @@ final class MusicNowPlayingViewController: UIViewController, UIGestureRecognizer
         scrim.gradientLayer.locations = [0.356, 0.896, 1]
 
         header.textAlignment = .center
-        header.frame = CGRect(x: 480, y: 100 - header.font.ascender, width: bounds.width - 960,
-                              height: ceil(header.font.lineHeight))
+        header.frame = CGRect(x: 480, y: 0, width: bounds.width - 960, height: ceil(header.font.lineHeight))
         artwork.contentMode = .scaleAspectFill
         artwork.clipsToBounds = true
         artwork.layer.cornerRadius = 12
@@ -224,13 +228,13 @@ final class MusicNowPlayingViewController: UIViewController, UIGestureRecognizer
         view.addSubview(controls)
         let top = Metrics.controlsTop
 
-        // Upper row: 72pt circles on a 100 pitch, the last one's right edge at x 1840.
+        // Upper row: 70pt circles on a 94 pitch, the last one's right edge at x 1840.
         for (index, button) in upperButtons.reversed().enumerated() {
             controls.addSubview(button)
             NSLayoutConstraint.activate([
                 button.topAnchor.constraint(equalTo: controls.topAnchor, constant: Metrics.upperTop - top),
                 button.trailingAnchor.constraint(equalTo: controls.trailingAnchor,
-                                                 constant: -MusicMetrics.margin - CGFloat(index) * 100),
+                                                 constant: -MusicMetrics.margin - CGFloat(index) * Metrics.circlePitch),
             ])
         }
         shuffleButton.addAction(UIAction { [weak self] _ in
@@ -375,8 +379,7 @@ final class MusicNowPlayingViewController: UIViewController, UIGestureRecognizer
         infoTask?.cancel()
         let track = queue.currentTrack
         header.text = track?.albumTitle
-        caption.configure(title: track?.title ?? "", artist: track?.artistName, showsBars: true,
-                          isPlaying: queue.playbackState == .playing)
+        refreshCaption()
         artworkTask?.cancel()
         if artwork.image == nil { artwork.image = MusicChrome.placeholder(side: Metrics.art) }
         artworkTask = MusicChrome.loadArtwork(track?.artwork.poster, quality: .full) { [weak self] image in
@@ -485,12 +488,26 @@ final class MusicNowPlayingViewController: UIViewController, UIGestureRecognizer
         animator.startAnimation()
     }
 
-    /// The artwork is centred, or beside the lyrics; with the controls gone it sits 40pt lower.
+    /// With the controls up the second line is the artist; gone, "Artist - Album".
+    private func refreshCaption() {
+        let track = queue.currentTrack
+        let artist = controlsHidden ? [track?.artistName, track?.albumTitle].compactMap { $0 }.joined(separator: " - ")
+            : track?.artistName
+        caption.configure(title: track?.title ?? "", artist: artist, showsBars: true,
+                          isPlaying: queue.playbackState == .playing)
+    }
+
+    /// The artwork is centred, or beside the lyrics; with the controls gone it grows about a centre
+    /// 40pt lower and the header drops 20.
     private func layoutStage() {
-        let x = lyricsShown ? Metrics.lyricsArtX : (view.bounds.width - Metrics.art) / 2
-        let y = Metrics.artTop + (controlsHidden && mode != .queue ? Metrics.hiddenShift : 0)
-        artwork.frame = CGRect(x: x, y: y, width: Metrics.art, height: Metrics.art)
-        caption.frame = CGRect(x: x, y: y + Metrics.art, width: Metrics.art, height: MusicNowPlayingCaptionView.height)
+        let idle = controlsHidden && mode != .queue
+        let side = idle ? Metrics.hiddenArt : Metrics.art
+        let centerX = lyricsShown ? Metrics.lyricsArtX + Metrics.art / 2 : view.bounds.width / 2
+        let x = centerX - side / 2
+        let y = Metrics.artTop + Metrics.art / 2 + (idle ? Metrics.hiddenShift : 0) - side / 2
+        artwork.frame = CGRect(x: x, y: y, width: side, height: side)
+        caption.frame = CGRect(x: x, y: y + side, width: side, height: MusicNowPlayingCaptionView.height)
+        header.frame.origin.y = 100 + (controlsHidden ? Metrics.hiddenHeaderDrop : 0) - header.font.ascender
     }
 
     /// Apple's ground is the artwork's colours with no picture left in them: here the cover's
@@ -758,6 +775,7 @@ final class MusicNowPlayingViewController: UIViewController, UIGestureRecognizer
             self.controls.alpha = hidden ? 0 : 1
             self.scrim.alpha = hidden ? 0 : 1
         }
+        refreshCaption()
         let move = {
             self.layoutStage()
             self.lyricsPane.setControlsVisible(!hidden)

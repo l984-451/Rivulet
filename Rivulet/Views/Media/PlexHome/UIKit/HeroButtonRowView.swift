@@ -107,7 +107,7 @@ final class HeroButtonRowView: UIView {
         watchlistButton.setImage(UIImage(systemName: "plus"), for: .normal)
         // Measured from the TV app: Info bold, the chevron 15 x 26 at rest.
         infoButton.setImage(UIImage(systemName: "info.circle"), for: .normal, pointSize: 30, weight: .bold)
-        nextButton.setImage(UIImage(systemName: "chevron.right"), for: .normal, pointSize: 28)
+        nextButton.setImage(UIImage(systemName: "chevron.right"), for: .normal, pointSize: 35.5)
 
         playButton.accessibilityLabel = String(localized: "Play")
         watchlistButton.accessibilityLabel = String(localized: "Toggle Watchlist")
@@ -343,6 +343,8 @@ final class HeroPillButton: UIControl {
     /// The glass is faded to show less blur; a plain dark fill under it keeps the buttons dark.
     static let restingGlassAlpha: CGFloat = 0.5
     static let restingFill = UIColor.black.withAlphaComponent(0.3)
+    /// The focused Play fill reads 229 on Apple's, not pure white.
+    static let focusedFill = UIColor(white: 0.9, alpha: 1)
 
     var title: String = "" {
         didSet { titleLabel.text = title }
@@ -468,7 +470,7 @@ final class HeroPillButton: UIControl {
                        initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]) {
             self.transform = focused
                 ? CGAffineTransform(scaleX: HeroPillButton.focusScale, y: HeroPillButton.focusScale) : .identity
-            self.background.backgroundColor = focused ? .white : HeroPillButton.restingFill
+            self.background.backgroundColor = focused ? HeroPillButton.focusedFill : HeroPillButton.restingFill
             self.materialBackground.alpha = focused ? 0 : HeroPillButton.restingGlassAlpha
             self.strokeLayer.opacity = focused ? 0 : 1
             self.titleLabel.textColor = focused ? .black : .white
@@ -522,6 +524,10 @@ final class HeroCircleButton: UIControl {
     private let cornerRadius: CGFloat = 33
     /// False draws only the symbol at rest (the hero's Next chevron).
     private let restingPlatter: Bool
+    /// Apple's bare chevron rests 12.5 pt left of the platter's centre; focus recentres it.
+    private var restingIconTransform: CGAffineTransform {
+        restingPlatter ? .identity : CGAffineTransform(translationX: -12.5, y: 0)
+    }
 
     init(restingPlatter: Bool = true) {
         self.restingPlatter = restingPlatter
@@ -554,6 +560,7 @@ final class HeroCircleButton: UIControl {
         iconView.contentMode = .scaleAspectFit
         iconView.translatesAutoresizingMaskIntoConstraints = false
         iconView.isUserInteractionEnabled = false
+        iconView.transform = restingIconTransform
         addSubview(iconView)
 
         NSLayoutConstraint.activate([
@@ -617,6 +624,7 @@ final class HeroCircleButton: UIControl {
             self.materialBackground.alpha = focused || !self.restingPlatter ? 0 : HeroPillButton.restingGlassAlpha
             self.strokeLayer.opacity = focused || !self.restingPlatter ? 0 : 1
             self.iconView.tintColor = focused ? .black : .white
+            self.iconView.transform = focused ? .identity : self.restingIconTransform
         }
     }
 

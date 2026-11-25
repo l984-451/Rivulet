@@ -75,7 +75,9 @@ final class CastCell: UIView {
                 constant: 32 + Self.nameFont.descender - Self.roleFont.ascender),
             subtitleLabel.leadingAnchor.constraint(equalTo: photoView.leadingAnchor),
             subtitleLabel.trailingAnchor.constraint(equalTo: photoView.trailingAnchor),
-            subtitleLabel.bottomAnchor.constraint(equalTo: bottomAnchor),
+            // At most: an equal pin stretches the name label into the cell's spare height and
+            // its centered text drifts down.
+            subtitleLabel.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor),
         ])
     }
 

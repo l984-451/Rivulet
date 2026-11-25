@@ -82,9 +82,10 @@ enum SubtitleAdjustments {
     /// The lowest a caption may sit while the rail is showing. Lives here
     /// because BOTH overlays need it and they must agree: captions should not
     /// change height when a title falls back from the engine to the HLS route.
-    /// How much higher AVKit sets captions while an info pane is open: just above
-    /// its risen pills (measured, tvOS 27 sim; the pills rise 334, captions 116).
-    static let paneLift: CGFloat = 116
+    /// How much higher AVKit sets captions while an info pane is open: 34pt above
+    /// the risen pills (measured in the tvOS 27 sim, where the pills rose 334 and
+    /// captions 116). Derived, so it follows the pane's rise.
+    static let paneLift: CGFloat = PlayerRailPanelView.risenPillTop + 34 - controlsFloor
 
     static let controlsFloor: CGFloat = railTopFromScreenBottom + railMargin
 

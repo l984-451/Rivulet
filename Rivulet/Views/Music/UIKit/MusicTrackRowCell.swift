@@ -161,14 +161,14 @@ final class MusicTrackRowCell: UICollectionViewCell {
         }
     }
 
-    /// Album rows read white in Apple's photo; its playlist capture measures the title
-    /// at 64% white and the rest at 38%. A focused row is white, its title semibold.
+    /// At rest an album row's title measures 57% white (tvOS 27.2.1), a playlist's 64% and the
+    /// rest 38%. A focused row is white, its title semibold.
     private func applyColors() {
         let numbered = style == .numbered
         title.font = .systemFont(ofSize: 31, weight: numbered || showsFocus ? .semibold : .medium)
-        title.textColor = UIColor(white: 1, alpha: showsFocus || numbered ? 1 : 0.64)
+        title.textColor = UIColor(white: 1, alpha: showsFocus ? 1 : (numbered ? 0.57 : 0.64))
         artist.textColor = UIColor(white: 1, alpha: showsFocus ? 1 : 0.38)
-        duration.textColor = UIColor(white: 1, alpha: showsFocus ? 1 : (numbered ? 0.4 : 0.38))
+        duration.textColor = UIColor(white: 1, alpha: showsFocus ? 1 : (numbered ? 0.35 : 0.38))
         number.textColor = UIColor(white: 1, alpha: showsFocus ? 1 : 0.55)
     }
 }

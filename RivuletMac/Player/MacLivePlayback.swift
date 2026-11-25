@@ -20,6 +20,8 @@ final class MacLivePlayback: ObservableObject, MacPlaybackSession {
     var onItemChange: (() -> Void)?
     /// The next join is Go Live from such a session: no question, the edge.
     private var joinsLiveWithoutAsking = false
+    /// The recording this session plays from (Start from Beginning), and where it was loaded.
+    private var recordingStart: LiveRecordingStart?
 
     private let store = LiveTVDataStore.shared
     private let tuner = MacLiveTuner()
@@ -38,10 +40,14 @@ final class MacLivePlayback: ObservableObject, MacPlaybackSession {
                 return LiveSeekableWindow(lowerBound: range.lowerBound, upperBound: window.edgeTime)
             },
             position: { [weak player] in player?.liveWindow.playhead ?? 0 },
-            seek: { [weak player] in await player?.seekLive(to: $0) },
-            seekToLiveEdge: { [weak player] in await player?.seekToLiveEdge() },
+            seek: { [weak self] in await self?.seekWithinRecording(to: $0) },
+            seekToLiveEdge: { [weak self] in await self?.seekToLiveEdge() },
             play: { [weak player] in player?.play() },
-            isUserPaused: { [weak player] in player?.state == .paused }
+            isUserPaused: { [weak player] in player?.state == .paused },
+            reach: { [weak self] in
+                guard let self, let start = self.recordingStart else { return (0, 0) }
+                return start.reach(lag: self.liveLag)
+            }
         ))
         windowSeeker.onChange = { [weak self] in self?.objectWillChange.send() }
     }
@@ -69,14 +75,79 @@ final class MacLivePlayback: ObservableObject, MacPlaybackSession {
     }
 
     func skip(by seconds: Double) {
-        if player.liveWindow.seekableRange != nil {
+        if player.liveWindow.seekableRange != nil || windowSeeker.isLanding {
             windowSeeker.step(by: seconds)
         } else {
             Task { await player.skip(by: seconds) }
         }
     }
 
+    /// A seek on the session axis. The engine fetches a recording's backlog at 1x, so a target
+    /// past what it holds (or before where this join began) reloads the recording there.
+    private func seekWithinRecording(to target: Double) async {
+        let window = player.liveWindow
+        if let start = recordingStart, liveLag > 0, let range = window.seekableRange,
+           let offset = start.rejoinOffset(
+               forSessionPosition: target,
+               in: LiveSeekableWindow(lowerBound: range.lowerBound, upperBound: window.edgeTime),
+               edgeWall: Date().addingTimeInterval(-liveLag)) {
+            await reloadRecording(start.joining(atOffset: offset))
+            return
+        }
+        await player.seekLive(to: target)
+    }
+
+    /// Loads the same recorder session from a later (or earlier) offset. The tune and its
+    /// keepalive stay, so a skip costs one playlist fetch, not a re-tune.
+    private func reloadRecording(_ start: LiveRecordingStart) async {
+        recordingStart = start
+        liveLag = start.lag(at: Date())
+        await reloadEngine(start.url, joinsAtRecordingStart: true)
+    }
+
+    /// The same recorder session joined at its head, which is live: no re-tune.
+    private func reloadAtLive(_ start: LiveRecordingStart) async {
+        let head = start.joining(atOffset: Date().timeIntervalSince(start.firstSegmentAired) - LiveRecordingStart.headMargin)
+        recordingStart = nil
+        liveLag = 0
+        await reloadEngine(head.url, joinsAtRecordingStart: false)
+    }
+
+    /// Reloads the engine on the session already tuned. Awaited, so the skip control holds
+    /// presses until the new window exists.
+    private func reloadEngine(_ url: URL, joinsAtRecordingStart: Bool) async {
+        let headers = LiveTVClientIdentity.streamHeaders(for: channel)
+        loadTask?.cancel()
+        let task = Task {
+            do {
+                try await player.loadLive(url: url, headers: headers,
+                                          forceEngineDemux: true, joinsAtRecordingStart: joinsAtRecordingStart)
+            } catch {
+                guard !Task.isCancelled, !isCancellationError(error) else { return }
+                // The session is gone: join live again rather than ask a second time.
+                joinsLiveWithoutAsking = true
+                retry()
+            }
+        }
+        loadTask = task
+        await task.value
+    }
+
+    /// The controller's far end. Behind a recording's head, live is the recording's head.
+    private func seekToLiveEdge() async {
+        if liveLag > 0, let start = recordingStart {
+            await reloadAtLive(start)
+        } else {
+            await player.seekToLiveEdge()
+        }
+    }
+
     func goLive() {
+        if liveLag > 0, let start = recordingStart {
+            windowSeeker.cancelPending()
+            Task { await reloadAtLive(start) }
+            return
+        }
         if liveLag > 0 {
             // Joined at a recording's start, the session only reaches its own edge; live is a new join.
             joinsLiveWithoutAsking = true
@@ -141,6 +212,7 @@ final class MacLivePlayback: ObservableObject, MacPlaybackSession {
     private func load() async {
         notice = nil
         liveLag = 0
+        recordingStart = nil
         windowSeeker.cancelPending()
         let channel = channel
         guard let stream = await tuner.tune(channel) else {
@@ -156,7 +228,8 @@ final class MacLivePlayback: ObservableObject, MacPlaybackSession {
             if startQuestion === question { startQuestion = nil }
             guard !Task.isCancelled else { return }
         }
-        liveLag = fromStart.map { Date().timeIntervalSince($0.firstSegmentAired) } ?? 0
+        recordingStart = fromStart
+        liveLag = fromStart?.lag(at: Date()) ?? 0
         do {
             try await player.loadLive(url: fromStart?.url ?? stream.url, headers: stream.headers,
                                       forceEngineDemux: stream.forceEngineDemux,

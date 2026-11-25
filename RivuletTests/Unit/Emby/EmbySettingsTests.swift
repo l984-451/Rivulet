@@ -106,9 +106,10 @@ final class EmbySettingsTests: XCTestCase {
     func test_serversPage_listsEmbyBesideJellyfin_withTheServerName() throws {
         try signInStub()
         let servers = SettingsContent.rows(for: .servers)
-        XCTAssertEqual(servers.map(\.id), ["plexServer", "jellyfinServer", "embyServer"])
-        XCTAssertEqual(servers.last?.valueText, "Den Emby")
-        guard case .navigationAction(let page, _, let prepare) = servers.last?.kind else { return XCTFail("not a navigation row") }
+        XCTAssertEqual(servers.prefix(3).map(\.id), ["plexServer", "jellyfinServer", "embyServer"])
+        let emby = servers.first { $0.id == "embyServer" }
+        XCTAssertEqual(emby?.valueText, "Den Emby")
+        guard case .navigationAction(let page, _, let prepare) = emby?.kind else { return XCTFail("not a navigation row") }
         XCTAssertEqual(page, .emby)
         SettingsContent.addSourceDraft = nil
         prepare()

@@ -161,6 +161,8 @@ I welcome all contributions from any level of developer. I welcome contributions
 
 **Ask before opening a UI PR.** Rivulet's interface is deliberate. It mostly follows the Apple TV app, and where it departs from it, that is a choice I made on purpose. Before changing how a screen looks or behaves, open an issue or start a discussion so we can agree on the direction first. Bug fixes don't need this.
 
+**One change per pull request.** Keep each PR to a single fix or feature. Don't combine unrelated changes, even small ones: a PR that mixes several is much harder and slower to review, and one part I can't take holds up the rest. Open separate PRs instead.
+
 By submitting a pull request, you agree to license your contribution under the same terms as Rivulet (PolyForm Noncommercial 1.0.0, see [LICENSE](LICENSE)).
 <br></br>
 

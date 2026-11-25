@@ -99,17 +99,17 @@ final class WatchTogetherTests: XCTestCase {
     // MARK: - Title matching
 
     func testTitlesMatchOnWordsAndCloseYears() {
-        XCTAssertTrue(WatchTogetherSession.sameTitle("Spider-Man: Homecoming", year: 2017, ids: [:],
-                                                     as: "Spider Man Homecoming", year: 2018, ids: [:]))
-        XCTAssertFalse(WatchTogetherSession.sameTitle("Dune", year: 1984, ids: [:], as: "Dune", year: 2021, ids: [:]))
-        XCTAssertTrue(WatchTogetherSession.sameTitle("Dune", year: nil, ids: [:], as: "Dune", year: 2021, ids: [:]))
+        XCTAssertTrue(TitleCopies.sameTitle("Spider-Man: Homecoming", year: 2017, ids: [:],
+                                            as: "Spider Man Homecoming", year: 2018, ids: [:]))
+        XCTAssertFalse(TitleCopies.sameTitle("Dune", year: 1984, ids: [:], as: "Dune", year: 2021, ids: [:]))
+        XCTAssertTrue(TitleCopies.sameTitle("Dune", year: nil, ids: [:], as: "Dune", year: 2021, ids: [:]))
     }
 
     func testAnIDConflictOverridesAMatchingTitle() {
-        XCTAssertFalse(WatchTogetherSession.sameTitle("Dune", year: 2021, ids: ["tmdb": "438631"],
-                                                      as: "Dune", year: 2021, ids: ["tmdb": "841"]))
-        XCTAssertTrue(WatchTogetherSession.sameTitle("Dune", year: 2021, ids: ["tmdb": "438631"],
-                                                     as: "Dune", year: 2021, ids: ["imdb": "tt1160419"]))
+        XCTAssertFalse(TitleCopies.sameTitle("Dune", year: 2021, ids: ["tmdb": "438631"],
+                                             as: "Dune", year: 2021, ids: ["tmdb": "841"]))
+        XCTAssertTrue(TitleCopies.sameTitle("Dune", year: 2021, ids: ["tmdb": "438631"],
+                                            as: "Dune", year: 2021, ids: ["imdb": "tt1160419"]))
     }
 
     // MARK: - The relay's rules on names

@@ -114,6 +114,16 @@ final class DownloadRollbackTests: XCTestCase {
         XCTAssertFalse(second.safeToSweep)
     }
 
+    func test_launchLoad_anUnreadableManifestIsNeitherSweptNorSaved() throws {
+        let url = dir.appendingPathComponent("manifest.json")
+        // A directory exists at the path but can't be read as data.
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        let launch = DownloadManifest.loadForLaunch(from: url)
+        XCTAssertFalse(launch.safeToSweep)
+        XCTAssertFalse(launch.canSave)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+    }
+
     func test_launchLoad_aReadableOrAbsentManifestMaySweep() throws {
         XCTAssertTrue(DownloadManifest.loadForLaunch(from: dir.appendingPathComponent("none.json")).safeToSweep)
         let loaded = DownloadManifest.loadForLaunch(from: try writeV2([record("a", provider: "plex:M", source: "1")]))

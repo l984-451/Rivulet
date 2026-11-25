@@ -15,7 +15,7 @@ struct InfoPopupCardLayout {
     let insetBottom: CGFloat
 
     /// Breathing room for content scrolling in and out of the card's edges.
-    private static let scrollInsetTop: CGFloat = 8
+    static let scrollInsetTop: CGFloat = 8
     private static let scrollInsetBottom: CGFloat = 72
 
     static func make(contentHeight: CGFloat, pad: CGFloat, screenHeight: CGFloat) -> InfoPopupCardLayout {
@@ -100,6 +100,7 @@ final class InfoPopupViewController: UIViewController {
 
         // Match the carousel detail's left margin so the popup padding feels native.
         let pad: CGFloat = PreviewCarouselGeometry.expandedChromeInset
+        let topPad = descriptionTopPad ?? pad
         var constraints: [NSLayoutConstraint] = [
             card.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             card.centerYAnchor.constraint(equalTo: view.centerYAnchor),
@@ -128,7 +129,7 @@ final class InfoPopupViewController: UIViewController {
             cardHeight = card.heightAnchor.constraint(equalToConstant: 320)
             constraints += [
                 cardHeight,
-                scroll.topAnchor.constraint(equalTo: blur.contentView.topAnchor, constant: pad),
+                scroll.topAnchor.constraint(equalTo: blur.contentView.topAnchor, constant: topPad),
                 scroll.leadingAnchor.constraint(equalTo: blur.contentView.leadingAnchor, constant: pad),
                 scroll.trailingAnchor.constraint(equalTo: blur.contentView.trailingAnchor, constant: -pad),
                 scroll.bottomAnchor.constraint(equalTo: blur.contentView.bottomAnchor, constant: -pad),
@@ -171,6 +172,13 @@ final class InfoPopupViewController: UIViewController {
                 }
             )
         }
+    }
+
+    /// Apple anchors the description popup's title cap 70.5 below the card top, not at the side padding.
+    private var descriptionTopPad: CGFloat? {
+        guard cardWidth == Self.descriptionSize.width, fixedHeight == Self.descriptionSize.height else { return nil }
+        let title = InfoPopupContent.descriptionTitleFont
+        return 70.5 - InfoPopupCardLayout.scrollInsetTop - (title.ascender - title.capHeight)
     }
 
     /// Left/Right, for content that pages sideways (the ratings popup's reviews). Set before presenting.
@@ -256,17 +264,36 @@ final class InfoPopupViewController: UIViewController {
 
 enum InfoPopupContent {
 
-    /// Title + genre line + full body (the About "description" popup).
+    static let descriptionTitleFont = UIFont.systemFont(ofSize: 31, weight: .bold)
+
+    /// Title + genre line + full body (the About "description" popup). Spaced by baselines as
+    /// Apple's is: title to genre 48.5, genre to body 66, body to body 32; no genre, title to body 66.
     static func description(title: String, subtitle: String?, body: String?) -> UIView {
-        let stack = verticalStack(spacing: 10)
-        stack.addArrangedSubview(label(title, size: 31, weight: .bold, color: .white, lines: 2))
+        let stack = verticalStack(spacing: 0)
+        let titleFont = descriptionTitleFont
+        let textFont = UIFont.systemFont(ofSize: 25, weight: .medium)
+        let titleLabel = label(title, size: 31, weight: .bold, color: .white, lines: 2)
+        stack.addArrangedSubview(titleLabel)
+        var above = titleLabel
+        var aboveFont = titleFont
+        let baselines: CGFloat = 66
         if let subtitle, !subtitle.isEmpty {
-            let s = label(subtitle, size: 20, weight: .medium, color: .white.withAlphaComponent(0.6), lines: 1)
+            let s = label(subtitle, size: 25, weight: .medium, color: .white.withAlphaComponent(0.65), lines: 1)
             stack.addArrangedSubview(s)
-            stack.setCustomSpacing(20, after: s)
+            stack.setCustomSpacing(48.5 + titleFont.descender - textFont.ascender, after: above)
+            above = s
+            aboveFont = textFont
         }
         if let body, !body.isEmpty {
-            stack.addArrangedSubview(label(body, size: 24, weight: .regular, color: .white.withAlphaComponent(0.9), lines: 0))
+            let paragraph = NSMutableParagraphStyle()
+            let bodyFont = UIFont.systemFont(ofSize: 25, weight: .regular)
+            paragraph.lineSpacing = 32 - bodyFont.lineHeight
+            let text = UILabel()
+            text.numberOfLines = 0
+            text.attributedText = NSAttributedString(string: body, attributes: [
+                .font: bodyFont, .foregroundColor: UIColor.white.withAlphaComponent(0.52), .paragraphStyle: paragraph])
+            stack.addArrangedSubview(text)
+            stack.setCustomSpacing(baselines + aboveFont.descender - bodyFont.ascender, after: above)
         }
         return stack
     }
@@ -387,8 +414,9 @@ enum InfoPopupContent {
             langs.append((String(localized: "Original Audio"), n))
         }
         if let audio = source?.audioTracks, !audio.isEmpty {
-            let summary = audioSummary(audio)
-            if !summary.isEmpty { langs.append((String(localized: "Audio"), summary)) }
+            if let summary = AudioLanguageSummary.text(audio, name: { InfoColumnsView.languageName($0) }) {
+                langs.append((String(localized: "Audio"), summary))
+            }
         }
         if let subs = source?.subtitleTracks, !subs.isEmpty {
             let names = uniqueOrdered(subs.compactMap { t -> String? in
@@ -464,42 +492,6 @@ enum InfoPopupContent {
 
     /// "English (Dolby Atmos, Dolby 5.1, AAC, AD), French (Canada) (…)" — group
     /// audio tracks by language and list each language's distinct formats.
-    private static func audioSummary(_ tracks: [AudioTrack]) -> String {
-        var byLang: [String: [String]] = [:]
-        var order: [String] = []
-        for t in tracks {
-            guard let name = InfoColumnsView.languageName(t.language) else { continue }
-            if byLang[name] == nil { byLang[name] = []; order.append(name) }
-            let fmt = audioFormat(t)
-            if !fmt.isEmpty, !(byLang[name]?.contains(fmt) ?? false) { byLang[name]?.append(fmt) }
-            if (t.title ?? t.extendedTitle ?? "").localizedCaseInsensitiveContains("descri"),
-               !(byLang[name]?.contains("AD") ?? false) { byLang[name]?.append("AD") }
-        }
-        return order.map { name in
-            let fmts = byLang[name] ?? []
-            return fmts.isEmpty ? name : "\(name) (\(fmts.joined(separator: ", ")))"
-        }.joined(separator: ", ")
-    }
-
-    private static func audioFormat(_ t: AudioTrack) -> String {
-        let codec = t.codec.lowercased()
-        let title = (t.extendedTitle ?? t.title ?? "").lowercased()
-        if title.contains("atmos") || (t.channelLayout ?? "").lowercased().contains("atmos") {
-            return "Dolby Atmos"
-        }
-        let layout = t.channelLayout ?? t.channels.map { $0 >= 6 ? "\($0 - 1).1" : ($0 >= 2 ? "Stereo" : "Mono") } ?? ""
-        let isDolby = (codec == "eac3" || codec == "ac3" || codec == "truehd")
-        if isDolby, !layout.isEmpty, layout != "Stereo", layout != "Mono" { return "Dolby \(layout)" }
-        switch codec {
-        case "aac": return "AAC"
-        case "dts", "dca": return "DTS"
-        case "truehd": return "Dolby TrueHD"
-        case "flac": return "FLAC"
-        case "ac3", "eac3": return layout.isEmpty ? "Dolby Digital" : "Dolby \(layout)"
-        default: return layout.isEmpty ? codec.uppercased() : layout
-        }
-    }
-
     private static func runtimeString(_ seconds: TimeInterval) -> String {
         let total = Int(seconds.rounded()); let h = total / 3600, m = (total % 3600) / 60
         if h > 0 { return m > 0 ? String(localized: "\(h) hr \(m) min") : String(localized: "\(h) hr") }

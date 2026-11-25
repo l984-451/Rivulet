@@ -44,11 +44,11 @@ final class LiveMultiviewViewController: UIViewController {
 
     private let layoutButtons = UIStackView()
     private let focusLayoutButton = TransportControlButton(
-        icon: nil, accessibilityLabel: String(localized: "Focus Layout"), diameter: 62)
+        icon: nil, accessibilityLabel: String(localized: "Focus Layout"), diameter: 55)
     private let gridLayoutButton = TransportControlButton(
-        icon: nil, accessibilityLabel: String(localized: "Grid Layout"), diameter: 62)
+        icon: nil, accessibilityLabel: String(localized: "Grid Layout"), diameter: 55)
     private let scoresLayoutButton = TransportControlButton(
-        icon: nil, accessibilityLabel: String(localized: "Scores Layout"), diameter: 62)
+        icon: nil, accessibilityLabel: String(localized: "Scores Layout"), diameter: 55)
     /// The scores layout's right column; exists only while that layout shows.
     private var scoresList: LiveScoresPaneView?
 
@@ -88,11 +88,11 @@ final class LiveMultiviewViewController: UIViewController {
 
     private enum Metrics {
         static let side: CGFloat = 90
-        static let gap: CGFloat = 36
+        static let gap: CGFloat = 42
         /// Watch mode's tile area and gap: near the edges, with room for a
         /// tile's focused scale. The bottom keeps the tiles clear of the edit hint.
-        static let watchInset = UIEdgeInsets(top: 40, left: 24, bottom: 44, right: 24)
-        static let watchGap: CGFloat = 20
+        static let watchInset = UIEdgeInsets(top: 40, left: 45, bottom: 44, right: 45)
+        static let watchGap: CGFloat = 34
         static let editHintHeight: CGFloat = 20
         static let cardWidth: CGFloat = 340
         /// One Add More row: What's On's card plus its focus-growth room.
@@ -101,7 +101,7 @@ final class LiveMultiviewViewController: UIViewController {
         static var rowPitch: CGFloat { rowHeight + MediaRowMetrics.rowTopInset + MediaRowMetrics.rowBottomInset }
         /// How much of the next row's cards shows below the current one, so
         /// it reads as scrollable. The show detail page's episode peek.
-        static let nextRowPeek: CGFloat = 40
+        static let nextRowPeek: CGFloat = 34
         /// The Add More area: one row, then the next row down to `nextRowPeek`
         /// of its card (the card sits mid-row, half the growth room down).
         static var addMoreHeight: CGFloat {
@@ -111,8 +111,8 @@ final class LiveMultiviewViewController: UIViewController {
         /// stays clear of the watch hint (y 16 to 96) even at the focused
         /// scale: a tile over the hint let Right from the big focus-layout
         /// tile land on it and switch to watch mode.
-        static let editTilesTop: CGFloat = 110
-        static let editTilesHeight: CGFloat = 450
+        static let editTilesTop: CGFloat = 120
+        static let editTilesHeight: CGFloat = 472
         static var editTilesBottom: CGFloat { editTilesTop + editTilesHeight }
     }
 
@@ -150,7 +150,7 @@ final class LiveMultiviewViewController: UIViewController {
         editHint.isHidden = true
 
         layoutButtons.axis = .horizontal
-        layoutButtons.spacing = 24
+        layoutButtons.spacing = 25
         layoutButtons.addArrangedSubview(focusLayoutButton)
         layoutButtons.addArrangedSubview(gridLayoutButton)
         layoutButtons.addArrangedSubview(scoresLayoutButton)
@@ -186,14 +186,14 @@ final class LiveMultiviewViewController: UIViewController {
 
         NSLayoutConstraint.activate([
             layoutButtons.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            layoutButtons.topAnchor.constraint(equalTo: view.topAnchor, constant: Metrics.editTilesBottom + 20),
+            layoutButtons.topAnchor.constraint(equalTo: view.topAnchor, constant: Metrics.editTilesBottom + 25),
 
             addMoreLabel.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: MediaRowMetrics.liveLeading),
             addMoreLabel.bottomAnchor.constraint(equalTo: addMoreCollection.topAnchor, constant: -4),
 
             addMoreCollection.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             addMoreCollection.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            addMoreCollection.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -20),
+            addMoreCollection.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             addMoreCollection.heightAnchor.constraint(equalToConstant: Metrics.addMoreHeight),
         ])
 
@@ -362,9 +362,11 @@ final class LiveMultiviewViewController: UIViewController {
     private func confirmExit() {
         let alert = UIAlertController(title: String(localized: "Do you want to exit Multiview?"), message: nil, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: String(localized: "Cancel"), style: .cancel))
-        alert.addAction(UIAlertAction(title: String(localized: "Exit"), style: .default) { [weak self] _ in
+        let exit = UIAlertAction(title: String(localized: "Exit"), style: .default) { [weak self] _ in
             self?.exitMultiview(handingOff: nil)
-        })
+        }
+        alert.addAction(exit)
+        alert.preferredAction = exit
         present(alert, animated: true)
     }
 
@@ -417,6 +419,8 @@ final class LiveMultiviewViewController: UIViewController {
         if newMode == .watch && viewModel.streams.isEmpty { return }
         mode = newMode
         let editing = newMode == .edit
+        // Before focus moves, so the tile that takes it grows by the new mode's scale.
+        for tile in tiles.values { tile.focusScale = editing ? 1.05 : 1.04 }
 
         // Everything the new mode shows must be unhidden before focus moves,
         // and the old mode's controls hidden only after, or the engine picks
@@ -928,6 +932,15 @@ final class LiveMultiviewViewController: UIViewController {
             let top = rect.minY + (rect.height - max(mainH, columnH)) / 2
 
             let main = CGRect(x: x, y: top, width: mainW, height: mainH)
+            // A lone empty slot is a prompt: Apple draws it at 0.48 of the main tile, centred on it.
+            if count == 1, placeholder {
+                let w = mainW * 0.48
+                let h = w * 9 / 16
+                let left = rect.minX + (rect.width - (mainW + gap + w)) / 2
+                plan.tiles = [CGRect(x: left, y: top, width: mainW, height: mainH)]
+                plan.placeholders = [CGRect(x: left + mainW + gap, y: top + mainH / 2 - h / 2, width: w, height: h)]
+                return plan
+            }
             var side: [CGRect] = []
             for i in 0..<sideCount {
                 side.append(CGRect(x: x + mainW + gap, y: top + CGFloat(i) * (sideH + gap),
@@ -1090,7 +1103,7 @@ final class LiveMultiviewViewController: UIViewController {
         }
     }
 
-    /// Add More's rows: "Recommended" (channels like the one multiview opened
+    /// Add More's rows: the first (channels like the one multiview opened
     /// with) and then What's On's own rows. One row shows at a time; Down and
     /// Up page between them. Channels already on screen are left out.
     private func reloadAddMore() {
@@ -1157,7 +1170,7 @@ final class LiveMultiviewViewController: UIViewController {
             item.kind == .channel && !(item.channel.map { active.contains($0.id) } ?? true)
         }
         // Recordings and Starting Soon are not channels to add now.
-        let rows = ([LiveBrowseViewController.Shelf(id: "add", title: String(localized: "Recommended"), items: recommended)]
+        let rows = ([LiveBrowseViewController.Shelf(id: "add", title: String(localized: "Add More"), items: recommended)]
                     + shelves.filter { $0.id != "recordings" && $0.id != "soon" })
             .map { LiveBrowseViewController.Shelf(id: $0.id, title: $0.title,
                                                   items: $0.items.filter(notPlaying).uniquedById()) }
@@ -1296,6 +1309,9 @@ final class LiveMultiviewTileView: UIView {
 
     override var canBecomeFocused: Bool { true }
 
+    /// Apple's focused tile grows 5% on the edit screen and 4% in watch mode.
+    var focusScale: CGFloat = 1.05
+
     init(slotId: UUID) {
         self.slotId = slotId
         super.init(frame: .zero)
@@ -1385,7 +1401,10 @@ final class LiveMultiviewTileView: UIView {
         speakerIcon.isHidden = slot.isMuted
     }
 
+    /// Captions show on the edit screen only, so the flag also picks its focus scale.
     func setShowsCaption(_ shows: Bool) {
+        focusScale = shows ? 1.05 : 1.04
+        if isFocused { transform = CGAffineTransform(scaleX: focusScale, y: focusScale) }
         captionLabel.alpha = shows ? 1 : 0
         captionScrim.opacity = shows ? 1 : 0
     }
@@ -1424,7 +1443,7 @@ final class LiveMultiviewTileView: UIView {
         // Scale only, as the Apple TV app does: no outline around a playing
         // picture, which distracts and would sit static long enough to burn in.
         coordinator.addCoordinatedAnimations {
-            self.transform = focused ? CGAffineTransform(scaleX: 1.03, y: 1.03) : .identity
+            self.transform = focused ? CGAffineTransform(scaleX: self.focusScale, y: self.focusScale) : .identity
         }
     }
 }

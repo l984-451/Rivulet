@@ -8,13 +8,14 @@ extension IOSPlaybackController {
     /// means; `sourceID` picks a version; a `queue` (a playlist) replaces Up Next. Failure
     /// shows in the host's alert (`playbackError`); a second call while one prepares is ignored.
     func play(_ item: MediaItem, fromBeginning: Bool = false, sourceID: String? = nil,
-              queue: PlayQueue<PlaylistEntry>? = nil) {
+              queue: PlayQueue<PlaylistEntry>? = nil, startOffset: TimeInterval? = nil) {
         guard !isPreparing else { return }
         setPreparing(true)
         Task {
             defer { setPreparing(false) }
             do {
-                try await startItem(item, fromBeginning: fromBeginning, sourceID: sourceID, queue: queue)
+                try await startItem(item, fromBeginning: fromBeginning, sourceID: sourceID, queue: queue,
+                                    startOffset: startOffset)
             } catch is CancellationError {
             } catch {
                 playbackError = PlaybackFailure.message(for: error)
@@ -23,9 +24,9 @@ extension IOSPlaybackController {
     }
 
     private func startItem(_ item: MediaItem, fromBeginning: Bool, sourceID: String?,
-                       queue: PlayQueue<PlaylistEntry>?) async throws {
+                           queue: PlayQueue<PlaylistEntry>?, startOffset: TimeInterval?) async throws {
         let prepared = try await PlaybackStart.prepare(
-            item, fromBeginning: fromBeginning, sourceID: sourceID, queue: queue, plex: plex)
+            item, fromBeginning: fromBeginning, sourceID: sourceID, queue: queue, plex: plex, startOffset: startOffset)
         start(IOSPlexPlayback(request: prepared.request, plex: prepared.backend, queue: prepared.queue))
     }
 

@@ -22,6 +22,8 @@ final class SettingsContainerViewController: UIViewController {
     private let titleLabel = UILabel()
     private let leftPanel = SettingsLeftPanelView()
     private let rightPane = UIView()
+    /// Apple's list fades out over y 150 to 200 at the top and 1000 to 1060 at the bottom.
+    private let listFade = CAGradientLayer()
     private let leftFocusGuide = UIFocusGuide()
 
     private var pages: [SettingsPageViewController] = []
@@ -104,6 +106,18 @@ final class SettingsContainerViewController: UIViewController {
         }
     }
 
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        // The mask spans the screen's height and well past the pane's sides, so sliding pages are not cut.
+        let height = view.bounds.height
+        let stops: [CGFloat] = [150, 200, 1000, 1060]
+        listFade.colors = [UIColor.clear, .black, .black, .clear].map(\.cgColor)
+        listFade.locations = stops.map { NSNumber(value: Double($0 / height)) }
+        listFade.frame = CGRect(x: -3000, y: -rightPane.frame.minY, width: 8000, height: height)
+        // Start and end are clear outside the stops, so the end colors need no entries.
+        if rightPane.layer.mask == nil { rightPane.layer.mask = listFade }
+    }
+
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         setNeedsFocusUpdate()
@@ -112,7 +126,7 @@ final class SettingsContainerViewController: UIViewController {
 
     private func setupLayout() {
         titleLabel.font = .systemFont(ofSize: 57, weight: .bold)
-        titleLabel.textColor = SettingsHeaderCell.captionColor
+        titleLabel.textColor = SettingsPalette.pageTitle
         titleLabel.textAlignment = .center
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(titleLabel)

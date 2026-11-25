@@ -10,6 +10,8 @@ struct IOSPlexActions {
     var playFromBeginning: (MediaItem) -> Void = { _ in }
     /// Plays one file of the title (a `MediaSource` id) instead of the best.
     var playVersion: (MediaItem, String) -> Void = { _, _ in }
+    /// Plays one file of another copy of the title (another library or server), from the given start when set.
+    var playCopy: (MediaItem, String, TimeInterval?) -> Void = { _, _, _ in }
     /// Plays a playlist from its current entry, then on through the rest.
     var playQueue: (PlayQueue<MediaItem>) -> Void = { _ in }
     /// Plays a video library's titles at random, unwatched only when the flag is set.
@@ -67,6 +69,10 @@ private struct IOSPlexActionHost: ViewModifier {
                 play: { play($0) },
                 playFromBeginning: { play($0, fromBeginning: true) },
                 playVersion: { play($0, sourceID: $1) },
+                playCopy: { item, sourceID, start in
+                    guard IOSPlaybackGate.canPlay(item.ref) else { return }
+                    playback.play(item, sourceID: sourceID, startOffset: start)
+                },
                 playQueue: playQueue,
                 shuffleLibrary: { library, unwatchedOnly in
                     shuffle(providerID: library.providerID, itemID: library.id) {
@@ -282,11 +288,17 @@ private struct IOSPlexContextMenu: ViewModifier {
     let showsDetails: Bool
     @EnvironmentObject private var browse: BrowseStore
 
+    @ViewBuilder
     func body(content: Content) -> some View {
-        content.contextMenu {
-            IOSPlexItemMenu(item: item, showsPlay: true, showsDetails: showsDetails)
-        } preview: {
-            IOSPlexMenuPreview(item: item).environmentObject(browse)
+        // A catalog title (TMDB) is on no server, so it has none of these actions.
+        if item.isMetadataOnly {
+            content
+        } else {
+            content.contextMenu {
+                IOSPlexItemMenu(item: item, showsPlay: true, showsDetails: showsDetails)
+            } preview: {
+                IOSPlexMenuPreview(item: item).environmentObject(browse)
+            }
         }
     }
 }

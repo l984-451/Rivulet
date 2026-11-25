@@ -97,6 +97,19 @@ final class OfflineProgressLogTests: XCTestCase {
         XCTAssertEqual(removed, ["403", "ok"])
     }
 
+    func test_replay_401_408_429StopAndKeepEverything() async {
+        for status in [401, 408, 429] {
+            var removed: [String] = []
+            let sent = await OfflineProgressLog.replay(
+                [entry("a", offset: 1, at: 0), entry("b", offset: 1, at: 0)],
+                serverLastViewedAt: { _ in nil },
+                send: { _ in throw PlexAPIError.httpError(statusCode: status, data: nil) },
+                remove: { removed.append($0.itemID) })
+            XCTAssertFalse(sent)
+            XCTAssertEqual(removed, [])
+        }
+    }
+
     func test_saveAndLoad() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("OfflineProgressLogTests-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }

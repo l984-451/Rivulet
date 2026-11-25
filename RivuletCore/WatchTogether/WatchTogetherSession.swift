@@ -260,7 +260,8 @@ final class WatchTogetherSession: ObservableObject {
         case let joined as ParticipantJoinedEvent:
             notices.send(String(localized: "\(joined.participant.name) joined"))
         case let left as ParticipantLeftEvent:
-            notices.send(String(localized: "\(left.participant.name) left"))
+            // Its own key: "%@ left" already means time remaining ("45 min left").
+            notices.send(String(localized: "watchTogether.left", defaultValue: "\(left.participant.name) left"))
         case let action as ActionEvent where !action.byMe:
             guard let name = action.by?.name else { break }
             switch action.kind {
@@ -364,25 +365,5 @@ extension WatchTogetherSession {
             group.cancelAll()
             return first
         }
-    }
-
-    /// Lower case, with runs of anything but letters and digits as one space.
-    nonisolated static func foldedTitle(_ title: String) -> String {
-        title.lowercased()
-            .split { !$0.isLetter && !$0.isNumber }
-            .joined(separator: " ")
-    }
-
-    /// Some catalogue both sides are in names a different title.
-    nonisolated static func idsConflict(_ a: [String: String], _ b: [String: String]) -> Bool {
-        a.contains { key, value in b[key].map { $0 != value } ?? false }
-    }
-
-    /// A title match: same words, years at most one apart, no id saying otherwise.
-    nonisolated static func sameTitle(_ title: String, year: Int?, ids: [String: String],
-                                      as otherTitle: String, year otherYear: Int?, ids otherIDs: [String: String]) -> Bool {
-        guard foldedTitle(title) == foldedTitle(otherTitle), !idsConflict(ids, otherIDs) else { return false }
-        guard let year, let otherYear else { return true }
-        return abs(year - otherYear) <= 1
     }
 }

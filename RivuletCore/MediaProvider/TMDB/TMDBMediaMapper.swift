@@ -19,6 +19,15 @@ enum TMDBMediaMapper {
     // visibly upscales. Still small enough that row cards downsample cheaply.
     private static let posterBase = "https://image.tmdb.org/t/p/w780"
 
+    /// One of this mapper's posters at the smallest TMDB width covering `width` pixels: iOS
+    /// decodes artwork at the size it arrives. Any other URL comes back unchanged.
+    static func sizedPoster(_ url: URL, width: Int) -> URL {
+        let string = url.absoluteString
+        guard string.hasPrefix(posterBase + "/"),
+              let size = [92, 154, 185, 342, 500].first(where: { $0 >= width }) else { return url }
+        return URL(string: "https://image.tmdb.org/t/p/w\(size)" + string.dropFirst(posterBase.count)) ?? url
+    }
+
     /// TMDB ids are not globally unique — id 100 can exist as a movie AND a TV
     /// show. `MediaItemRef.itemID` encodes both so callers that only have a ref
     /// can disambiguate without a second round-trip. Format: "{movie|tv}:{id}".

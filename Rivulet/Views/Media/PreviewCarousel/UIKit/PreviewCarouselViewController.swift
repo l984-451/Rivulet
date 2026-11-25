@@ -410,7 +410,10 @@ final class PreviewCarouselViewController: UIViewController {
             backdrop.alpha = entrySnapshots.isEmpty ? 1 : 0
             backdropPlane.alpha = 0
             collectionView.alpha = 0
-            if entrySnapshots.isEmpty {
+            if standaloneDetail, entrySnapshots.isEmpty {
+                // No card morph: the stand-in never shows, and an item would run every detail load twice.
+                morphSnapshot.isHidden = true
+            } else if entrySnapshots.isEmpty {
                 morphSnapshot.isHidden = false
                 morphSnapshot.translatesAutoresizingMaskIntoConstraints = true
                 morphSnapshot.frame = initialSourceFrame == .zero

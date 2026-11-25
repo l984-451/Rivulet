@@ -424,7 +424,7 @@ final class InfoColumnsView: UIView {
         let source = detail.primarySource
         var langs: [(String, String)] = []
         if let audio = source?.audioTracks, !audio.isEmpty {
-            let names = uniqueOrdered(audio.compactMap { Self.languageName($0.language) })
+            let names = AudioLanguageSummary.entries(audio, name: { Self.languageName($0) })
             if !names.isEmpty { langs.append((String(localized: "Audio"), names.joined(separator: ", "))) }
         }
         if let subs = source?.subtitleTracks, !subs.isEmpty {

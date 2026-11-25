@@ -6130,7 +6130,9 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         // episode is prepared now, so a failure shows before the countdown fires.
         Task {
             if case .provider = source, let next = nextEpisode {
-                await preparedNextProviderPlayback(for: next)
+                if let prepared = await preparedNextProviderPlayback(for: next) {
+                    Self.prewarmProviderStream(prepared.stream)
+                }
             } else {
                 await preloadNextEpisode()
             }
@@ -6695,9 +6697,8 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
 
     /// Preload the next episode's stream URL and metadata for instant playback
     private func preloadNextEpisode() async {
-        // Plex only: a provider episode is prepared from its provider at the
-        // swap (`playNextEpisode`), never from a Plex URL built here.
-        // ponytail: no provider preload; add one if the swap's start is slow.
+        // Plex only: a provider episode is prepared at the credits
+        // (`preparedNextProviderPlayback`) and warmed by `prewarmProviderStream`.
         guard case .plex = source else { return }
         guard let next = nextEpisode, let ratingKey = next.ratingKey else { return }
 
@@ -6740,6 +6741,16 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                 }
             }
         }
+    }
+
+    /// Warms the opening bytes of a prepared Jellyfin or Emby episode, as `preloadNextEpisode`
+    /// does for Plex, so the swap's `load()` reads them from memory. Only a stream that goes to
+    /// Aether, with the route's own URL and headers: they are the prewarm's adoption key, and a
+    /// transcode would never read the bytes.
+    static func prewarmProviderStream(_ stream: StreamInfo) {
+        guard case .aether(let url, let headers)? = initialRoutes(for: stream)?.primary else { return }
+        let httpHeaders = headers ?? [:]
+        Task(priority: .utility) { await AetherPlayer.prewarm(url: url, headers: httpHeaders) }
     }
 
     /// Clear preloaded data

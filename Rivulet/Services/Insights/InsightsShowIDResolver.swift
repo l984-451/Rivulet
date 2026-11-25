@@ -2,7 +2,7 @@
 // Copyright (C) 2025-2026 Bain Gurley
 
 // Resolves a show's TMDB id when Plex gives no tmdb:// guid: episodes carry a plex:// or tvdb://
-// grandparent guid, so tvdb/imdb ids go through the tmdb-proxy `/tmdb/find`, cached per show.
+// grandparent guid, so tvdb/imdb ids go through `tmdb/find` (`TMDBTransport`), cached per show.
 
 import Foundation
 
@@ -54,15 +54,8 @@ actor InsightsShowIDResolver {
 
     private func performFind(external: String, source: String) async -> Int? {
         guard let encoded = external.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
-              let url = URL(string: "tmdb/find/\(encoded)", relativeTo: baseURL) else { return nil }
-        var comps = URLComponents(url: url, resolvingAgainstBaseURL: true)
-        comps?.queryItems = [URLQueryItem(name: "source", value: source)]
-        guard let finalURL = comps?.url else { return nil }
-
-        var req = URLRequest(url: finalURL)
-        req.addValue("application/json", forHTTPHeaderField: "Accept")
-        guard let (data, response) = try? await session.attestedData(for: req),
-              let http = response as? HTTPURLResponse, http.statusCode == 200,
+              let data = try? await TMDBTransport.data("tmdb/find/\(encoded)", query: [URLQueryItem(name: "source", value: source)],
+                                                       session: session, baseURL: baseURL),
               let decoded = try? JSONDecoder().decode(FindResponse.self, from: data) else {
             return nil
         }

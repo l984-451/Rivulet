@@ -248,7 +248,8 @@ final class ShellSidebarRowCell: UICollectionViewCell {
 
     func configure(item: ShellSidebarItem, isSelectedTab: Bool) {
         self.isSelectedTab = isSelectedTab
-        iconView.image = UIImage(systemName: item.icon)
+        // Home's glyph fills a 40 pt box, its size in the TV app's rows.
+        iconView.image = SidebarHomeGlyph.icon(item.icon, side: 40)
         titleLabel.text = item.title
         serverLabel.text = item.badge
         serverLabel.isHidden = item.badge == nil
@@ -1026,8 +1027,9 @@ final class ShellSidebarViewController: UIViewController {
                                                constant: Metrics.pillHeight / 2),
             // Chevron sits just left of the collapsed pill, vertically centered
             // on it. The pill's left edge is at pillOrigin.x.
+            // 2 pt short of the pill puts the glyph where the TV app's sits (measured, tvOS 27).
             pillChevron.trailingAnchor.constraint(equalTo: view.leadingAnchor,
-                                                  constant: Metrics.pillOrigin.x - 4),
+                                                  constant: Metrics.pillOrigin.x - 2),
             pillChevron.centerYAnchor.constraint(equalTo: view.topAnchor,
                                                  constant: Metrics.pillOrigin.y + Metrics.pillHeight / 2),
         ])
@@ -1049,7 +1051,7 @@ final class ShellSidebarViewController: UIViewController {
     private func configurePill() {
         // Over the profile panel the pill is the TV app's dim "Switch Profile": person glyph, no chevron.
         let item = item(for: pillShowsProfile ? .account : selectedTab)
-        pillIcon.image = UIImage(systemName: pillShowsProfile ? "person.crop.circle" : item.icon)
+        pillIcon.image = pillShowsProfile ? UIImage(systemName: "person.crop.circle") : SidebarHomeGlyph.icon(item.icon, side: 46)
         pillAvatar.url = pillShowsProfile ? nil : item.avatarURL
         pillLabel.text = pillShowsProfile ? String(localized: "Switch Profile") : item.title
         pillLabel.textColor = UIColor.white.withAlphaComponent(pillShowsProfile ? 0.29 : 1)
@@ -1135,7 +1137,7 @@ final class ShellSidebarViewController: UIViewController {
         for section in sections {
             if let match = section.items.first(where: { $0.tab == tab }) { return match }
         }
-        return ShellSidebarItem(tab: .home, title: String(localized: "Home"), icon: "house.fill")
+        return ShellSidebarItem(tab: .home, title: String(localized: "Home"), icon: SidebarHomeGlyph.name)
     }
 
 }

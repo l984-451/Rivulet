@@ -46,6 +46,8 @@ final class IOSDownloadCenter: ObservableObject {
     private var queueIDs: [String: Int] = [:]
     private var ticker: Task<Void, Never>?
     private var reconciled = false
+    /// False when the manifest was there but unreadable at launch: then its records are unknown.
+    private var manifestReadable = true
     private var cancellables = Set<AnyCancellable>()
     /// The current server's machine id, kept across launches for offline use.
     private(set) var currentServerID: String? {
@@ -53,24 +55,19 @@ final class IOSDownloadCenter: ObservableObject {
     }
 
     private init() {
-        try? FileManager.default.createDirectory(at: Self.directory, withIntermediateDirectories: true)
-        IOSDownloadTransfer.excludeFromBackup(Self.directory)
-        let present = Set((try? FileManager.default.contentsOfDirectory(atPath: Self.directory.path)) ?? [])
-        let launch = DownloadManifest.loadForLaunch(from: Self.manifestURL)
-        let loaded = launch.manifest
-        let checked = loaded.reconciled(filesPresent: present)
-        records = checked.records
-        if checked != loaded || loaded.migratedFrom != nil { save() }
         currentServerID = UserDefaults.standard.string(forKey: Self.serverIDKey)
-        pendingRemovals = DownloadsJSONFile.load([PendingRemoval].self, from: Self.removalsURL) ?? []
-        // A delete that raced a finishing transfer leaves a file named for no record. Never behind a
-        // manifest that would not decode: those files are the only copy.
-        if launch.safeToSweep {
-            for name in DownloadRules.orphanedFiles(present, records: records) { removeFile(name) }
-        }
+        loadManifest()
 
         NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)
-            .sink { [weak self] _ in Task { await self?.serverChanged() } }
+            .sink { [weak self] _ in Task {
+                guard let self else { return }
+                // A manifest that could not be read at launch gets another try.
+                if !self.manifestReadable {
+                    self.loadManifest()
+                    self.start()
+                }
+                await self.serverChanged()
+            } }
             .store(in: &cancellables)
         // willSet: the new URL is in place once the Task runs.
         auth.$selectedServerURL.dropFirst().removeDuplicates()
@@ -89,8 +86,28 @@ final class IOSDownloadCenter: ObservableObject {
         pathMonitor.start(queue: DispatchQueue(label: "rivulet.downloads.path"))
     }
 
+    private func loadManifest() {
+        try? FileManager.default.createDirectory(at: Self.directory, withIntermediateDirectories: true)
+        IOSDownloadTransfer.excludeFromBackup(Self.directory)
+        let present = Set((try? FileManager.default.contentsOfDirectory(atPath: Self.directory.path)) ?? [])
+        let launch = DownloadManifest.loadForLaunch(from: Self.manifestURL)
+        manifestReadable = launch.canSave
+        guard manifestReadable else { return }
+        let loaded = launch.manifest
+        let checked = loaded.reconciled(filesPresent: present)
+        records = checked.records
+        if checked != loaded || loaded.migratedFrom != nil { save() }
+        pendingRemovals = DownloadsJSONFile.load([PendingRemoval].self, from: Self.removalsURL) ?? []
+        // A delete that raced a finishing transfer leaves a file named for no record. Never behind a
+        // manifest that would not decode: those files are the only copy.
+        if launch.safeToSweep {
+            for name in DownloadRules.orphanedFiles(present, records: records) { removeFile(name) }
+        }
+    }
+
     /// Launch: re-attach live transfers, cancel orphans, then resume everything unfinished.
     func start() {
+        guard manifestReadable else { return }
         Task {
             // Read on main after the await: a task whose completion already ran is no longer live.
             let tasks = await transfer.allTasks().filter { $0.state == .running || $0.state == .suspended }
@@ -237,7 +254,7 @@ final class IOSDownloadCenter: ObservableObject {
     /// Starts a download, or retries a failed one. `quality` (else the Download Quality setting) applies to
     /// Plex only: it converts on the server, while Jellyfin and Emby always send the original file.
     func download(_ item: MediaItem, quality: StreamingQuality? = nil) {
-        guard IOSDownloadGate.canDownload(item.ref),
+        guard manifestReadable, IOSDownloadGate.canDownload(item.ref),
               let key = DownloadIdentity.providerID(for: item.ref, selectedPlexMachineID: currentServerID) else { return }
         let plexMachineID = DownloadIdentity.plexMachineID(of: key)
         let provider = registry.provider(for: item.ref.providerID)
@@ -320,8 +337,14 @@ final class IOSDownloadCenter: ObservableObject {
         }
     }
 
+    /// Delete All reaches every profile's downloads only for the Plex Home administrator, or with no profiles.
+    var deleteAllRemovesEverything: Bool {
+        let profiles = PlexUserProfileManager.shared
+        return !profiles.isRestrictedProfile && (profiles.selectedUser.map(\.admin) ?? (currentProfileID == nil))
+    }
+
     func deleteAll() {
-        for record in records { delete(recordID: record.id) }
+        for record in deleteAllRemovesEverything ? records : visibleRecords { delete(recordID: record.id) }
     }
 
     // MARK: - Transfer events
@@ -340,7 +363,7 @@ final class IOSDownloadCenter: ObservableObject {
         case let .finished(id, taskID, fileName, bytes, etag):
             guard accepts(id, taskID), let record = record(id) else {
                 // A deleted or superseded download's file has no owner.
-                if record(id)?.fileName != fileName { removeFile(fileName) }
+                if manifestReadable, record(id)?.fileName != fileName { removeFile(fileName) }
                 return
             }
             activeTasks[id] = nil
@@ -913,6 +936,7 @@ final class IOSDownloadCenter: ObservableObject {
     }
 
     private func save() {
+        guard manifestReadable else { return }
         try? DownloadManifest(records: records).save(to: Self.manifestURL)
     }
 }

@@ -20,8 +20,10 @@ nonisolated struct TvheadendAccount: Sendable, Equatable {
 
     var isSignedIn: Bool { username != nil }
 
-    var credential: URLCredential? {
-        username.map { URLCredential(user: $0, password: password ?? "", persistence: .forSession) }
+    var credential: BoundedDownload.ServerCredential? {
+        username.map {
+            .init(origin: server, value: URLCredential(user: $0, password: password ?? "", persistence: .none))
+        }
     }
 }
 

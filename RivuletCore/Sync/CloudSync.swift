@@ -37,6 +37,11 @@ final class CloudSync: ObservableObject {
     private var accountsRunning = false
     private var accountsAgain = false
     private var loggedUnreadableVault = false
+    /// CloudKit named the signed-in account since the last look. Until then nothing goes to the vault:
+    /// a switch of account can't be noticed without the name.
+    private var identityKnown = false
+    /// Bumped on every account check, so a lookup or cycle started before it can't act after it.
+    private var accountCheck = 0
     /// The key-value store already announced the switch of account; the next identity check must not repeat it.
     private var switchAnnounced = false
     private lazy var vault = AccountVault()
@@ -109,6 +114,7 @@ final class CloudSync: ObservableObject {
     }
 
     private func deactivate() {
+        identityKnown = false
         debounce?.cancel()
         accountDebounce?.cancel()
         mirror = nil
@@ -122,17 +128,24 @@ final class CloudSync: ObservableObject {
     }
 
     private func refreshAccountSoon() {
-        Task { [weak self] in await self?.refreshAccount() }
+        identityKnown = false
+        accountCheck += 1
+        let check = accountCheck
+        Task { [weak self] in await self?.refreshAccount(check) }
     }
 
     /// Asks CloudKit whether an account is signed in, notes a switch of account, and starts a vault cycle.
-    private func refreshAccount() async {
+    private func refreshAccount(_ check: Int) async {
         guard isEnabled else { status = .off; return }
         let available = await vault.accountAvailable()
         guard isEnabled else { return }
         status = available ? .on : .noAccount
         guard available else { accountsReady = true; return }
-        if let identity = await vault.accountIdentity() { noteAppleAccount(identity) }
+        let identity = await vault.accountIdentity()
+        guard check == accountCheck else { return }
+        guard let identity, isEnabled else { accountsReady = true; return }
+        noteAppleAccount(identity)
+        identityKnown = true
         scheduleAccountSync(after: .zero)
     }
 
@@ -180,7 +193,7 @@ final class CloudSync: ObservableObject {
     }
 
     private func scheduleAccountSync(after delay: Duration = .seconds(3)) {
-        guard isEnabled, status == .on else { accountsReady = true; return }
+        guard isEnabled, status == .on, identityKnown else { accountsReady = true; return }
         accountDebounce?.cancel()
         accountDebounce = Task { [weak self] in
             if delay > .zero { try? await Task.sleep(for: delay) }
@@ -190,11 +203,14 @@ final class CloudSync: ObservableObject {
     }
 
     private func runAccountSync() async {
-        guard isEnabled, status == .on else { accountsReady = true; return }
+        guard isEnabled, status == .on, identityKnown else { accountsReady = true; return }
         if accountsRunning { accountsAgain = true; return }
         accountsRunning = true
         do {
-            if try await coordinator.sync() { Self.onAccountsChanged?() }
+            let check = accountCheck
+            if try await coordinator.sync(isCurrent: { self.identityKnown && self.accountCheck == check }) {
+                Self.onAccountsChanged?()
+            }
         } catch let error as VaultError {
             // The record is left exactly as it is; saying so once is enough.
             if !loggedUnreadableVault {

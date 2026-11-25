@@ -228,11 +228,13 @@ struct IOSDownloadSettingsView: View {
                 LabeledContent("Storage Used",
                                value: ByteCountFormatter.string(fromByteCount: downloads.storageUsed, countStyle: .file))
                 Button("Delete All Downloads", role: .destructive) { confirmingDeleteAll = true }
-                    .disabled(downloads.records.isEmpty)
+                    .disabled(downloads.deleteAllRemovesEverything ? downloads.records.isEmpty : downloads.visibleRecords.isEmpty)
                     .confirmationDialog("Delete all downloads?", isPresented: $confirmingDeleteAll, titleVisibility: .visible) {
                         Button("Delete All Downloads", role: .destructive) { downloads.deleteAll() }
                     } message: {
-                        Text("Every download on this device is removed, for every profile.")
+                        if downloads.deleteAllRemovesEverything {
+                            Text("Every download on this device is removed, for every profile.")
+                        }
                     }
             }
         }

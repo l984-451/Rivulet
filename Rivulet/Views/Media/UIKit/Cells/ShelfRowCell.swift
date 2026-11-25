@@ -72,6 +72,8 @@ final class ShelfRowCell: UICollectionViewCell {
     /// The header text over this row when it lives outside the cell (Home's section header).
     var liftingHeader: (() -> UIView?)?
     private weak var liftedHeader: UIView?
+    /// The focused tile and the offset the row rests at, kept for `refreshHeaderLift`.
+    private var liftFocus: (item: Int?, offset: CGFloat) = (nil, 0)
 
     /// Focused tile index in this row, nil off-row or on the skeleton. Play/Pause bubbles to the
     /// owning controller with no per-tile callback, so the controller reads it from here.
@@ -118,6 +120,11 @@ final class ShelfRowCell: UICollectionViewCell {
     }
 
     static let headerHeight: CGFloat = 44
+
+    /// The in-cell header's opacity: a detail page's first row fades its title in with the scroll.
+    var headerAlpha: CGFloat = 1 {
+        didSet { headerLabel.alpha = headerAlpha }
+    }
 
     private let headerLabel: UILabel = {
         let l = UILabel()
@@ -254,6 +261,7 @@ final class ShelfRowCell: UICollectionViewCell {
     override func prepareForReuse() {
         super.prepareForReuse()
         pendingFocusIndex = nil
+        headerAlpha = 1
         liftedHeader?.transform = .identity
         liftedHeader = nil
         // Belongs to the row this cell WAS showing; carrying it into a
@@ -631,9 +639,22 @@ extension ShelfRowCell: UICollectionViewDataSource, UICollectionViewDelegate {
     /// The Apple TV app lifts a row's header by the focused tile's upward growth while that tile's
     /// grown frame overlaps the header text (VideosUI 27 0x202f39f04).
     private func updateHeaderLift(focusedItem: Int?, offset: CGFloat, coordinator: UIFocusAnimationCoordinator) {
-        let header = liftingHeader?() ?? (headerLabel.isHidden ? nil : headerLabel)
+        liftFocus = (focusedItem, offset)
+        liftHeader(liftingHeader?()) { coordinator.addCoordinatedAnimations($0, completion: nil) }
+    }
+
+    /// Moving up, a row takes focus before its header is on screen, so the page passes the header in
+    /// as it appears.
+    func refreshHeaderLift(header: UIView?) {
+        header?.superview?.layoutIfNeeded()
+        liftHeader(header) { UIView.animate(withDuration: 0.25, animations: $0) }
+    }
+
+    private func liftHeader(_ pageHeader: UIView?, animate: (@escaping () -> Void) -> Void) {
+        let (focusedItem, offset) = liftFocus
+        let header = pageHeader ?? (headerLabel.isHidden ? nil : headerLabel)
         if let old = liftedHeader, old !== header {
-            coordinator.addCoordinatedAnimations({ old.transform = .identity }, completion: nil)
+            animate { old.transform = .identity }
         }
         liftedHeader = header
         guard let header else { return }
@@ -648,7 +669,7 @@ extension ShelfRowCell: UICollectionViewDataSource, UICollectionViewDelegate {
         }
         let transform = overlaps ? CGAffineTransform(translationX: 0, y: -tileKind.focusRise) : .identity
         guard header.transform != transform else { return }
-        coordinator.addCoordinatedAnimations({ header.transform = transform }, completion: nil)
+        animate { header.transform = transform }
     }
 
     /// Keep a Left press at the window edge from escaping to the sidebar

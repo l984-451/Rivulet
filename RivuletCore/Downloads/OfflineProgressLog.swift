@@ -117,7 +117,10 @@ nonisolated struct OfflineProgressLog: Codable, Sendable, Equatable {
     static func verdict(for error: Error) -> Verdict {
         if case PlexAPIError.networkError = error { return .stop }
         if error is URLError || error is CancellationError { return .stop }
-        if case PlexAPIError.httpError(let status, _) = error { return status >= 500 ? .keep : .drop }
+        if case PlexAPIError.httpError(let status, _) = error {
+            if [401, 408, 429].contains(status) { return .stop }
+            return status >= 500 ? .keep : .drop
+        }
         switch error as? MediaProviderError {
         case .unreachable?, .unauthorized?: return .stop
         case .backendSpecific?: return .keep
@@ -126,7 +129,8 @@ nonisolated struct OfflineProgressLog: Codable, Sendable, Equatable {
     }
 
     /// Sends `entries` in order and returns whether any was sent. A transport error stops the run
-    /// and keeps the rest, a 5xx keeps that entry, and any other failure drops it.
+    /// and keeps the rest, as do a refused token, a timeout and a rate limit; a 5xx keeps that entry, and any other
+    /// failure drops it.
     static func replay(
         _ entries: [Entry],
         isolation: isolated (any Actor)? = #isolation,

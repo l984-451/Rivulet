@@ -84,7 +84,8 @@ struct IOSPlexDetailView: View {
         } else if let summary = shown.overview, !summary.isEmpty {
             summaryView(summary).padding(.horizontal, leading)
         }
-        if isSeries {
+        // A catalog title (TMDB) has no seasons of its own to list.
+        if isSeries, !item.isMetadataOnly {
             episodesSection(leading: leading)
         }
         IOSPlexExtrasRow(detail: detail?.adding(extras: seasonExtras))
@@ -193,6 +194,19 @@ struct IOSPlexDetailView: View {
 
     private func load() async {
         do {
+            // A title on no server, from a catalog (TMDB), is that catalog's detail alone, as on tvOS.
+            if browse.provider(for: item.ref.providerID) == nil,
+               let source = MetadataSourceRegistry.shared.source(for: item.ref.providerID) {
+                // TMDB answers every failure, a cancelled request included, with "not found".
+                guard let loaded = try? await source.itemDetail(item.ref) else {
+                    if !Task.isCancelled { error = String(localized: "Try again in a moment.") }
+                    return
+                }
+                detail = loaded
+                error = nil
+                loadedRevision = browse.watchStateRevision
+                return
+            }
             let provider = try browse.provider(for: item.ref)
             let loaded = try await provider.fullDetail(for: item.ref)
             detail = loaded
@@ -279,6 +293,9 @@ private struct IOSPlexDetailHeader: View {
     @State private var onList: Bool?
     @State private var onScreen = false
     @State private var inView = true
+    /// What Versions plays (a show's Play episode) and the other copies of it.
+    @State private var versionSubject: MediaItemDetail?
+    @State private var otherCopies: [VersionPicker.Copy] = []
 
     private var isWide: Bool { size.width > size.height }
 
@@ -412,30 +429,48 @@ private struct IOSPlexDetailHeader: View {
                         actions.setFavorite(item, !isFavorite)
                     }
                 }
-                if canPlay, item.isPlayable, let detail {
-                    let versions = VersionPicker.versions(in: detail)
-                    if !versions.isEmpty { versionMenu(versions) }
+                if canPlay, let subject = versionSubject {
+                    let options = VersionPicker.options(for: subject, copies: otherCopies)
+                    if !options.isEmpty { versionMenu(options, subject: subject.item) }
                 }
                 if item.isPlayable, canDownload {
                     IOSDownloadButton(item: item)
                 }
-                Menu {
-                    // No Delete: the page would be left showing what it deleted.
-                    IOSPlexItemMenu(item: item, showsPlay: false, showsWatchlist: false, showsFavorite: false, showsDelete: false)
-                } label: {
-                    Image(systemName: "ellipsis").frame(width: 22, height: 22)
+                // Its actions (watched, refresh metadata) need the title on a server.
+                if !item.isMetadataOnly {
+                    Menu {
+                        // No Delete: the page would be left showing what it deleted.
+                        IOSPlexItemMenu(item: item, showsPlay: false, showsWatchlist: false, showsFavorite: false, showsDelete: false)
+                    } label: {
+                        Image(systemName: "ellipsis").frame(width: 22, height: 22)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .accessibilityLabel("More")
                 }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .accessibilityLabel("More")
             }
         }
         .frame(maxWidth: 480)
         .controlSize(.large)
         .task(id: item.ref) { await loadWatchlistState() }
+        .task(id: [detail?.item.ref, playTarget?.ref]) { await loadVersions() }
         .onReceive(PlexWatchlistService.shared.$watchlistItems.dropFirst()) { _ in
             Task { await loadWatchlistState() }
         }
+    }
+
+    /// Versions' files first, then the other libraries' and servers' copies.
+    private func loadVersions() async {
+        versionSubject = nil
+        otherCopies = []
+        guard let detail, let subject = await TitleCopies.subject(of: detail, playTarget: playTarget),
+              !Task.isCancelled else { return }
+        versionSubject = subject
+        let servers = TitleCopies.servers(for: item, libraries: browse.libraries)
+        guard !servers.isEmpty else { return }
+        let found = await TitleCopies.versions(of: subject, on: servers)
+        guard !Task.isCancelled else { return }
+        otherCopies = found.copies
     }
 
     private var canPlay: Bool { IOSPlaybackGate.canPlay(item.ref) }
@@ -486,11 +521,19 @@ private struct IOSPlexDetailHeader: View {
         }
     }
 
-    /// Plays one of the title's files instead of the best one.
-    private func versionMenu(_ versions: [MediaSource]) -> some View {
+    /// Plays one of the title's files, or another copy's, instead of the best one.
+    private func versionMenu(_ options: [VersionPicker.Option], subject: MediaItem) -> some View {
         Menu {
-            ForEach(Array(zip(versions, VersionPicker.labels(for: versions))), id: \.0.id) { source, label in
-                Button(label) { if let playTarget { actions.playVersion(playTarget, source.id) } }
+            ForEach(Array(zip(options.indices, VersionPicker.labels(for: options))), id: \.0) { index, label in
+                Button(label) {
+                    switch VersionPicker.pick(options[index], playTarget: nil, shown: subject) {
+                    case .version(let id): actions.playVersion(subject, id)
+                    case .item(let copy, let id):
+                        // The copy carries this page's resume point when that is further in.
+                        let offset = copy.userState.viewOffset
+                        actions.playCopy(copy, id, offset > 0 ? offset : nil)
+                    }
+                }
             }
         } label: {
             Image(systemName: "square.stack.3d.up").frame(width: 22, height: 22)

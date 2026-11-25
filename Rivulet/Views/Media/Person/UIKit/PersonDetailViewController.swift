@@ -502,6 +502,15 @@ final class PersonDetailViewController: UIViewController {
 }
 
 extension PersonDetailViewController: UICollectionViewDelegate {
+    /// Moving up, a row takes focus before its header is on screen: lift the header as it appears.
+    func collectionView(_ collectionView: UICollectionView, willDisplaySupplementaryView view: UICollectionReusableView,
+                        forElementKind elementKind: String, at indexPath: IndexPath) {
+        guard elementKind == UICollectionView.elementKindSectionHeader,
+              let row = collectionView.cellForItem(at: IndexPath(item: 0, section: indexPath.section)) as? ShelfRowCell
+        else { return }
+        row.refreshHeaderLift(header: (view as? HubHeaderView)?.textView)
+    }
+
     func scrollViewWillEndDragging(_ scrollView: UIScrollView, withVelocity velocity: CGPoint,
                                    targetContentOffset: UnsafeMutablePointer<CGPoint>) {
         guard scrollView === collectionView else { return }

@@ -67,6 +67,9 @@ final class IOSPlaybackController: NSObject, ObservableObject {
         self.surface = surface
         newSession.onItemChange = { [weak self] in self?.startNowPlaying() }
         observe(player)
+        (newSession as? IOSPlexPlayback)?.$nextEpisode
+            .sink { [weak self] in self?.nowPlaying.hasNext = $0 != nil }
+            .store(in: &cancellables)
         startNowPlaying()
         isPresented = true
         Task { await newSession.begin() }
@@ -159,7 +162,8 @@ final class IOSPlaybackController: NSObject, ObservableObject {
                 play: { [weak self] in self?.session.map(IOSWatchTogether.play) },
                 pause: { [weak self] in self?.session.map(IOSWatchTogether.pause) },
                 skip: { [weak self] seconds in self?.session.map { IOSWatchTogether.skip($0, by: seconds) } },
-                seek: item.isLive ? nil : { [weak self] time in self?.session.map { IOSWatchTogether.seek($0, to: time) } }
+                seek: item.isLive ? nil : { [weak self] time in self?.session.map { IOSWatchTogether.seek($0, to: time) } },
+                next: item.isLive ? nil : { [weak self] in (self?.session as? IOSPlexPlayback)?.playNext() }
             ),
             skipBackward: back,
             skipForward: forward

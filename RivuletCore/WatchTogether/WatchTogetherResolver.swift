@@ -16,10 +16,7 @@ import OpenWatchParty
 @MainActor
 enum WatchTogetherResolver {
     /// Selected Plex server first, so the likeliest copy is tried first.
-    static var providers: [any MediaProvider] {
-        let registry = MediaProviderRegistry.shared
-        return [registry.plexProvider].compactMap { $0 } + registry.secondaryProviders
-    }
+    static var providers: [any MediaProvider] { TitleCopies.servers(in: .shared) }
 
     static func candidates(for media: Media) async throws -> [Candidate<WatchTogetherItem>] {
         let details = await withTaskGroup(of: (Int, [MediaItemDetail]).self) { group in
@@ -49,51 +46,34 @@ enum WatchTogetherResolver {
         return found
     }
 
-    /// One server's copies: the descriptor's own shortcut, its Plex guid, then a title search.
+    /// One server's copies: the descriptor's own shortcut, else `TitleCopies`.
     private static func copies(of media: Media, on provider: any MediaProvider) async throws -> [MediaItemDetail] {
-        func detail(_ itemID: String) async -> MediaItemDetail? {
-            try? await provider.fullDetail(for: MediaItemRef(providerID: provider.id, itemID: itemID))
-        }
         let serverKey = await serverKey(for: provider)
         if let shortcut = WatchTogetherSession.shortcut(in: media), shortcut.server == serverKey,
-           let exact = await detail(shortcut.item) {
+           let exact = try? await provider.fullDetail(for: MediaItemRef(providerID: provider.id, itemID: shortcut.item)) {
             return [exact]
         }
-        if let plex = provider as? PlexProvider, let guid = media.ids["plex"],
-           let key = try? await PlexNetworkManager.shared.findByGuid(
-               serverURL: plex.serverURL, authToken: plex.authToken, guid: guid)?.ratingKey,
-           let exact = await detail(key) {
-            return [exact]
-        }
+        guard let query = query(for: media) else { return [] }
+        return await TitleCopies.copies(of: query, on: provider).details
+    }
+
+    /// The room's descriptor as a title to find; nil for a video that is neither a movie nor an episode.
+    nonisolated static func query(for media: Media) -> TitleQuery? {
+        var ids = media.ids
+        let plexGUID = ids.removeValue(forKey: "plex")
         switch media.kind {
         case .movie:
-            let hits = try await provider.search(media.title).filter { $0.kind == .movie }
-            var details: [MediaItemDetail] = []
-            for hit in hits where WatchTogetherSession.foldedTitle(hit.title) == WatchTogetherSession.foldedTitle(media.title) {
-                guard let full = await detail(hit.ref.itemID),
-                      WatchTogetherSession.sameTitle(media.title, year: media.year.map(Int.init), ids: media.ids,
-                                                     as: hit.title, year: hit.year, ids: full.externalIDs)
-                else { continue }
-                details.append(full)
-            }
-            return details
+            return TitleQuery(title: media.title, year: media.year.map(Int.init), ids: ids, plexGUID: plexGUID)
         case .episode:
-            guard let series = media.series, let season = media.season, let episode = media.episode else { return [] }
-            let shows = try await provider.search(series.title).filter {
-                $0.kind == .show && WatchTogetherSession.sameTitle(
-                    series.title, year: series.year.map(Int.init), ids: [:], as: $0.title, year: $0.year, ids: [:])
-            }
-            var details: [MediaItemDetail] = []
-            for show in shows {
-                let episodes = (try? await provider.allEpisodes(of: show.ref)) ?? []
-                for hit in episodes where hit.seasonNumber.map(Int64.init) == season
-                    && hit.episodeNumber.map(Int64.init) == episode {
-                    if let full = await detail(hit.ref.itemID) { details.append(full) }
-                }
-            }
-            return details
-        case .video:
-            return []
+            guard let series = media.series, let season = media.season, let episode = media.episode else { return nil }
+            var showIDs = series.ids
+            let showGUID = showIDs.removeValue(forKey: "plex")
+            return TitleQuery(title: media.title, year: media.year.map(Int.init), ids: ids, plexGUID: nil,
+                              show: .init(title: series.title, year: series.year.map(Int.init), ids: showIDs,
+                                          plexGUID: showGUID),
+                              season: Int(season), episode: Int(episode))
+        default:
+            return nil
         }
     }
 

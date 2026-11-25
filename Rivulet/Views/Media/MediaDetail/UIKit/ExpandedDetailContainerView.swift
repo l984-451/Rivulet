@@ -45,10 +45,10 @@ final class ExpandedDetailContainerView: UIView {
     /// Vertical slack inside the season-pill scroller so a focused pill's 1.05
     /// scale isn't clipped by the scroller's bounds.
     private static let seasonPillFocusPad: CGFloat = 8
-    /// Small title logo box and the pills below it (measured on device, tvOS 27): the pills sit 64 under the logo.
-    private static let smallLogoTop: CGFloat = 45
-    private static let smallLogoHeight: CGFloat = 100
-    static let seasonPillTop: CGFloat = smallLogoTop + smallLogoHeight + 64
+    /// The small title logo: top 45, fitted inside 546 x 100 (measured on device, tvOS 27).
+    /// Its height places the pills and the rows below it, as Apple's does.
+    static let smallLogoTop: CGFloat = 45
+    private static let smallLogoMaxSize = CGSize(width: 546, height: 100)
     private static let peekLeadingCarousel = PreviewCarouselGeometry.centeredHorizontalInset
     private static let peekTrailingCarousel = PreviewCarouselGeometry.centeredHorizontalInset
     private static let peekLeadingExpanded: CGFloat = 0
@@ -201,6 +201,8 @@ final class ExpandedDetailContainerView: UIView {
     private var episodesTrailingConstraint: NSLayoutConstraint!
 
     private var logoLoadToken: UInt64 = 0
+    private var smallLogoHeightConstraint: NSLayoutConstraint!
+    private var seasonsHeaderTopConstraint: NSLayoutConstraint!
     /// Bumped on every `setCurrent`; in-flight cascade blocks no-op if stale.
     private var cascadeToken: UInt64 = 0
     /// Width constraints of the 6 episode thumbs (animated on expand).
@@ -306,6 +308,9 @@ final class ExpandedDetailContainerView: UIView {
         episodesTrailingConstraint = episodesClip.trailingAnchor.constraint(
             equalTo: belowFoldPage.trailingAnchor, constant: -Self.peekTrailingCarousel
         )
+        smallLogoHeightConstraint = smallTitleLogo.heightAnchor.constraint(equalToConstant: Self.smallLogoMaxSize.height)
+        seasonsHeaderTopConstraint = seasonsHeader.topAnchor.constraint(equalTo: topAnchor, constant: 0)
+        applySmallLogoHeight(Self.smallLogoMaxSize.height)
 
         NSLayoutConstraint.activate([
             contentView.topAnchor.constraint(equalTo: topAnchor),
@@ -326,8 +331,8 @@ final class ExpandedDetailContainerView: UIView {
             // Small title logo: top-centered, slides up with content, crossfades in.
             smallTitleLogo.topAnchor.constraint(equalTo: topAnchor, constant: Self.smallLogoTop),
             smallTitleLogo.centerXAnchor.constraint(equalTo: centerXAnchor),
-            smallTitleLogo.heightAnchor.constraint(equalToConstant: Self.smallLogoHeight),
-            smallTitleLogo.widthAnchor.constraint(lessThanOrEqualToConstant: 546),
+            smallLogoHeightConstraint,
+            smallTitleLogo.widthAnchor.constraint(lessThanOrEqualToConstant: Self.smallLogoMaxSize.width),
 
             // Episode peek: card-height clipped window, top tracks the reserve.
             episodesTopConstraint,
@@ -341,7 +346,7 @@ final class ExpandedDetailContainerView: UIView {
             episodesRow.bottomAnchor.constraint(equalTo: episodesClip.bottomAnchor),
 
             // Seasons header: pills 64 below the logo, left-aligned with the episodes.
-            seasonsHeader.topAnchor.constraint(equalTo: topAnchor, constant: Self.seasonPillTop - Self.seasonPillFocusPad),
+            seasonsHeaderTopConstraint,
             // Edge to edge, so the pills bleed off the screen like the episode rows.
             seasonsHeader.leadingAnchor.constraint(equalTo: leadingAnchor),
             seasonsHeader.trailingAnchor.constraint(equalTo: trailingAnchor),
@@ -414,6 +419,7 @@ final class ExpandedDetailContainerView: UIView {
         scrollOffset = off
         smallTitleLogo.alpha = belowFoldTitleOpacity
         seasonsHeader.alpha = scrollProgress
+        belowFoldCollection.firstHeaderAlpha = scrollProgress
         // The logo and pills ride the rail's offset past its details rest, inside the scroll animation.
         let dy = belowFoldCollection.detailsRestOff - off
         let scroll = CGAffineTransform(translationX: 0, y: dy)
@@ -518,6 +524,7 @@ final class ExpandedDetailContainerView: UIView {
         layoutIfNeeded()  // keep the reserve push locked to the translation (§6)
         smallTitleLogo.alpha = belowFoldTitleOpacity
         seasonsHeader.alpha = scrollProgress
+        belowFoldCollection.firstHeaderAlpha = scrollProgress
         onScrollProgress?(scrollProgress)
     }
 
@@ -620,16 +627,32 @@ final class ExpandedDetailContainerView: UIView {
 
         logoLoadToken &+= 1
         let token = logoLoadToken
-        smallTitleLogo.image = nil
+        let logoURL = item?.artwork.logo
+        setSmallLogo(logoURL.flatMap { ImageCacheManager.shared.cachedImage(for: $0) })
 
-        guard let item, let logoURL = item.artwork.logo else { return }
+        guard let logoURL, smallTitleLogo.image == nil else { return }
         Task { [weak self] in
             let image = await ImageCacheManager.shared.image(for: logoURL)
             await MainActor.run {
                 guard let self, self.logoLoadToken == token, let image else { return }
-                self.smallTitleLogo.image = image
+                self.setSmallLogo(image)
             }
         }
+    }
+
+    /// Shows the logo in a box fitted to it, so the pills and rows follow its bottom edge.
+    private func setSmallLogo(_ image: UIImage?) {
+        smallTitleLogo.image = image
+        let max = Self.smallLogoMaxSize
+        let height = image.map { $0.size.width > 0 ? min(max.height, max.width * $0.size.height / $0.size.width) : max.height }
+        applySmallLogoHeight(height ?? max.height)
+    }
+
+    private func applySmallLogoHeight(_ height: CGFloat) {
+        smallLogoHeightConstraint.constant = height
+        let pillTop = BelowFoldCollectionView.seasonPillTop(logoHeight: height)
+        seasonsHeaderTopConstraint.constant = pillTop - Self.seasonPillFocusPad
+        belowFoldCollection.logoHeight = height
     }
 
     // MARK: - Peek episode thumbnails

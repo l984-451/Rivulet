@@ -319,7 +319,10 @@ class PlexDataStore: ObservableObject {
         NotificationCenter.default.addObserver(
             forName: .plexDataNeedsRefresh, object: nil, queue: .main
         ) { _ in
-            MainActor.assumeIsolated { PlexNetworkManager.shared.forgetRecentReads() }
+            MainActor.assumeIsolated {
+                PlexNetworkManager.shared.forgetRecentReads()
+                TitleCopies.Cache.shared.removeAll()
+            }
         }
 
         // Same for the sidebar order — it decides Home's row order too

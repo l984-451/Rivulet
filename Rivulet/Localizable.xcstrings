@@ -14410,6 +14410,28 @@
         }
       }
     },
+    "Other Channels" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weitere Sender"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Άλλα κανάλια"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Autres chaînes"
+          }
+        }
+      }
+    },
     "Owner" : {
       "localizations" : {
         "de" : {

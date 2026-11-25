@@ -94,6 +94,9 @@ final class AboutCollectionCell: UICollectionViewCell {
 
         ageLabel.font = .systemFont(ofSize: 58, weight: .bold)
         ageLabel.textColor = .white
+        // "Unknown" and long ratings ("Not Rated") shrink to the card instead of clipping.
+        ageLabel.adjustsFontSizeToFitWidth = true
+        ageLabel.minimumScaleFactor = 0.5
 
         sealIcon.image = UIImage(systemName: "checkmark.circle.fill")
         sealIcon.tintColor = .systemGreen
@@ -186,6 +189,14 @@ final class AboutCollectionCell: UICollectionViewCell {
     // Apple's cards are 2 and 1 columns of the six-column grid (560 and 260), left-aligned, 300 tall.
     // The ratings card is ours and takes two columns after them.
     private static let narrowCard = MediaRowMetrics.gridWidth(columns: 6)
+
+    /// The age card's text. A missing rating (or "N/A") reads "Unknown", never a made-up "NR";
+    /// a server's real "NR" shows as sent.
+    static func ageText(_ rating: String?) -> String {
+        guard let rating = rating?.trimmingCharacters(in: .whitespaces), !rating.isEmpty,
+              rating.caseInsensitiveCompare("N/A") != .orderedSame else { return String(localized: "Unknown") }
+        return rating
+    }
     private static let wideCard = 2 * narrowCard + MediaRowMetrics.tileGap
     private static let cardHeight: CGFloat = 300
     private static let cardPad: CGFloat = 22
@@ -241,14 +252,14 @@ final class AboutCollectionCell: UICollectionViewCell {
         if let a = advisory, a.hasAny {
             // Inline = compact: age + seal + one-line description. The topic dots
             // and full text live in the click-to-open popup (ATV+ pattern).
-            ageLabel.text = a.ageRating ?? detail.contentRating ?? "NR"
+            ageLabel.text = Self.ageText(a.ageRating ?? detail.contentRating)
             sealRow.isHidden = false
             oneLinerLabel.text = a.oneLiner
             oneLinerLabel.isHidden = (a.oneLiner ?? "").isEmpty
             fallbackCaption.isHidden = true
         } else {
             // Fallback: content rating only (no CSM available).
-            ageLabel.text = detail.contentRating ?? "NR"
+            ageLabel.text = Self.ageText(detail.contentRating)
             sealRow.isHidden = true
             oneLinerLabel.isHidden = true
             fallbackCaption.text = String(localized: "Rated")

@@ -754,26 +754,35 @@ final class MediaDetailChromeView: UIView {
         versionsButton = button
     }
 
-    /// Every signed-in Plex server, with its address and token. The shown item's own server is
-    /// included: another library on it can hold a second copy.
-    private static func plexServers() -> [PlexOwnedLookup.Server] {
+    /// The signed-in Plex servers that can hold another copy of `shown` (`TitleCopies.servers`),
+    /// counted from the library lists the sidebar already loaded.
+    private static func plexServers(for shown: MediaItem, kind: MediaLibrary.LibraryKind) -> [PlexOwnedLookup.Server] {
         var servers: [PlexOwnedLookup.Server] = []
+        var libraries: [String: Int] = [:]
         let auth = PlexAuthManager.shared
         if let selected = MediaProviderRegistry.shared.plexProvider,
            let url = auth.selectedServerURL, let token = auth.selectedServerToken {
             servers.append(.init(id: selected.id, url: url, token: token))
+            let own = PlexDataStore.shared.libraries
+            if !own.isEmpty {
+                let type = kind == .movies ? "movie" : "show"
+                libraries[selected.id] = own.filter { $0.type == type }.count
+            }
         }
         let extras = PlexExtraServers.shared
         servers += extras.current.compactMap { server in
             extras.token(for: server).map { PlexOwnedLookup.Server(id: server.providerID, url: server.url, token: $0) }
         }
-        return servers
+        for library in ServerDataStore.shared.libraries where library.kind == kind {
+            libraries[library.providerID, default: 0] += 1
+        }
+        return TitleCopies.servers(servers, besides: shown.ref.providerID, libraries: libraries)
     }
 
     /// A movie's copies (`TitleCopies.movie`).
     private func loadMovieCopies(of subject: MediaItem, guid: String, token: UInt64) {
         guard otherCopiesKey != guid else { return }
-        let servers = Self.plexServers()
+        let servers = Self.plexServers(for: subject, kind: .movies)
         guard !servers.isEmpty else { return }
         let ids = detail?.externalIDs ?? [:]
         copiesTask?.cancel()
@@ -790,7 +799,7 @@ final class MediaDetailChromeView: UIView {
               episode.seasonNumber != nil, episode.episodeNumber != nil else { return }
         let key = episode.ref.providerID + "/" + episode.ref.itemID
         guard otherCopiesKey != key else { return }
-        let servers = Self.plexServers()
+        let servers = Self.plexServers(for: shown, kind: .shows)
         // Plex only, as movies are (they need a plex guid): a Jellyfin or Emby show lists no copies.
         guard !servers.isEmpty, let provider = MediaProviderRegistry.shared.provider(for: shown.ref.providerID),
               provider.kind == .plex

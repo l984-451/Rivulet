@@ -76,6 +76,20 @@ final class TitleCopiesTests: XCTestCase {
 
     private let noOwners: TitleCopies.Owners = { _, _ in PlexOwnedLookup.Owned() }
 
+    // MARK: - servers
+
+    func test_servers_shownServerNeedsASecondLibrary_othersOne() {
+        XCTAssertEqual(TitleCopies.servers([home, office], besides: home.id, libraries: [home.id: 1, office.id: 1]),
+                       [office])
+        XCTAssertEqual(TitleCopies.servers([home, office], besides: home.id, libraries: [home.id: 2, office.id: 0]),
+                       [home])
+        XCTAssertEqual(TitleCopies.servers([home], besides: home.id, libraries: [home.id: 1]), [])
+    }
+
+    func test_servers_unknownLibraries_areAsked() {
+        XCTAssertEqual(TitleCopies.servers([home, office], besides: home.id, libraries: [:]), [home, office])
+    }
+
     // MARK: - titles
 
     func test_titles_guidMatches_carryTheirServerAndLibrary() async {

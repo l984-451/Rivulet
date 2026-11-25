@@ -54,6 +54,16 @@ enum TitleCopies {
         func removeAll() { results.removeAll() }
     }
 
+    /// The servers that can hold another copy: the shown item's own needs a second library of its
+    /// kind, any other server one. `libraries` counts them by server id; a server missing from it is asked.
+    static func servers(_ servers: [PlexOwnedLookup.Server], besides shownOn: String,
+                        libraries: [String: Int]) -> [PlexOwnedLookup.Server] {
+        servers.filter { server in
+            guard let count = libraries[server.id] else { return true }
+            return count >= (server.id == shownOn ? 2 : 1)
+        }
+    }
+
     /// A movie: its copies found by guid or confirmed external id, each with its files.
     static func movie(_ subject: MediaItem, guid: String, externalIDs: [String: String],
                       on servers: [PlexOwnedLookup.Server], registry: MediaProviderRegistry? = nil,

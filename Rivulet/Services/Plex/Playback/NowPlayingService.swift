@@ -45,6 +45,8 @@ final class NowPlayingService: ObservableObject {
     private var publishedSubtitleTracks: [MediaTrack] = []
     /// Applies a remote's track pick; a nil id turns subtitles off.
     private var selectTrack: ((MPNowPlayingInfoLanguageOptionType, Int?) -> Void)?
+    /// The video's next-track target, present only while a view model is attached.
+    private var nextTrackTarget: Any?
 
     // MARK: - Initialization
 
@@ -260,6 +262,13 @@ final class NowPlayingService: ObservableObject {
                                    subtitleId: viewModel.chosenSubtitleTrackId)
             }
             .store(in: &cancellables)
+        // Siri's "next episode": what Up Next would play. Added per attach so it never answers beside
+        // Music's target; on a movie or a known last episode the command is off.
+        nextTrackTarget = MPRemoteCommandCenter.shared().nextTrackCommand.addTarget { [weak viewModel] _ in
+            guard let viewModel, viewModel.hasNextItem else { return .noSuchContent }
+            Task { await viewModel.skipToNextItem() }
+            return .success
+        }
         // Next track follows whether anything may come after this item; a swap or a lookup can change that.
         // Delivered a run-loop pass later, so `hasNextItem` reads the values after `@Published`'s willSet.
         viewModel.$nextEpisode.map { _ in () }
@@ -286,6 +295,8 @@ final class NowPlayingService: ObservableObject {
     /// Per WWDC17 guidance, the session should remain active while the app could receive remote commands.
     func detach() {
         cancellables.removeAll()
+        if let nextTrackTarget { MPRemoteCommandCenter.shared().nextTrackCommand.removeTarget(nextTrackTarget) }
+        nextTrackTarget = nil
         MPRemoteCommandCenter.shared().nextTrackCommand.isEnabled = false
         viewModel = nil
         inputCoordinator = nil
@@ -474,14 +485,6 @@ final class NowPlayingService: ObservableObject {
             @unknown default:
                 break
             }
-            return .success
-        }
-
-        // Siri's "next episode": what Up Next would play. Enabled only while something may follow
-        // (see attach), so on a movie or a known last episode Siri answers that there is nothing next.
-        commandCenter.nextTrackCommand.addTarget { [weak self] _ in
-            guard let viewModel = self?.viewModel, viewModel.hasNextItem else { return .noSuchContent }
-            Task { await viewModel.skipToNextItem() }
             return .success
         }
 

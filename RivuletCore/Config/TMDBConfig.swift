@@ -15,7 +15,7 @@ nonisolated enum TMDBConfig {
     /// The custom domain, not workers.dev: only this host has the per-IP rate limit.
     static let proxyBaseURL = URL(string: "https://tmdb.gurleystudios.com")!
 
-    /// TMDB's own v3 API, used instead of the proxy when the user saved their own key (`TMDBCredential`).
+    /// TMDB's own v3 API, used instead of the proxy by a self-build with its own key (`TMDBCredential`).
     static let apiBaseURL = URL(string: "https://api.themoviedb.org/3")!
 
     /// Cache TTL for TMDB responses when stored locally (in seconds).

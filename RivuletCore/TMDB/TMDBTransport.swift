@@ -7,11 +7,12 @@
 //
 //  The one way to reach TMDB. Callers name a proxy path ("tmdb/details/603",
 //  `type=movie`) and get the proxy's JSON back: from the App-Attested proxy, or,
-//  with the user's own key saved (`TMDBCredential`), from TMDB's v3 API,
+//  in a self-build with its own key (`TMDBCredential.bundled`), from TMDB's v3 API,
 //  reshaped to match (`TMDBDirectAPI`). Each caller keeps its own session.
 //
 
 import Foundation
+import Synchronization
 
 nonisolated enum TMDBTransport {
     /// The JSON for a proxy `path`; throws on a non-2xx answer. A `baseURL` other than
@@ -21,7 +22,7 @@ nonisolated enum TMDBTransport {
         query: [URLQueryItem],
         session: URLSession,
         baseURL: URL = TMDBConfig.proxyBaseURL,
-        credential: TMDBCredential? = TMDBCredential.saved
+        credential: TMDBCredential? = TMDBCredential.bundled
     ) async throws -> Data {
         guard baseURL == TMDBConfig.proxyBaseURL, let credential else {
             let request = try proxyRequest(path, query: query, baseURL: baseURL)
@@ -34,6 +35,9 @@ nonisolated enum TMDBTransport {
             throw URLError(.unsupportedURL)
         }
         let (data, response) = try await session.data(for: request)
+        if (response as? HTTPURLResponse)?.statusCode == 401, refusalLogged.exchange(true, ordering: .relaxed) == false {
+            DiagLog.error(.network, "TMDB refused the built-in key")
+        }
         let body = try succeeded(data, response)
         return route.foldsDetails ? TMDBDirectAPI.foldDetails(body) : body
     }
@@ -52,6 +56,8 @@ nonisolated enum TMDBTransport {
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         return request
     }
+
+    private static let refusalLogged = Atomic(false)
 
     private static func succeeded(_ data: Data, _ response: URLResponse) throws -> Data {
         guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {

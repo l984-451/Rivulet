@@ -5,11 +5,9 @@
 //  TMDBTransportTests.swift
 //  RivuletTests
 //
-//  The user's own TMDB key: how it is read and applied, how each proxy path maps
+//  A self-build's own TMDB key: how it is read and applied, how each proxy path maps
 //  to TMDB's v3 API, and that requests without a key are what they always were.
-//  Every test passes its credential explicitly and never touches the Keychain.
-//  The older TMDB tests (TMDBDiscoverServiceTests, TMDBLogoCacheTests) take the
-//  saved key, so they expect a test simulator with no key saved.
+//  Every test passes its credential explicitly.
 //
 
 import XCTest
@@ -107,7 +105,7 @@ final class TMDBTransportTests: XCTestCase {
     // MARK: - Reshaping details
 
     func testDetailsLiftCreditsAndFlattenMovieKeywords() throws {
-        let v3 = #"{"id":603,"credits":{"cast":[{"name":"Keanu Reeves"}],"crew":[{"name":"Lana Wachowski","job":"Director"}]},"keywords":{"keywords":[{"id":1,"name":"hacker"}]}}"#
+        let v3 = #"{"id":603,"credits":{"cast":[{"name":"Keanu Reeves"}],"crew":[{"name":"Lana Wachowski","job":"Director"},{"name":"Bill Pope","job":"Director of Photography"}]},"keywords":{"keywords":[{"id":1,"name":"hacker"}]}}"#
         let json = try object(TMDBDirectAPI.foldDetails(Data(v3.utf8)))
         XCTAssertNil(json["credits"])
         XCTAssertEqual(names(json["cast"]), ["Keanu Reeves"])
@@ -121,6 +119,14 @@ final class TMDBTransportTests: XCTestCase {
         let json = try object(TMDBDirectAPI.foldDetails(Data(v3.utf8)))
         XCTAssertEqual(names(json["keywords"]), ["dragon"])
         XCTAssertEqual(names(json["cast"]), [])
+    }
+
+    /// The proxy keeps the first 20 cast.
+    func testDetailsKeepTheFirstTwentyCast() throws {
+        let cast = (1...30).map { #"{"name":"\#($0)"}"# }.joined(separator: ",")
+        let v3 = #"{"id":1,"credits":{"cast":[\#(cast)],"crew":[]}}"#
+        let json = try object(TMDBDirectAPI.foldDetails(Data(v3.utf8)))
+        XCTAssertEqual(names(json["cast"]), (1...20).map(String.init))
     }
 
     // MARK: - Routing
@@ -195,22 +201,6 @@ final class TMDBTransportTests: XCTestCase {
         XCTAssertNil(sent.value(forHTTPHeaderField: "Authorization"))
     }
 
-    // MARK: - Verifying
-
-    func testVerificationMapsTMDBAnswers() async throws {
-        let ok = await verdict(status: 200)
-        XCTAssertNil(ok)
-        let sent = try XCTUnwrap(RecordingURLProtocol.requests.last)
-        XCTAssertEqual(sent.url?.absoluteString, "https://api.themoviedb.org/3/authentication")
-        let refused = await verdict(status: 401)
-        XCTAssertEqual(refused, .refused)
-        let serverError = await verdict(status: 500)
-        XCTAssertEqual(serverError, .unreachable)
-        RecordingURLProtocol.failure = URLError(.notConnectedToInternet)
-        let offline = await verdict(status: 200)
-        XCTAssertEqual(offline, .unreachable)
-    }
-
     // MARK: - Helpers
 
     private func q(_ name: String, _ value: String) -> URLQueryItem { URLQueryItem(name: name, value: value) }
@@ -225,16 +215,6 @@ final class TMDBTransportTests: XCTestCase {
 
     private func names(_ value: Any?) -> [String]? {
         (value as? [[String: Any]])?.compactMap { $0["name"] as? String }
-    }
-
-    private func verdict(status: Int) async -> TMDBCredentialError? {
-        RecordingURLProtocol.status = status
-        do {
-            try await token.verify(session: RecordingURLProtocol.session())
-            return nil
-        } catch {
-            return error
-        }
     }
 }
 

@@ -23,9 +23,6 @@
         }
       }
     },
-    "Couldn't reach TMDB. Try again." : {},
-    "Couldn't Save Key" : {},
-    "Couldn't save the key. Try again." : {},
     "Leave a Tip" : {
       "localizations" : {
         "de" : {
@@ -122,7 +119,6 @@
     "Recording in Progress" : {
 
     },
-    "Remove TMDB Key" : {},
     "Rivulet is free and open source. A tip helps keep it going." : {
       "localizations" : {
         "de" : {
@@ -145,7 +141,6 @@
         }
       }
     },
-    "Save" : {},
     "Server Can't Play This" : {
       "localizations" : {
         "de" : {
@@ -190,7 +185,6 @@
         }
       }
     },
-    "Set" : {},
     "Slideshow" : {
       "localizations" : {
         "de" : {
@@ -249,7 +243,6 @@
         }
       }
     },
-    "That isn't a TMDB API key or Read Access Token." : {},
     "The App Store couldn't be reached. Try again later." : {
       "localizations" : {
         "de" : {
@@ -580,8 +573,6 @@
         }
       }
     },
-    "TMDB didn't accept this key." : {},
-    "TMDB Key" : {},
     "Unfavorite" : {
       "localizations" : {
         "de" : {
@@ -598,7 +589,6 @@
         }
       }
     },
-    "Uses your own TMDB key instead of Rivulet's service, for builds from source or to use your own TMDB quota. Takes an API Read Access Token or API key from themoviedb.org." : {},
     "Videos" : {
       "localizations" : {
         "de" : {

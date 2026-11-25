@@ -11,7 +11,7 @@
 import Foundation
 import Security
 
-nonisolated enum KeychainHelper {
+enum KeychainHelper {
 
     private static let plexService = "com.rivulet.plex"
 

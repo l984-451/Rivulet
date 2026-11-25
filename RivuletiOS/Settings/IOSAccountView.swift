@@ -90,10 +90,6 @@ struct IOSAccountView: View {
                     }
                 }
 
-                if !profiles.isRestrictedProfile {
-                    IOSTMDBKeySection()
-                }
-
                 Section("About") {
                     LabeledContent("Version", value: IOSChangelog.currentVersion)
                     NavigationLink("Changelog") { IOSChangelogView() }
@@ -299,69 +295,6 @@ private struct IOSTipJarView: View {
             Button("OK") {}
         } message: {
             Text("Your tip helps keep Rivulet going.")
-        }
-    }
-}
-
-/// Account > TMDB Key: the user's own key (`TMDBCredential`). The field never shows a saved key.
-private struct IOSTMDBKeySection: View {
-    @State private var isSaved = TMDBCredential.saved != nil
-    @State private var key = ""
-    @State private var isChecking = false
-    @State private var failure: String?
-
-    var body: some View {
-        Section {
-            if isSaved {
-                LabeledContent("TMDB Key") { Text("Set") }
-                Button("Remove TMDB Key", role: .destructive) {
-                    TMDBCredential.remove()
-                    isSaved = false
-                }
-            } else {
-                // Not IOSFormField's .password: that invites AutoFill to save the key to iCloud Keychain.
-                LabeledContent("TMDB Key") {
-                    SecureField("TMDB Key", text: $key, prompt: Text("Required"))
-                        .multilineTextAlignment(.trailing)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .onSubmit(save)
-                }
-                Button(action: save) {
-                    HStack(spacing: 8) {
-                        if isChecking {
-                            ProgressView()
-                            Text("Checking…")
-                        } else {
-                            Text("Save")
-                        }
-                    }
-                }
-                .disabled(key.isEmpty || isChecking)
-            }
-        } footer: {
-            Text("Uses your own TMDB key instead of Rivulet's service, for builds from source or to use your own TMDB quota. Takes an API Read Access Token or API key from themoviedb.org.")
-        }
-        .alert("Couldn't Save Key", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(failure ?? "")
-        }
-    }
-
-    private func save() {
-        guard !key.isEmpty, !isChecking else { return }
-        isChecking = true
-        failure = nil
-        Task {
-            do {
-                try await TMDBCredential.saveVerified(key)
-                key = ""
-                isSaved = true
-            } catch {
-                failure = error.localizedDescription
-            }
-            isChecking = false
         }
     }
 }

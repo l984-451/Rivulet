@@ -5,7 +5,7 @@
 //  TMDBDirectAPI.swift
 //  Rivulet
 //
-//  A proxy path as TMDB's own v3 request, for a user's own key, and the
+//  A proxy path as TMDB's own v3 request, for a self-build's own key, and the
 //  details reply reshaped to what the proxy returns, so callers can't tell.
 //  Only the paths the proxy serves are mapped.
 //
@@ -58,13 +58,14 @@ nonisolated enum TMDBDirectAPI {
         }
     }
 
-    /// The proxy's details: credits' cast and crew at the top level, and keywords as one
-    /// flat list (v3 nests them as `keywords.keywords` for a film, `keywords.results` for a show).
+    /// The proxy's details (`flattenDetailsCredits`): the first 20 cast and the directors at the top
+    /// level, and keywords as one flat list (v3 nests them as `keywords.keywords` for a film,
+    /// `keywords.results` for a show).
     static func foldDetails(_ data: Data) -> Data {
         guard var json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return data }
         if let credits = json.removeValue(forKey: "credits") as? [String: Any] {
-            json["cast"] = credits["cast"] ?? [Any]()
-            json["crew"] = credits["crew"] ?? [Any]()
+            json["cast"] = Array(((credits["cast"] as? [Any]) ?? []).prefix(20))
+            json["crew"] = ((credits["crew"] as? [[String: Any]]) ?? []).filter { $0["job"] as? String == "Director" }
         }
         if let keywords = json["keywords"] as? [String: Any] {
             json["keywords"] = keywords["keywords"] ?? keywords["results"] ?? [Any]()

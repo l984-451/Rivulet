@@ -4,7 +4,7 @@
 import StoreKit
 import SwiftUI
 
-/// Settings > General: app icon, iCloud sync, TMDB key and About. Parity source: the lower sections of IOSAccountView.
+/// Settings > General: app icon, iCloud sync and About. Parity source: the lower sections of IOSAccountView.
 struct MacGeneralSettingsView: View {
     @ObservedObject private var profiles = PlexUserProfileManager.shared
     @ObservedObject private var sync = CloudSync.shared
@@ -26,7 +26,7 @@ struct MacGeneralSettingsView: View {
                 }
             }
 
-            // Sync (sources, server sign-ins) and the TMDB key are the owner's, not a restricted profile's.
+            // Sync carries sources and server sign-ins: the owner's, not a restricted profile's.
             if !profiles.isRestrictedProfile {
                 Section {
                     Toggle("iCloud Sync", isOn: Binding(get: { sync.isEnabled }, set: { sync.setEnabled($0) }))
@@ -37,8 +37,6 @@ struct MacGeneralSettingsView: View {
                          ? "iCloud has a different Plex account."
                          : "Keeps your settings, servers and Live TV sources the same on your Apple TV, iPhone, iPad and Mac. Sign-ins are stored encrypted in iCloud. Watch progress comes from your servers and is not part of this.")
                 }
-
-                MacTMDBKeySection()
             }
 
             Section {
@@ -105,61 +103,6 @@ struct MacGeneralSettingsView: View {
     private func measureSpace() async {
         spaceUsed = nil
         spaceUsed = await Task.detached(priority: .utility) { StorageUsage.totalBytes() }.value
-    }
-}
-
-/// General > TMDB Key: the user's own key (`TMDBCredential`). The field never shows a saved key.
-private struct MacTMDBKeySection: View {
-    @State private var isSaved = TMDBCredential.saved != nil
-    @State private var key = ""
-    @State private var isChecking = false
-    @State private var failure: String?
-
-    var body: some View {
-        Section {
-            if isSaved {
-                LabeledContent("TMDB Key") {
-                    HStack {
-                        Text("Set")
-                        Button("Remove TMDB Key", role: .destructive) {
-                            TMDBCredential.remove()
-                            isSaved = false
-                        }
-                    }
-                }
-            } else {
-                MacFormField("TMDB Key", text: $key, prompt: "Required", kind: .password)
-                    .onSubmit(save)
-                HStack(spacing: 8) {
-                    if isChecking { ProgressView().controlSize(.small) }
-                    Button("Save", action: save).disabled(key.isEmpty || isChecking)
-                }
-                .frame(maxWidth: .infinity, alignment: .trailing)
-            }
-        } footer: {
-            Text("Uses your own TMDB key instead of Rivulet's service, for builds from source or to use your own TMDB quota. Takes an API Read Access Token or API key from themoviedb.org.")
-        }
-        .alert("Couldn't Save Key", isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(failure ?? "")
-        }
-    }
-
-    private func save() {
-        guard !key.isEmpty, !isChecking else { return }
-        isChecking = true
-        failure = nil
-        Task {
-            do {
-                try await TMDBCredential.saveVerified(key)
-                key = ""
-                isSaved = true
-            } catch {
-                failure = error.localizedDescription
-            }
-            isChecking = false
-        }
     }
 }
 

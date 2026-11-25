@@ -5,7 +5,7 @@
 //  TMDBClient.swift
 //  Rivulet
 //
-//  Lightweight TMDB client over `TMDBTransport` (the proxy, or TMDB with the user's own key).
+//  Lightweight TMDB client over `TMDBTransport` (the proxy, or TMDB with a self-build's own key).
 //  Used only for per-item features (keywords/cast/genres/directors) that
 //  feed the personalized recommendation engine. Artwork (logos, backdrops)
 //  comes from Plex directly.

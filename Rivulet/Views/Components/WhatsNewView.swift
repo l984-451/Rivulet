@@ -155,6 +155,17 @@ struct WhatsNewView: View {
     // MARK: - Changelog Data
 
     static let changelogs: [(version: String, features: [String])] = [
+        ("1.3.1 (133)", [
+            "Versions lists every copy of a title across all your servers. @nachoferre",
+            "Say \"next episode\" to Siri to play the next episode. @nachoferre",
+            "After Start from Beginning, you can skip through the recording all the way to live",
+            "Swiping scrubs only while paused",
+            "Detail pages list each language's audio formats, and unrated titles show Unknown",
+            "German covers Watch Together, the pause screen and new settings. @DennisR-git",
+            "## Fixes",
+            "Fixed a black screen when lowering an HDR title's quality during playback. @rcork",
+            "The launch animation now plays for Jellyfin and Emby users too. @DennisR-git",
+        ]),
         ("1.3.1 (132)", [
             "Live TV can start a show from the beginning when Plex is recording it",
             "Swipe to scrub follows your finger. @268htvgzs6-art",

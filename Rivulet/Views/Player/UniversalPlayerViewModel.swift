@@ -3939,10 +3939,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
                 request.addValue(value, forHTTPHeaderField: key)
             }
 
-            guard let (data, response) = try? await URLSession.shared.data(for: request),
-                  let http = response as? HTTPURLResponse else {
-                return
-            }
+            guard let (data, http) = try? await StreamBodyProbe.sample(request) else { return }
 
             self.directPlayProbeStatus = http.statusCode
             let classification = StreamBodyClassifier.classify(data)

@@ -50,15 +50,25 @@ nonisolated struct DownloadManifest: Codable, Sendable, Equatable {
 
     /// The manifest at launch, and whether the files beside it may be swept for orphans. Not when a file
     /// was there and would not decode, nor on later launches while its `.corrupt` copy sits beside it:
-    /// then the files are the only copy.
-    static func loadForLaunch(from url: URL) -> (manifest: DownloadManifest, safeToSweep: Bool) {
-        let files = FileManager.default
-        let existed = files.fileExists(atPath: url.path)
-        let manifest = load(from: url)
-        // `load` moves a file it cannot decode aside.
-        let unreadable = existed && !files.fileExists(atPath: url.path)
-        let keptAside = files.fileExists(atPath: url.appendingPathExtension("corrupt").path)
-        return (manifest, !unreadable && !keptAside)
+    /// then the files are the only copy. `canSave` is false when the file is there but can't be read:
+    /// nothing may be swept or written over it.
+    static func loadForLaunch(from url: URL) -> (manifest: DownloadManifest, safeToSweep: Bool, canSave: Bool) {
+        let corrupt = url.appendingPathExtension("corrupt")
+        let keptAside = FileManager.default.fileExists(atPath: corrupt.path)
+        let data: Data
+        do {
+            data = try Data(contentsOf: url)
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+            return (DownloadManifest(), !keptAside, true)
+        } catch {
+            return (DownloadManifest(), false, false)
+        }
+        if let manifest = try? JSONDecoder().decode(Self.self, from: data) { return (manifest, !keptAside, true) }
+        // An earlier copy already kept aside stays: then this one stays where it is, and nothing is saved over it.
+        guard !keptAside, (try? FileManager.default.moveItem(at: url, to: corrupt)) != nil else {
+            return (DownloadManifest(), false, false)
+        }
+        return (DownloadManifest(), false, true)
     }
 
     /// Marks completed records whose file is gone as failed. Never drops a record.

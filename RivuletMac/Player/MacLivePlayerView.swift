@@ -284,7 +284,7 @@ struct MacLivePlayerView: View {
             }
             iconButton("Channels", systemImage: "list.bullet") { showsChannels.toggle() }
                 .popover(isPresented: $showsChannels, arrowEdge: .top) {
-                    MacLiveChannelPicker(current: channel) { session.switchChannel(to: $0) }
+                    MacLiveListView(mode: .picker(current: channel)) { session.switchChannel(to: $0) }
                 }
             iconButton(isFavorite ? "Remove from Favorites" : "Add to Favorites",
                        systemImage: isFavorite ? "star.fill" : "star") { store.toggleFavorite(channel) }

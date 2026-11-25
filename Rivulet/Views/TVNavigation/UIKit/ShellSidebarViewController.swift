@@ -104,8 +104,9 @@ enum ShellPillMetrics {
 /// System row coloring: focused = solid white capsule, dark content; selected
 /// but unfocused = translucent capsule, full-white content; otherwise bare, dim.
 /// Resting 0.7 is the TV app's value; its focused 0.9 / 0.7 pair rides a
-/// PlusL / PlusD layer this sidebar does not have.
-private func sidebarRowColors(focused: Bool, selected: Bool) -> (background: UIColor, content: UIColor) {
+/// PlusL / PlusD layer this sidebar does not have. The List layout's
+/// category rows share it.
+func sidebarRowColors(focused: Bool, selected: Bool) -> (background: UIColor, content: UIColor) {
     if focused { return (UIColor.white.withAlphaComponent(0.91), .black) }
     if selected { return (UIColor.white.withAlphaComponent(0.1), .white) }
     return (.clear, UIColor.white.withAlphaComponent(0.7))
@@ -1298,9 +1299,13 @@ extension ShellSidebarViewController {
         }
         if SidebarArrangement.isLiveTV(key) {
             let current = LiveTVLayout(rawValue: UserDefaults.standard.string(forKey: "liveTVLayout") ?? "") ?? .fallback
-            let layouts = [LiveTVLayout.browse, .guide].map { layout -> TileMenuAction in
-                TileMenuAction(verbatim: layout.description,
-                               systemImage: layout == current ? "checkmark" : (layout == .guide ? "list.bullet.rectangle" : "square.grid.2x2")) {
+            let layouts = [LiveTVLayout.browse, .guide, .list].map { layout -> TileMenuAction in
+                let symbol = switch layout {
+                case .browse: "square.grid.2x2"
+                case .guide: "list.bullet.rectangle"
+                case .list: "list.bullet"
+                }
+                return TileMenuAction(verbatim: layout.description, systemImage: layout == current ? "checkmark" : symbol) {
                     UserDefaults.standard.set(layout.rawValue, forKey: "liveTVLayout")
                 }
             }

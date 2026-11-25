@@ -110,7 +110,8 @@ final class ShellSidebarModelTests: XCTestCase {
     }
 
     func test_liveTVOnly_hidesServerTabs_andHome() {
-        XCTAssertEqual(tabs(hasServer: false, liveTV: true), [.account, .liveTV(sourceId: nil), .settings])
+        // Search stays, for looking up a channel.
+        XCTAssertEqual(tabs(hasServer: false, liveTV: true), [.account, .search, .liveTV(sourceId: nil), .settings])
     }
 
     func test_nothingConnected_keepsHomeForTheWelcome() {

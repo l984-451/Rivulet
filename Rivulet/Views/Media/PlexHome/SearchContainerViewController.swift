@@ -157,6 +157,14 @@ final class SearchContainerViewController: UIViewController {
     /// declined. Not a `UIFocusGuide`: the search controller owns the layout, so there is no frame to
     /// pin one to. Gated on where focus is, not on `preferredHalf`.
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        // A player or page presented from the results passes the presses it declines up to
+        // here (the live player declines arrows). They are not this page's: acting on them
+        // pulled focus back to the keyboard under the player, and its controls went dead.
+        guard let focused = UIFocusSystem.focusSystem(for: view)?.focusedItem as? UIView,
+              focused.isDescendant(of: view) else {
+            super.pressesBegan(presses, with: event)
+            return
+        }
         let types = Set(presses.map(\.type))
         // Read-and-clear on EVERY arrow, so the flag never carries over from an
         // earlier press and makes the next one think a move happened.

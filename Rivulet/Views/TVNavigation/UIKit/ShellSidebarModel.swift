@@ -168,10 +168,11 @@ enum ShellSidebarModel {
         }
         sections.append(ShellSidebarSection(title: nil, items: header))
 
-        // Search, Discover and the watchlist need a media server. Without one,
-        // Home is only the welcome screen, kept while there is no Live TV instead.
+        // Discover and the watchlist need a media server; Search needs that or
+        // Live TV, where it looks up channels. Without a server, Home is only
+        // the welcome screen, kept while there is no Live TV instead.
         var top: [ShellSidebarItem] = []
-        if hasMediaServer {
+        if hasMediaServer || !liveTVSources.isEmpty {
             top.append(ShellSidebarItem(tab: .search, title: String(localized: "Search"), icon: "magnifyingglass"))
         }
         if !opensToLiveTV(hasMediaServer: hasMediaServer, liveTVSources: liveTVSources) {

@@ -27,6 +27,7 @@ final class MacLivePlayback: ObservableObject, MacPlaybackSession {
     private let tuner = MacLiveTuner()
     private var loadTask: Task<Void, Never>?
     private var rolloverTask: Task<Void, Never>?
+    private var cancellables = Set<AnyCancellable>()
     private var shownProgramId: String?
     /// Stacked skips land as one seek once they settle; a seek per tap takes a live item down.
     private let windowSeeker = LiveWindowSeekController()
@@ -50,6 +51,19 @@ final class MacLivePlayback: ObservableObject, MacPlaybackSession {
             }
         ))
         windowSeeker.onChange = { [weak self] in self?.objectWillChange.send() }
+        // The channel's picture and sound, for the channel lists (`LiveStreamQualityStore`), once it
+        // plays: a switch clears the size, so the old channel's sound never lands on the new one.
+        // Playing is an input too: tracks that settled before it must still be noted.
+        Publishers.CombineLatest4(player.$videoSize, player.$audioTracks, player.$currentAudioTrackId, player.$state)
+            .debounce(for: .seconds(2), scheduler: DispatchQueue.main)
+            .sink { [weak self] size, audio, audioId, state in
+                guard let self, state == .playing, size.height > 0 || !audio.isEmpty else { return }
+                let track = audio.first { $0.id == audioId } ?? audio.first { $0.isDefault } ?? audio.first
+                LiveStreamQualityStore.shared.record(channelId: self.channel.id,
+                                                     height: size.height > 0 ? Int(size.height.rounded()) : nil,
+                                                     audioChannels: track?.channels)
+            }
+            .store(in: &cancellables)
     }
 
     var changes: AnyPublisher<Void, Never> { objectWillChange.map { _ in () }.eraseToAnyPublisher() }
@@ -59,8 +73,8 @@ final class MacLivePlayback: ObservableObject, MacPlaybackSession {
     var nowPlayingItem: MacNowPlaying.Item {
         let programme = programme
         return MacNowPlaying.Item(
-            title: programme?.displayTitle ?? channel.name,
-            subtitle: programme == nil ? nil : channel.name,
+            title: programme?.displayTitle ?? channel.displayName,
+            subtitle: programme == nil ? nil : channel.displayName,
             artworkURL: channel.logoURL,
             isLive: true
         )

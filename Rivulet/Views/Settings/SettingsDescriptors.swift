@@ -304,7 +304,7 @@ enum SettingsDescriptorStore {
         ),
         "defaultLayout": SettingDescriptor(
             icon: "tv",
-            description: "The Guide lists every channel against the time. What's On shows rows of what is on now, with multiview, like the Apple TV app."
+            description: "The Guide lists every channel against the time. What's On shows rows of what is on now, with multiview, like the Apple TV app. List shows your categories beside their channels and what is on each."
         ),
         "liveTVFavorites": SettingDescriptor(
             icon: "star.fill",

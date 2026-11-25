@@ -15,6 +15,10 @@ struct IOSLiveTVView: View {
     @State private var pendingPlay: UnifiedChannel?
     @State private var showingAddSource = false
     @State private var jumpToken = 0
+    /// The smart list editor: nil closed, "" a new list, else the list's id.
+    @State private var editingSmartList: String?
+    @State private var deletingList: LiveChannelList?
+    @ObservedObject private var channelLists = LiveChannelListStore.shared
     @State private var dismissedIssues = ""
 
     private static let favoritesFilter = "Favorites"
@@ -27,6 +31,24 @@ struct IOSLiveTVView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar { toolbar }
             .navigationDestination(for: IOSLiveRoute.self) { _ in IOSLiveRecordingsView() }
+            .confirmationDialog(
+                deletingList.map { String(localized: "Delete \u{201C}\($0.name)\u{201D}?") } ?? "",
+                isPresented: Binding(get: { deletingList != nil }, set: { if !$0 { deletingList = nil } }),
+                titleVisibility: .visible,
+                presenting: deletingList
+            ) { list in
+                Button("Delete", role: .destructive) {
+                    channelLists.delete(list.id)
+                    guideFilter = ""
+                }
+            } message: { _ in
+                Text("Its channels stay where they are.")
+            }
+            .sheet(isPresented: Binding(get: { editingSmartList != nil }, set: { if !$0 { editingSmartList = nil } })) {
+                IOSLiveSmartListEditor(listId: editingSmartList.flatMap { $0.isEmpty ? nil : $0 }) { id in
+                    guideFilter = id.map { LiveChannelList.filterPrefix + $0 } ?? ""
+                }
+            }
             .sheet(item: $selection, onDismiss: playPending) { selection in
                 IOSLiveProgrammeSheet(selection: selection) { pendingPlay = $0 }
             }
@@ -85,6 +107,12 @@ struct IOSLiveTVView: View {
                     guide
                 }
                 .safeAreaBar(edge: .top) { layoutPicker }
+            case .list:
+                IOSLiveListView(mode: .tab, onPick: play, menu: { channel in
+                    LiveMenu.sections(channel: channel, program: store.getCurrentProgram(for: channel),
+                                      recorder: recorder, watch: play, details: { selection = $0 })
+                }, canProbe: { playback.session == nil })
+                .safeAreaBar(edge: .top) { layoutPicker }
             }
         }
     }
@@ -132,6 +160,10 @@ struct IOSLiveTVView: View {
             let favorites = store.favorites(in: store.channels)
             return favorites.isEmpty ? store.channels : favorites
         }
+        if let list = LiveChannelList.forFilter(guideFilter, store: channelLists) {
+            let channels = list.channels(in: store.channels, epg: store.epg, versions: store.lineupVersions)
+            return channels.isEmpty ? store.channels : channels
+        }
         guard !guideFilter.isEmpty else { return store.channels }
         let matching = store.channels.filter {
             $0.groupTitle?.trimmingCharacters(in: .whitespacesAndNewlines) == guideFilter
@@ -169,7 +201,29 @@ struct IOSLiveTVView: View {
                 if hasFavorites {
                     Label("Favorites", systemImage: "star").tag(Self.favoritesFilter)
                 }
-                ForEach(groups, id: \.self) { Text($0).tag($0) }
+                ForEach(channelLists.lists) { list in
+                    Label { Text(verbatim: list.name) } icon: {
+                        Image(systemName: list.isSmart ? "gearshape.2" : "list.bullet")
+                    }
+                    .tag(list.filterTag)
+                }
+                let names = LiveGroupDisplay.names(groups)
+                ForEach(groups, id: \.self) { Text(verbatim: names[$0] ?? $0).tag($0) }
+            }
+            Divider()
+            Button { editingSmartList = "" } label: { Label("New Smart List…", systemImage: "plus") }
+            if let list = LiveChannelList.forFilter(guideFilter, store: channelLists), list.isSmart {
+                Button { editingSmartList = list.id } label: {
+                    Label("Edit \u{201C}\(list.name)\u{201D}…", systemImage: "pencil")
+                }
+            }
+            if let list = LiveChannelList.forFilter(guideFilter, store: channelLists), !list.isSmart {
+                Button { recorder.askRename(list) } label: {
+                    Label("Rename \u{201C}\(list.name)\u{201D}…", systemImage: "pencil")
+                }
+                Button(role: .destructive) { deletingList = list } label: {
+                    Label("Delete \u{201C}\(list.name)\u{201D}…", systemImage: "trash")
+                }
             }
         } label: {
             // The toolbar glass is the circle; an active filter tints the glyph.

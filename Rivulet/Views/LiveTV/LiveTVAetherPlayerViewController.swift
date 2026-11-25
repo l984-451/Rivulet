@@ -222,6 +222,17 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         override var canBecomeFocused: Bool { true }
     }
     private let focusCatcher = FocusCatcherView()
+    /// The rail shows once as each channel's picture first appears.
+    private var didShowRailOnJoin = false
+    /// This channel's picture is up: until then the reused player still holds the last
+    /// channel's tracks, which must not be noted as this one's quality.
+    private var hasPresentedThisChannel = false
+    /// The darkening and glass sheet under the guide over the picture.
+    private var guideBackdrop: UIView?
+    /// The viewer paused this channel since it started, so a jump on resume needs a word.
+    private var pausedSinceJoin = false
+    /// The guide over the playing channel (Right), while it is open.
+    private var guideOverlay: UIViewController?
 
     /// One front door for transport input. A Play/Pause can reach this VC as a
     /// press and ALSO as a system remote command for the same click; both go
@@ -254,6 +265,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     // confirm, a click moves it by a step, and Back or a few idle seconds
     // drop it. Playback never moves until it is confirmed.
     private let timelinePan = LiveTimelineScrubPan()
+    /// A swipe on the timeline while the channel plays: the same as a tap (Right opens the guide).
+    private var timelineSwipeBinding: DirectionalInputBinding?
     private var touchScrub = LiveTimelineScrub()
     /// Seconds behind live the drag is showing, while it is up or held.
     private var touchScrubBehind: Double?
@@ -333,6 +346,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// The live player on screen, for DEBUG launch hooks.
     static weak var debugCurrent: LiveTVAetherPlayerViewController?
     func debugHiddenDirection(up: Bool) { handleHiddenChromeDirection(up ? .up : .down) }
+    func debugHiddenDirection(right: Bool) { handleHiddenChromeDirection(right ? .right : .left) }
     func debugHideRail() { hideRail() }
     func debugPresent(_ name: String) { name == "info" ? presentInfoPanel() : presentChannelListPanel() }
     func debugMenu() { dismiss(animated: true) }
@@ -407,6 +421,9 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private func startPlayback() {
         loadingSpinner.startAnimating()
         isUserPaused = false
+        didShowRailOnJoin = false
+        hasPresentedThisChannel = false
+        pausedSinceJoin = false
 
         // Sticky per-channel subtitle delay (OSD stepper). Re-read per channel:
         // the key is derived from the channel id.
@@ -479,8 +496,15 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             .filter { $0 }
             .sink { [weak self] _ in
                 guard let self else { return }
+                self.hasPresentedThisChannel = true
                 self.loadingSpinner.stopAnimating()
                 self.finishJoinTelemetry { $0.joined(codec: self.aetherPlayer?.sourceVideoCodecName) }
+                // As the TV app does on tuning: the channel and what is on, then the rail fades
+                // by itself. Once per channel, and not over a panel or the description.
+                if !self.didShowRailOnJoin, self.activePanel == nil, self.descriptionOverlay == nil {
+                    self.didShowRailOnJoin = true
+                    self.showRail()
+                }
             }
             .store(in: &cancellables)
 
@@ -497,12 +521,29 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         aether.liveResumeSkips
             .receive(on: DispatchQueue.main)
             .sink { [weak self] skipped in
-                guard skipped >= 1 else { return }
+                // Only after a pause: the engine also clamps a fresh join onto the
+                // window by a few seconds, which no viewer caused or needs explaining.
+                guard let self, self.pausedSinceJoin, skipped >= 1 else { return }
                 let minutes = Int((skipped / 60).rounded())
                 let seconds = Int(skipped.rounded())
-                self?.noticeView.show(minutes >= 1
+                self.noticeView.show(minutes >= 1
                     ? String(localized: "Jumped ahead \(minutes) min. The pause ran past what the rewind buffer holds.")
                     : String(localized: "Jumped ahead \(seconds) sec. The pause ran past what the rewind buffer holds."))
+            }
+            .store(in: &cancellables)
+
+        // The channel's picture and sound, for the channel lists (`LiveStreamQualityStore`).
+        // The size is zero on the software path; then only the sound is noted.
+        // The picture coming up is an input too: tracks that settled before it must still be noted.
+        Publishers.CombineLatest4(aether.$videoSize, aether.$audioTracks, aether.$activeAudioTrackId,
+                                  aether.hasPresented.prepend(false))
+            .debounce(for: .seconds(2), scheduler: DispatchQueue.main)
+            .sink { [weak self] size, audio, audioId, _ in
+                guard let self, self.hasPresentedThisChannel else { return }
+                let track = audio.first { $0.id == audioId } ?? audio.first { $0.isDefault } ?? audio.first
+                LiveStreamQualityStore.shared.record(channelId: self.channel.id,
+                                                     height: size.height > 0 ? Int(size.height.rounded()) : nil,
+                                                     audioChannels: track?.channels)
             }
             .store(in: &cancellables)
 
@@ -531,6 +572,15 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                     }
                 }
             }
+            .store(in: &cancellables)
+        // The guide arriving after the channel started (just after launch): the rail
+        // names the programme instead of only the channel.
+        LiveTVDataStore.shared.$epg
+            .map { [channelId = channel.id] epg in epg[channelId]?.isEmpty == false }
+            .removeDuplicates()
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateRailContent() }
             .store(in: &cancellables)
         // And the Record button, the moment a recording is set or cancelled.
         LiveTVDataStore.shared.$scheduledRecordings
@@ -921,14 +971,29 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             scrubberProxy.bottomAnchor.constraint(equalTo: progressBar.topAnchor, constant: 56),
         ])
         railView.scrubberFocusProxy = scrubberProxy
-        scrubberProxy.onSkip = { [weak self] forward in self?.timelineArrow(forward: forward) }
-        scrubberProxy.onShuttle = scrubberProxy.onSkip
+        // A tap on the timeline: Right opens the guide, as from the picture, and Left does
+        // nothing (the viewer's choice: only the rail's skip button skips). While paused in
+        // the rewind window a tap still steps the scrub. Holding still shuttles.
+        scrubberProxy.onSkip = { [weak self] forward in self?.timelineTap(forward: forward) }
+        scrubberProxy.onShuttle = { [weak self] forward in self?.timelineArrow(forward: forward) }
         scrubberProxy.onSelect = { [weak self] in self?.timelineSelected() }
+        // Dragging along the timeline only once paused, as in Apple's player: while the
+        // channel plays a swipe is a tap (Right opens the guide), and holding still shuttles.
         timelinePan.isEnabled = { [weak self] in
-            guard let self, self.scrubberProxy.isFocused, self.activePanel == nil,
+            guard let self, self.isUserPaused, self.scrubberProxy.isFocused, self.activePanel == nil,
                   self.lastResortPlayer == nil else { return false }
             return self.aetherPlayer?.liveTimeshift.seekableRange != nil
         }
+        timelineSwipeBinding = DirectionalInputBinding(
+            gatedSwipesOn: view,
+            directions: [.right],
+            shouldHandle: { [weak self] _ in
+                guard let self else { return false }
+                return !self.isUserPaused && self.scrubberProxy.isFocused && self.activePanel == nil
+                    && self.guideOverlay == nil && self.scrubTarget == nil && !self.touchScrubPending
+            },
+            onSwipe: { [weak self] _ in self?.timelineTap(forward: true) }
+        )
         timelinePan.began = { [weak self] in self?.touchScrubBegan() }
         timelinePan.changed = { [weak self] translation, speed in self?.touchScrubChanged(translation, speed: speed) }
         timelinePan.ended = { [weak self] committed in self?.touchScrubEnded(committed: committed) }
@@ -1026,11 +1091,11 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         let scrubAt = previewTarget(in: shift).map { now.addingTimeInterval(-(shift.edgeTime - $0)) }
         let current = store.program(for: channel, at: scrubAt ?? onScreenAt) ?? store.getCurrentProgram(for: channel)
 
-        let eyebrow = [channel.channelNumber.map(String.init), channel.name]
+        let eyebrow = [channel.displayNumber.map(String.init), channel.displayName]
             .compactMap { $0 }
             .filter { !$0.isEmpty }
             .joined(separator: " · ")
-        railView.setTitle(current?.title ?? channel.name, eyebrow: eyebrow.isEmpty ? nil : eyebrow)
+        railView.setTitle(current?.title ?? channel.displayName, eyebrow: eyebrow.isEmpty ? nil : eyebrow)
 
         // Not the engine's `isAtLiveEdge` (one segment): streams drift that
         // far on their own, and Go Live bounced in and out, shifting the rail.
@@ -1085,8 +1150,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
 
         NowPlayingService.shared.updateLive(
-            title: current?.title ?? channel.name,
-            channelName: channel.name,
+            title: current?.title ?? channel.displayName,
+            channelName: channel.displayName,
             isPlaying: !isUserPaused,
             artworkURL: current?.posterURL ?? current?.landscapeURL ?? current?.iconURL ?? channel.logoURL,
             onScreenAt: onScreenAt
@@ -1144,6 +1209,16 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         syncSubtitleOverlay(animated: true)
         setNeedsFocusUpdate()
         updateFocusIfNeeded()
+        #if DEBUG
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let window = self.view.window else { return }
+            let focused = UIFocusSystem.focusSystem(for: window)?.focusedItem
+            print("[LiveFocus] rail hidden, focus=\(focused.map { String(describing: type(of: $0)) } ?? "none") catcher ok=\(focused === self.focusCatcher)")
+            if focused !== self.focusCatcher {
+                print("[LiveFocus] \(UIFocusDebugger.checkFocusability(for: self.focusCatcher))")
+            }
+        }
+        #endif
     }
 
     /// The bar takes focus only while the rail is up with nothing over it.
@@ -1248,6 +1323,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     }
 
     override var preferredFocusEnvironments: [UIFocusEnvironment] {
+        if let guideOverlay { return [guideOverlay] }
         if let descriptionOverlay { return [descriptionOverlay] }
         // A pane leaves focus on its pill, as AVKit's tabs do.
         if let activePanel { return activePanel.isPane ? [railView] : [activePanel] }
@@ -1888,7 +1964,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// art, "504 · Fox Footy", and the current programme title.
     private func presentChannelListPanel() {
         let store = LiveTVDataStore.shared
-        let channels = store.channels
+        // A large IPTV lineup lists the playing channel's group, not every channel.
+        let channels = LiveChannelsPaneScope.channels(store.channels, playing: channel)
         guard !channels.isEmpty else { return }
 
         let list = LiveChannelsPaneView(
@@ -1900,6 +1977,79 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             self?.switchChannel(to: selected)
         }
         presentPane(content: list, pill: railView.upNextButton)
+    }
+
+    // MARK: - Guide over the picture
+
+    /// The guide, see-through over the playing channel, on its group and focused on it.
+    /// Select switches channel in place; Menu, or Left out of the grid, closes it.
+    private func presentGuideOverlay() {
+        guard guideOverlay == nil, !LiveTVDataStore.shared.channels.isEmpty else { return }
+        activePanel?.dismissPanel()
+        hideRail()
+        let guide = LiveGuideOverlay.make(
+            playing: channel,
+            onSelect: { [weak self] selected in
+                self?.closeGuideOverlay()
+                self?.switchChannel(to: selected)
+            },
+            onClose: { [weak self] in self?.closeGuideOverlay() })
+        guideOverlay = guide
+        let backdrop = LiveGuideOverlay.backdrop()
+        backdrop.frame = view.bounds
+        backdrop.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(backdrop)
+        guideBackdrop = backdrop
+        guide.view.frame = view.bounds
+        guide.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        addChild(guide)
+        view.addSubview(guide.view)
+        guide.didMove(toParent: self)
+        guide.view.layoutIfNeeded()
+        syncSubtitleOverlay()
+        handFocusToGuide(guide, attempt: 0)
+    }
+
+    /// Into the playing channel's programme once the guide has laid out its rows (it names
+    /// that cell `initialFocusTarget`): landing on a category pill first would switch the
+    /// guide to that category. Covered is not enough, the focused catcher keeps focus under
+    /// the guide, so it is hidden at the hand-off. After about 1.5 s, the guide as it is.
+    private func handFocusToGuide(_ guide: UIViewController, attempt: Int) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + (attempt == 0 ? 0 : 0.05)) { [weak self] in
+            guard let self, self.guideOverlay === guide else { return }
+            let grid = Self.guideGrid(in: guide.view) as? EPGContainerView
+            guard grid?.initialFocusTarget != nil || attempt >= 30 else {
+                self.handFocusToGuide(guide, attempt: attempt + 1)
+                return
+            }
+            self.focusCatcher.isHidden = true
+            UIFocusSystem.focusSystem(for: self.view)?.requestFocusUpdate(to: grid ?? guide.view)
+        }
+    }
+
+    /// The guide's UIKit grid inside its hosting view.
+    private static func guideGrid(in view: UIView) -> UIView? {
+        if view is EPGContainerView { return view }
+        for subview in view.subviews {
+            if let found = guideGrid(in: subview) { return found }
+        }
+        return nil
+    }
+
+    private func closeGuideOverlay() {
+        guard let guide = guideOverlay else { return }
+        guideOverlay = nil
+        guide.willMove(toParent: nil)
+        guide.view.removeFromSuperview()
+        guide.removeFromParent()
+        guideBackdrop?.removeFromSuperview()
+        guideBackdrop = nil
+        syncSubtitleOverlay()
+        focusCatcher.isHidden = false
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            UIFocusSystem.focusSystem(for: self.view)?.requestFocusUpdate(to: self.focusCatcher)
+        }
     }
 
     /// Switches channels in place; the VC, chrome and render surface survive.
@@ -2030,7 +2180,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         let store = LiveTVDataStore.shared
         let current = store.getCurrentProgram(for: channel)
         let next = store.getNextProgram(for: channel)
-        let channelLine = [channel.channelNumber.map(String.init), channel.name]
+        let channelLine = [channel.displayNumber.map(String.init), channel.displayName]
             .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
         var meta = [channelLine]
         if let current {
@@ -2042,7 +2192,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         }
         let card = PlayerInfoCardView(content: .init(
             posterURL: current?.posterURL ?? channel.logoURL,
-            title: current?.title ?? channel.name,
+            title: current?.title ?? channel.displayName,
             summary: current?.description,
             badges: [current?.contentRating].compactMap { $0 },
             metaLine: meta.filter { !$0.isEmpty },
@@ -2089,7 +2239,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
     /// Source facts plus the engine's live stats. No stream URL: IPTV ones embed credentials.
     private func presentDetailsPanel() {
-        var source = [PlayerDetailsPaneView.Row(label: String(localized: "Channel"), value: [channel.channelNumber.map { "\($0)" }, channel.name].compactMap { $0 }.joined(separator: " "))]
+        var source = [PlayerDetailsPaneView.Row(label: String(localized: "Channel"), value: [channel.displayNumber.map { "\($0)" }, channel.displayName].compactMap { $0 }.joined(separator: " "))]
         source.append(.init(label: String(localized: "Provider"), value: channel.sourceType.displayName))
         let route = lastResortPlayer != nil ? "AVPlayer" : isNativeHLSRoute ? "HLS" : "AetherEngine"
         source.append(.init(label: String(localized: "Route"), value: route))
@@ -2153,6 +2303,9 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 dismiss(animated: true)
                 return
             case .select:
+                // The guide over the picture owns Select: it picks the channel. Taken here too,
+                // it brought the rail up, which took focus from the guide mid-selection.
+                if guideOverlay != nil { break }
                 if scrubTarget != nil {
                     // Click to play from the scrubbed spot.
                     resumePlayback()
@@ -2288,9 +2441,12 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private func handleHiddenChromeDirection(_ direction: DirectionalInputBinding.Direction) {
         switch direction {
         case .left:
-            skip(by: -InputConfig.tapSeekBackSeconds)
+            // Nothing: most live channels hold no rewind to skip into. The rail's skip
+            // buttons stay for those that do.
+            break
         case .right:
-            skip(by: InputConfig.tapSeekSeconds)
+            // The guide over the picture; the rail's skip button skips forward.
+            presentGuideOverlay()
         case .up:
             // AVKit lands Up from the picture on the first tool button.
             if let tool = railView.firstToolButton { railView.setFocusLanding(tool) }
@@ -2321,6 +2477,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         endScrub()
         windowSeeker.cancelPending()
         isUserPaused = true
+        pausedSinceJoin = true
         if let lastResortPlayer {
             lastResortPlayer.pause()
         } else {
@@ -2481,6 +2638,14 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
     /// Left/Right on the timeline. A held drag moves by a step, as VOD's skip
     /// does mid-scrub; a click just after a swipe is the swipe's own end.
+    private func timelineTap(forward: Bool) {
+        if scrubTarget != nil || touchScrubPending {
+            timelineArrow(forward: forward)
+        } else if forward {
+            presentGuideOverlay()
+        }
+    }
+
     private func timelineArrow(forward: Bool) {
         guard !touchScrubActive else { return }
         if let ended = touchScrubEndedAt, Date().timeIntervalSince(ended) < 0.5 { return }
@@ -2840,6 +3005,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             if animated { UIView.animate(withDuration: 0.25) { overlay.layoutIfNeeded() } }
         }
         overlay.setControlsVisible(railVisible || timelineVisible, animated: animated)
+        // The guide over the picture is read, not watched: captions would sit on its rows.
+        overlay.isHidden = guideOverlay != nil
     }
 
     /// Shows subtitles while tvOS's Show When Muted applies, then puts the prior

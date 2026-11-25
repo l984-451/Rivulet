@@ -52,9 +52,9 @@ struct MacLiveProgrammeSheet: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 MacLiveLogo(url: channel.logoURL).frame(width: 40, height: 24)
-                Text(channel.numberAndName).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                Text(channel.displayNumberAndName).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
             }
-            Text(program?.displayTitle ?? channel.name).font(.title2.bold())
+            Text(program?.displayTitle ?? channel.displayName).font(.title2.bold())
             if let subtitle = program?.subtitle, !subtitle.isEmpty, subtitle != program?.title {
                 Text(subtitle).font(.headline)
             }
@@ -85,7 +85,7 @@ struct MacLiveProgrammeSheet: View {
                     onWatch(channel)
                     dismiss()
                 } label: {
-                    Label(airing ? "Watch" : "Watch \(channel.name) Live", systemImage: "play.fill")
+                    Label(airing ? "Watch" : "Watch \(channel.displayName) Live", systemImage: "play.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
@@ -101,73 +101,5 @@ struct MacLiveProgrammeSheet: View {
             }
         }
         .controlSize(.large)
-    }
-}
-
-/// Every channel, favorites first, with what is on now. Picking one switches in place.
-struct MacLiveChannelPicker: View {
-    let current: UnifiedChannel
-    let onPick: (UnifiedChannel) -> Void
-    @ObservedObject private var store = LiveTVDataStore.shared
-    @Environment(\.dismiss) private var dismiss
-    @State private var query = ""
-
-    var body: some View {
-        NavigationStack {
-            List {
-                let favorites = filtered(store.favorites(in: store.channels))
-                if !favorites.isEmpty {
-                    Section("Favorites") { ForEach(favorites) { row($0) } }
-                }
-                Section(favorites.isEmpty ? "" : "All Channels") {
-                    ForEach(filtered(store.channels)) { row($0) }
-                }
-            }
-            .searchable(text: $query, prompt: "Channels")
-            .navigationTitle("Channels")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
-                }
-            }
-            .overlay {
-                if !query.isEmpty, filtered(store.channels).isEmpty { ContentUnavailableView.search(text: query) }
-            }
-        }
-        .frame(width: 420, height: 520)
-    }
-
-    private func filtered(_ channels: [UnifiedChannel]) -> [UnifiedChannel] {
-        guard !query.isEmpty else { return channels }
-        return channels.filter {
-            $0.name.localizedCaseInsensitiveContains(query)
-                || $0.channelNumber.map { String($0).hasPrefix(query) } == true
-                || store.getCurrentProgram(for: $0)?.title.localizedCaseInsensitiveContains(query) == true
-        }
-    }
-
-    private func row(_ channel: UnifiedChannel) -> some View {
-        Button {
-            onPick(channel)
-            dismiss()
-        } label: {
-            HStack(spacing: 12) {
-                MacLiveLogo(url: channel.logoURL).frame(width: 52, height: 32)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(channel.numberAndName).foregroundStyle(.primary)
-                    if let programme = store.getCurrentProgram(for: channel) {
-                        Text(programme.displayTitle).font(.subheadline).foregroundStyle(.secondary)
-                    }
-                }
-                .lineLimit(1)
-                Spacer(minLength: 0)
-                if channel.id == current.id {
-                    Image(systemName: "checkmark").foregroundStyle(.tint).accessibilityHidden(true)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(channel.id == current.id ? .isSelected : [])
     }
 }

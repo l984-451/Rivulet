@@ -194,11 +194,11 @@ struct MacLiveCard: View {
     }
 
     private var title: String {
-        item.program?.displayTitle ?? item.recording?.title ?? item.channel?.name ?? ""
+        item.program?.displayTitle ?? item.recording?.title ?? item.channel?.displayName ?? ""
     }
 
     private var detail: String {
-        if let channel = item.channel { return channel.numberAndName }
+        if let channel = item.channel { return channel.displayNumberAndName }
         return item.recording?.channelName ?? ""
     }
 
@@ -206,7 +206,7 @@ struct MacLiveCard: View {
     private var helpText: String {
         guard let program = item.program else { return title }
         let description = program.description.flatMap { $0.isEmpty ? nil : String($0.prefix(240)) }
-        return [title, [program.timeRange, item.channel?.numberAndName].compactMap { $0 }.joined(separator: " · "), description]
+        return [title, [program.timeRange, item.channel?.displayNumberAndName].compactMap { $0 }.joined(separator: " · "), description]
             .compactMap { $0 }.joined(separator: "\n")
     }
 
@@ -262,7 +262,7 @@ private struct MacLiveCardArt: View {
                 .padding(.horizontal, 36)
                 .padding(.vertical, 30)
             if item.channel?.logoURL == nil {
-                Text(item.channel?.name ?? item.recording?.channelName ?? "")
+                Text(item.channel?.displayName ?? item.recording?.channelName ?? "")
                     .font(.headline)
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)

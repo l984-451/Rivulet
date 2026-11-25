@@ -732,6 +732,9 @@ Hosting is the player's Watch Together button on every app; joining is the sideb
   for the SDK's own 4% nudge.
 - **The host decides what follows.** `blocksLocalAdvance` stops a guest's Up Next; a
   guest parks on the last frame until the host's `setMedia` re-presents its player.
+- **Copies are found by `TitleCopies`** (`RivuletCore/MediaProvider/`), the same matcher
+  the detail page's Versions lists from (#466): the plex:// guid on Plex, else a title
+  search that `sameTitle` confirms, an episode through its show. Fix matching there once.
 - **A resolver has 30 s in total**, so servers are asked at once with 12 s each
   (`within`). `/library/all?guid=` matches `plex://` guids across sections but NOT
   `imdb://` or `tmdb://`, and rounds durations (6480000 for 6455934, PMS 1.43.5): take

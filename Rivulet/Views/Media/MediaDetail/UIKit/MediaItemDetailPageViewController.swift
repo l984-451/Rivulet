@@ -69,6 +69,9 @@ final class MediaItemDetailPageViewController: UIViewController {
     private weak var watchlistButton: FocusableActionButton?
     private weak var actionRow: UIStackView?
     private weak var versionsButton: FocusableActionButton?
+    /// Other copies of the episode, from other libraries and servers.
+    private var otherCopies: [VersionPicker.Copy] = []
+    private var copiesTask: Task<Void, Never>?
     private var onWatchlist = false
     /// The show above this episode, kept from `loadDetail` so Go to Show opens
     /// without a second fetch.
@@ -608,22 +611,45 @@ final class MediaItemDetailPageViewController: UIViewController {
         infoTopConstraint.isActive = true
     }
 
-    /// Versions button after Watchlist, once the detail shows two or more files.
+    /// Versions button after Watchlist while the episode's files and its other copies add up to two
+    /// or more. The first detail also asks the other libraries and servers for copies.
     private func addVersionsButton(_ detail: MediaItemDetail) {
-        let versions = VersionPicker.versions(in: detail)
-        guard !versions.isEmpty, versionsButton == nil, let row = actionRow, let watchlist = watchlistButton,
-              let index = row.arrangedSubviews.firstIndex(of: watchlist) else { return }
+        if copiesTask == nil {
+            let servers = TitleCopies.servers(for: item)
+            if !servers.isEmpty {
+                copiesTask = Task { [weak self] in
+                    let found = await TitleCopies.versions(of: detail, on: servers)
+                    guard let self, let detail = self.detail else { return }
+                    self.otherCopies = found.copies
+                    self.addVersionsButton(detail)
+                }
+            }
+        }
+        guard !versionOptions(detail).isEmpty, versionsButton == nil, let row = actionRow,
+              let watchlist = watchlistButton, let index = row.arrangedSubviews.firstIndex(of: watchlist) else { return }
         let button = FocusableActionButton.circle(systemImage: "square.stack")
         button.onPrimaryAction = { [weak self, weak button] in
-            guard let self, let button else { return }
-            VersionPicker.present(versions, from: self, sourceFrame: button.convert(button.bounds, to: nil)) {
-                [weak self] id in
+            guard let self, let button, let detail = self.detail else { return }
+            VersionPicker.present(self.versionOptions(detail), from: self,
+                                  sourceFrame: button.convert(button.bounds, to: nil)) { [weak self] option in
                 guard let self else { return }
-                self.onPlay(self.item, id)
+                switch VersionPicker.pick(option, playTarget: nil, shown: detail.item) {
+                case .version(let id):
+                    self.onPlay(self.item, id)
+                case .item(let copy, let id):
+                    // The copy carries this episode's resume point when that is further in.
+                    let offset = copy.userState.viewOffset
+                    ProviderPlayer.play(copy, fromBeginning: false, sourceID: id,
+                                        explicitStartOffset: offset > 0 ? offset : nil, from: self, onDismiss: nil)
+                }
             }
         }
         row.insertArrangedSubview(button, at: index + 1)
         versionsButton = button
+    }
+
+    private func versionOptions(_ detail: MediaItemDetail) -> [VersionPicker.Option] {
+        VersionPicker.options(for: detail, copies: otherCopies)
     }
 
     // MARK: - Watch-state refresh (issue #228)

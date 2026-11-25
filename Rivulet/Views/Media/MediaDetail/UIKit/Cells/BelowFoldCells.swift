@@ -296,9 +296,9 @@ final class CastCollectionCell: UICollectionViewCell {
 
 final class BelowFoldSectionHeader: UICollectionReusableView {
     static let reuseID = "BelowFoldSectionHeader"
-    /// Baseline above the first row's frame top, measured on device (tvOS 27): a card
-    /// frame carries 20 of focus reserve, so the artwork sits 34.5 below. Cast circles have none beyond 20 above.
-    static let cardBaseline: CGFloat = 14.5
+    /// Baseline above the header's bottom, which sits 8 above a card row's frame (negative: below it).
+    /// Apple's rests 21 above the artwork, 20 under the frame top (tvOS 27, Ted Lasso and F1 on device).
+    static let cardBaseline: CGFloat = -7
     static let castBaseline: CGFloat = 41.5
     private let titleLabel = UILabel()
     private var baselineConstraint: NSLayoutConstraint!
@@ -307,7 +307,7 @@ final class BelowFoldSectionHeader: UICollectionReusableView {
         super.init(frame: frame)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         titleLabel.font = MediaRowMetrics.headerFont
-        titleLabel.textColor = MediaRowMetrics.headerColor
+        titleLabel.textColor = MediaRowMetrics.pageHeaderColor
         addSubview(titleLabel)
         baselineConstraint = titleLabel.lastBaselineAnchor.constraint(equalTo: bottomAnchor, constant: -Self.cardBaseline)
         NSLayoutConstraint.activate([

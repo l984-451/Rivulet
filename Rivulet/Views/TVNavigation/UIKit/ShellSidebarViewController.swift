@@ -44,12 +44,13 @@ private enum Metrics {
     /// The TV app's 50pt icon disc, centred in the 60pt pill.
     static let pillDiscSize: CGFloat = 50
     static var pillDiscInset: CGFloat { (pillHeight - pillDiscSize) / 2 }
-    static let pillTrailing: CGFloat = 41
+    /// Measured on device (tvOS 27.2): 26 from the label to the pill edge, as the TV app draws it.
+    static let pillTrailing: CGFloat = 25
     /// The TV app's sidebar avatar, and how much it grows under focus.
     static let avatarSize: CGFloat = 50
     static let avatarFocusGrowth: CGFloat = 4
     /// The profile header band: the first tab sits this far below the list top.
-    static let profileBandHeight: CGFloat = 90
+    static let profileBandHeight: CGFloat = 106.5
     /// While music plays the profile slot is the avatar's column plus the Now
     /// Playing pill, which is as tall as the avatar and centred on it.
     static var avatarColumnWidth: CGFloat { iconCenterX * 2 }
@@ -210,7 +211,7 @@ final class ShellSidebarRowCell: UICollectionViewCell {
         backgroundPill.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(backgroundPill)
 
-        iconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 24, weight: .medium)
+        iconView.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 21, weight: .regular)
         iconView.setContentHuggingPriority(.required, for: .horizontal)
         titleLabel.font = .preferredFont(forTextStyle: .caption1)
         serverLabel.font = .systemFont(ofSize: 17, weight: .semibold)
@@ -247,7 +248,8 @@ final class ShellSidebarRowCell: UICollectionViewCell {
 
     func configure(item: ShellSidebarItem, isSelectedTab: Bool) {
         self.isSelectedTab = isSelectedTab
-        iconView.image = UIImage(systemName: item.icon)
+        // Home's glyph fills a 40 pt box, its size in the TV app's rows.
+        iconView.image = SidebarHomeGlyph.icon(item.icon, side: 40)
         titleLabel.text = item.title
         serverLabel.text = item.badge
         serverLabel.isHidden = item.badge == nil
@@ -637,7 +639,7 @@ final class ShellSidebarViewController: UIViewController {
     private var pillHidden = false
     /// The remote gesture that last moved focus between rows (see `stopsUpwardRun`).
     private var lastFocusMoveGesture = -1
-    /// While the profile panel is up the pill names the user, not the tab.
+    /// While the profile panel is up the pill reads "Switch Profile", not the tab.
     private var pillShowsProfile = false
     /// Move from a row's long-press menu: the held row's key, and the order to put back on Menu.
     private var rowMove: GrabReorderController?
@@ -1025,8 +1027,9 @@ final class ShellSidebarViewController: UIViewController {
                                                constant: Metrics.pillHeight / 2),
             // Chevron sits just left of the collapsed pill, vertically centered
             // on it. The pill's left edge is at pillOrigin.x.
+            // 2 pt short of the pill puts the glyph where the TV app's sits (measured, tvOS 27).
             pillChevron.trailingAnchor.constraint(equalTo: view.leadingAnchor,
-                                                  constant: Metrics.pillOrigin.x - 4),
+                                                  constant: Metrics.pillOrigin.x - 2),
             pillChevron.centerYAnchor.constraint(equalTo: view.topAnchor,
                                                  constant: Metrics.pillOrigin.y + Metrics.pillHeight / 2),
         ])
@@ -1046,10 +1049,14 @@ final class ShellSidebarViewController: UIViewController {
     }
 
     private func configurePill() {
+        // Over the profile panel the pill is the TV app's dim "Switch Profile": person glyph, no chevron.
         let item = item(for: pillShowsProfile ? .account : selectedTab)
-        pillIcon.image = UIImage(systemName: item.icon)
-        pillAvatar.url = item.avatarURL
-        pillLabel.text = item.title
+        pillIcon.image = pillShowsProfile ? UIImage(systemName: "person.crop.circle") : SidebarHomeGlyph.icon(item.icon, side: 46)
+        pillAvatar.url = pillShowsProfile ? nil : item.avatarURL
+        pillLabel.text = pillShowsProfile ? String(localized: "Switch Profile") : item.title
+        pillLabel.textColor = UIColor.white.withAlphaComponent(pillShowsProfile ? 0.29 : 1)
+        pillLabel.font = pillShowsProfile ? .systemFont(ofSize: 25, weight: .regular) : emphasizedFont(.body)
+        pillChevron.isHidden = pillShowsProfile
         // The pill is as wide as its title: resize it when it is at rest.
         view.setNeedsLayout()
     }
@@ -1130,7 +1137,7 @@ final class ShellSidebarViewController: UIViewController {
         for section in sections {
             if let match = section.items.first(where: { $0.tab == tab }) { return match }
         }
-        return ShellSidebarItem(tab: .home, title: String(localized: "Home"), icon: "house.fill")
+        return ShellSidebarItem(tab: .home, title: String(localized: "Home"), icon: SidebarHomeGlyph.name)
     }
 
 }

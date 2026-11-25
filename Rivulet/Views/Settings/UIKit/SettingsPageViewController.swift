@@ -67,7 +67,11 @@ final class SettingsPageViewController: UIViewController, SidebarTabReselecting 
         section.contentInsets = NSDirectionalEdgeInsets(top: 12, leading: 24, bottom: 24, trailing: 24)
         // Insets from the bounds, not the safe area: the container places the pane.
         section.contentInsetsReference = .none
-        let layout = UICollectionViewCompositionalLayout(section: section)
+        // Apple's leading caption takes 44.5 pt above the first row, not a full 80 pt slot.
+        let layout = UICollectionViewCompositionalLayout { [weak self] _, _ in
+            section.contentInsets.top = self?.rows.first?.isHeader == true ? 12 - 35.5 : 12
+            return section
+        }
 
         collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
         collectionView.backgroundColor = .clear

@@ -22,6 +22,9 @@ final class FocusScrollControlledCollectionView: UICollectionView {
     /// Up, so this window keeps that press from also lifting to the pills.
     var topSectionJustTookFocus: Bool { CACurrentMediaTime() - lastTopFocusTime < 0.06 }
 
+    /// A section whose rows rest at the page top instead of centring (the person page's first shelf).
+    var unscrolledSectionIndex: Int?
+
     /// Set by the owner per snapshot. A section, not a cell class: trailers reuse `EpisodeCollectionCell`.
     var topSectionIndex: Int?
 
@@ -70,7 +73,8 @@ final class FocusScrollControlledCollectionView: UICollectionView {
         let isTop = topSectionIndex != nil && path?.section == topSectionIndex
         let minY = -adjustedContentInset.top
         let maxY = max(minY, contentSize.height - bounds.height + adjustedContentInset.bottom)
-        let targetY = isTop ? frame.minY - topBand : frame.midY - bounds.height / 2
+        let targetY = isTop ? frame.minY - topBand
+            : path?.section == unscrolledSectionIndex ? minY : frame.midY - bounds.height / 2
         return CGPoint(x: 0, y: max(minY, min(targetY, maxY)))
     }
 

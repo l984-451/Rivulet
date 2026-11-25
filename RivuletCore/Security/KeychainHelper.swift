@@ -32,10 +32,9 @@ enum KeychainHelper {
     @discardableResult
     static func set(_ value: String, forKey key: String, service: String = plexService) -> Bool {
         guard let data = value.data(using: .utf8) else { return false }
-        delete(key, service: service)
-        var status = add(data, to: query(key, service))
+        var status = upsert(data, in: query(key, service))
         // A build with no app identity can't use the data protection keychain.
-        if status == errSecMissingEntitlement { status = add(data, to: query(key, service, fileKeychain: true)) }
+        if status == errSecMissingEntitlement { status = upsert(data, in: query(key, service, fileKeychain: true)) }
         return status == errSecSuccess
     }
 
@@ -68,6 +67,13 @@ enum KeychainHelper {
         var result: AnyObject?
         guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess else { return nil }
         return result as? Data
+    }
+
+    /// Updates in place, so a refused write leaves the saved value where it was.
+    private static func upsert(_ data: Data, in query: [String: Any]) -> OSStatus {
+        let status = add(data, to: query)
+        guard status == errSecDuplicateItem else { return status }
+        return SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
     }
 
     private static func add(_ data: Data, to query: [String: Any]) -> OSStatus {

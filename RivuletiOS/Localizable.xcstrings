@@ -21,6 +21,42 @@
         }
       }
     },
+    "%lld hr" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Std."
+          }
+        }
+      }
+    },
+    "%lld hr %lld min" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Std. %lld Min."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld hr %2$lld min"
+          }
+        }
+      }
+    },
+    "%lld min" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Min."
+          }
+        }
+      }
+    },
     "Aspect Ratio" : {
       "localizations" : {
         "de" : {
@@ -52,6 +88,12 @@
           }
         }
       }
+    },
+    "Couldn't Load Discover" : {
+
+    },
+    "Discover" : {
+
     },
     "Leave a Tip" : {
       "localizations" : {
@@ -155,7 +197,16 @@
         }
       }
     },
-    "Plays surround soundtracks as stereo with the subwoofer channel mixed into left and right, for 2.1 speakers on a stereo connection." : {},
+    "Plays surround soundtracks as stereo with the subwoofer channel mixed into left and right, for 2.1 speakers on a stereo connection." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spielt Surround-Ton als Stereo ab und mischt den Subwoofer-Kanal in links und rechts, für 2.1-Lautsprecher an einem Stereoanschluss."
+          }
+        }
+      }
+    },
     "Recording in Progress" : {
 
     },
@@ -260,7 +311,16 @@
     "Start from Beginning" : {
 
     },
-    "Stereo with Subwoofer" : {},
+    "Stereo with Subwoofer" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stereo mit Subwoofer"
+          }
+        }
+      }
+    },
     "Still Waiting on the Server" : {
       "localizations" : {
         "de" : {
@@ -690,6 +750,23 @@
     "Watch Live" : {
 
     },
+    "watchTogether.left" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ hat den Raum verlassen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%@ left"
+          }
+        }
+      }
+    },
     "Widescreen" : {
       "localizations" : {
         "de" : {
@@ -994,8 +1071,26 @@
         }
       }
     },
-    "%@ joined" : {},
-    "%@ left" : {},
+    "%@ joined" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ ist beigetreten"
+          }
+        }
+      }
+    },
+    "%@ left" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch %@"
+          }
+        }
+      }
+    },
     "%@ of %@" : {
       "localizations" : {
         "de" : {
@@ -1024,9 +1119,36 @@
         }
       }
     },
-    "%@ paused" : {},
-    "%@ pressed play" : {},
-    "%@ skipped" : {},
+    "%@ paused" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ hat pausiert"
+          }
+        }
+      }
+    },
+    "%@ pressed play" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ hat die Wiedergabe gestartet"
+          }
+        }
+      }
+    },
+    "%@ skipped" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ hat gespult"
+          }
+        }
+      }
+    },
     "%@ to %@" : {
       "localizations" : {
         "de" : {
@@ -2669,7 +2791,16 @@
         }
       }
     },
-    "Buffering" : {},
+    "Buffering" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Puffert"
+          }
+        }
+      }
+    },
     "Browse" : {
       "localizations" : {
         "de" : {
@@ -3762,7 +3893,16 @@
         }
       }
     },
-    "Couldn't Join" : {},
+    "Couldn't Join" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beitritt nicht möglich"
+          }
+        }
+      }
+    },
     "Couldn't Load" : {
       "localizations" : {
         "de" : {
@@ -4057,8 +4197,26 @@
         }
       }
     },
-    "Couldn't join that room." : {},
-    "Couldn't reach Watch Together. Check your connection and try again." : {},
+    "Couldn't join that room." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diesem Raum konnte nicht beigetreten werden."
+          }
+        }
+      }
+    },
+    "Couldn't reach Watch Together. Check your connection and try again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Watch Together ist nicht erreichbar. Prüfe deine Verbindung und versuche es erneut."
+          }
+        }
+      }
+    },
     "Couldn't reach that server. Check the address and port." : {
       "localizations" : {
         "de" : {
@@ -4125,7 +4283,16 @@
         }
       }
     },
-    "Couldn't start a room." : {},
+    "Couldn't start a room." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Raum konnte nicht gestartet werden."
+          }
+        }
+      }
+    },
     "Couldn't tune this channel." : {
       "localizations" : {
         "de" : {
@@ -4664,7 +4831,16 @@
         }
       }
     },
-    "Different Version" : {},
+    "Different Version" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Andere Version"
+          }
+        }
+      }
+    },
     "Dismiss" : {
       "localizations" : {
         "de" : {
@@ -4841,7 +5017,16 @@
         }
       }
     },
-    "Doesn't have this title" : {},
+    "Doesn't have this title" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hat diesen Titel nicht"
+          }
+        }
+      }
+    },
     "Download" : {
       "localizations" : {
         "de" : {
@@ -5310,7 +5495,16 @@
         }
       }
     },
-    "Each person streams from their own server. To start a room, open the Watch Together button in the player." : {},
+    "Each person streams from their own server. To start a room, open the Watch Together button in the player." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jede Person streamt von ihrem eigenen Server. Um einen Raum zu starten, wähle im Player „Watch Together“."
+          }
+        }
+      }
+    },
     "Earlier" : {
       "localizations" : {
         "de" : {
@@ -5399,7 +5593,16 @@
         }
       }
     },
-    "Enter the code from the person hosting." : {},
+    "Enter the code from the person hosting." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gib den Code vom Host ein."
+          }
+        }
+      }
+    },
     "Enter the username and password from your provider." : {
       "localizations" : {
         "de" : {
@@ -5564,7 +5767,16 @@
         }
       }
     },
-    "Episode %lld" : {},
+    "Episode %lld" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folge %lld"
+          }
+        }
+      }
+    },
     "Episodes" : {
       "localizations" : {
         "de" : {
@@ -6343,7 +6555,16 @@
         }
       }
     },
-    "Get a code to share. Playback pauses here until someone presses play." : {},
+    "Get a code to share. Playback pauses here until someone presses play." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erhalte einen Code zum Teilen. Die Wiedergabe bleibt hier pausiert, bis jemand sie startet."
+          }
+        }
+      }
+    },
     "Go Live" : {
       "localizations" : {
         "de" : {
@@ -6584,7 +6805,16 @@
         }
       }
     },
-    "Here Now" : {},
+    "Here Now" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gerade dabei"
+          }
+        }
+      }
+    },
     "Hero" : {
       "localizations" : {
         "de" : {
@@ -6673,7 +6903,16 @@
         }
       }
     },
-    "Host • %@" : {},
+    "Host • %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Host • %@"
+          }
+        }
+      }
+    },
     "How this source appears in Live TV." : {
       "localizations" : {
         "de" : {
@@ -6954,8 +7193,26 @@
         }
       }
     },
-    "Join" : {},
-    "Join a Room" : {},
+    "Join" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beitreten"
+          }
+        }
+      }
+    },
+    "Join a Room" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einem Raum beitreten"
+          }
+        }
+      }
+    },
     "Jellyfin didn't accept that username and password." : {
       "localizations" : {
         "de" : {
@@ -7120,7 +7377,16 @@
         }
       }
     },
-    "Leave Room" : {},
+    "Leave Room" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Raum verlassen"
+          }
+        }
+      }
+    },
     "Leave the password empty if the user has none." : {
       "localizations" : {
         "de" : {
@@ -7317,7 +7583,16 @@
         }
       }
     },
-    "Loading" : {},
+    "Loading" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laden"
+          }
+        }
+      }
+    },
     "Lower" : {
       "localizations" : {
         "de" : {
@@ -8174,8 +8449,26 @@
         }
       }
     },
-    "No room has that code. Rooms end when everyone leaves." : {},
-    "None of your servers have %@." : {},
+    "No room has that code. Rooms end when everyone leaves." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Raum hat diesen Code. Ein Raum endet, sobald alle ihn verlassen haben."
+          }
+        }
+      }
+    },
+    "None of your servers have %@." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keiner deiner Server hat „%@“."
+          }
+        }
+      }
+    },
     "No Subtitles Found" : {
       "localizations" : {
         "de" : {
@@ -8258,7 +8551,16 @@
         }
       }
     },
-    "Not in Your Library" : {},
+    "Not in Your Library" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nicht in deiner Mediathek"
+          }
+        }
+      }
+    },
     "Nothing On Right Now" : {
       "localizations" : {
         "de" : {
@@ -8665,7 +8967,16 @@
         }
       }
     },
-    "Only the host can control playback." : {},
+    "Only the host can control playback." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur der Host kann die Wiedergabe steuern."
+          }
+        }
+      }
+    },
     "Only Plex converts. Jellyfin and Emby always download the original file." : {
       "localizations" : {
         "de" : {
@@ -9158,7 +9469,16 @@
         }
       }
     },
-    "Play Anyway" : {},
+    "Play Anyway" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trotzdem abspielen"
+          }
+        }
+      }
+    },
     "Play Again" : {
       "localizations" : {
         "de" : {
@@ -10079,7 +10399,16 @@
         }
       }
     },
-    "Ready" : {},
+    "Ready" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bereit"
+          }
+        }
+      }
+    },
     "Recap" : {
       "localizations" : {
         "de" : {
@@ -10228,7 +10557,16 @@
         }
       }
     },
-    "Reconnecting to Watch Together…" : {},
+    "Reconnecting to Watch Together…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbindung zu Watch Together wird wiederhergestellt …"
+          }
+        }
+      }
+    },
     "Record" : {
       "localizations" : {
         "de" : {
@@ -10514,7 +10852,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Veröffentlicht"
+            "value" : "Erschienen"
           }
         },
         "el" : {
@@ -10971,8 +11309,26 @@
         }
       }
     },
-    "Room Code" : {},
-    "Room codes have 6 letters and numbers." : {},
+    "Room Code" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Raumcode"
+          }
+        }
+      }
+    },
+    "Room codes have 6 letters and numbers." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Raumcodes bestehen aus 6 Buchstaben und Ziffern."
+          }
+        }
+      }
+    },
     "Rivulet needs %@ Server %lld.%lld.%lld or newer." : {
       "localizations" : {
         "de" : {
@@ -11517,7 +11873,16 @@
         }
       }
     },
-    "Share Code" : {},
+    "Share Code" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Code teilen"
+          }
+        }
+      }
+    },
     "Shared by %@" : {
       "localizations" : {
         "de" : {
@@ -12000,7 +12365,16 @@
         }
       }
     },
-    "Sit This One Out" : {},
+    "Sit This One Out" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diesmal aussetzen"
+          }
+        }
+      }
+    },
     "Skip %@" : {
       "localizations" : {
         "de" : {
@@ -12341,7 +12715,16 @@
         }
       }
     },
-    "Start a Room" : {},
+    "Start a Room" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Raum starten"
+          }
+        }
+      }
+    },
     "Starting Soon" : {
       "localizations" : {
         "de" : {
@@ -12364,7 +12747,16 @@
         }
       }
     },
-    "Starting…" : {},
+    "Starting…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird gestartet …"
+          }
+        }
+      }
+    },
     "Starts %@" : {
       "localizations" : {
         "de" : {
@@ -12409,7 +12801,16 @@
         }
       }
     },
-    "Stay" : {},
+    "Stay" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bleiben"
+          }
+        }
+      }
+    },
     "Stereo" : {
       "localizations" : {
         "de" : {
@@ -12998,7 +13399,16 @@
         }
       }
     },
-    "That room is full or locked." : {},
+    "That room is full or locked." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Raum ist voll oder gesperrt."
+          }
+        }
+      }
+    },
     "That server has no Dispatcharr sign-in. Clear the username and password." : {
       "localizations" : {
         "de" : {
@@ -14909,8 +15319,26 @@
         }
       }
     },
-    "Watch Together" : {},
-    "Watch Together ended" : {},
+    "Watch Together" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Watch Together"
+          }
+        }
+      }
+    },
+    "Watch Together ended" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Watch Together wurde beendet"
+          }
+        }
+      }
+    },
     "Watch from Beginning" : {
       "localizations" : {
         "de" : {
@@ -15295,8 +15723,50 @@
         }
       }
     },
-    "Your copy is %lld seconds longer than the room's, so it may not line up." : {},
-    "Your copy is %lld seconds shorter than the room's, so it may not line up." : {},
+    "Your copy is %lld seconds longer than the room's, so it may not line up." : {
+      "localizations" : {
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Deine Kopie ist %lld Sekunde länger als die des Raums und läuft daher eventuell nicht genau synchron."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Deine Kopie ist %lld Sekunden länger als die des Raums und läuft daher eventuell nicht genau synchron."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Your copy is %lld seconds shorter than the room's, so it may not line up." : {
+      "localizations" : {
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Deine Kopie ist %lld Sekunde kürzer als die des Raums und läuft daher eventuell nicht genau synchron."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Deine Kopie ist %lld Sekunden kürzer als die des Raums und läuft daher eventuell nicht genau synchron."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "Your provider has blocked this account." : {
       "localizations" : {
         "de" : {
@@ -16189,8 +16659,26 @@
         }
       }
     },
-    "Couldn't Load Folder" : {},
-    "Empty Folder" : {},
+    "Couldn't Load Folder" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ordner konnte nicht geladen werden"
+          }
+        }
+      }
+    },
+    "Empty Folder" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leerer Ordner"
+          }
+        }
+      }
+    },
     "library.decade" : {
       "extractionState" : "extracted_with_value",
       "localizations" : {
@@ -16204,6 +16692,24 @@
     },
     "%lld unwatched episodes" : {
       "localizations" : {
+        "de" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld ungesehene Folge"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld ungesehene Folgen"
+                }
+              }
+            }
+          }
+        },
         "en" : {
           "variations" : {
             "plural" : {

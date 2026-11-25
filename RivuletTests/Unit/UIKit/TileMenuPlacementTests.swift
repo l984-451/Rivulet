@@ -14,7 +14,7 @@ final class TileMenuPlacementTests: XCTestCase {
         let p = TileMenuPlacement.place(panel: panel, beside: tile, in: screen)
         XCTAssertEqual(p.frame.minY, tile.minY)
         XCTAssertEqual(p.anchor.y, 0, "grows from its top corner, beside the tile's top")
-        XCTAssertEqual(p.frame.minX, tile.maxX + 16)
+        XCTAssertEqual(p.frame.minX, tile.maxX + 19.5)
         XCTAssertEqual(p.anchor.x, 0)
     }
 
@@ -36,7 +36,7 @@ final class TileMenuPlacementTests: XCTestCase {
     func test_rightEdgeTile_opensToTheLeft() {
         let tile = CGRect(x: 1580, y: 200, width: 260, height: 390)
         let p = TileMenuPlacement.place(panel: panel, beside: tile, in: screen)
-        XCTAssertEqual(p.frame.maxX, tile.minX - 16)
+        XCTAssertEqual(p.frame.maxX, tile.minX - 19.5)
         XCTAssertEqual(p.anchor.x, 1)
     }
 
@@ -66,6 +66,6 @@ final class TileMenuPlacementTests: XCTestCase {
         XCTAssertEqual(glass.layer.anchorPoint, CGPoint(x: 0.5, y: 0.5))
         XCTAssertEqual(glass.frame, holder.bounds)
         XCTAssertTrue(glass.transform.isIdentity)
-        XCTAssertEqual(holder.layer.position, CGPoint(x: 434, y: 430), "grows from the corner beside the tile")
+        XCTAssertEqual(holder.layer.position, CGPoint(x: 437.5, y: 430), "grows from the corner beside the tile")
     }
 }

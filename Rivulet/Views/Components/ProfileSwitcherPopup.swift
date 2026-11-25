@@ -22,8 +22,11 @@ struct ProfileSwitcherPopup: View {
     @State private var isLoading = false
     @FocusState private var focusedUserId: Int?
 
-    // The Apple TV app's profile panel: 384 wide, insets 14 / 14 / 34,
-    // two columns that overlap 4pt, rows 10 apart, 160pt avatars growing to 180.
+    // The Apple TV app's profile panel: 384 wide, insets 14 / 14 / 34, two columns
+    // that overlap 4pt, rows 218 apart, 160pt avatars growing to 180. It sits at
+    // (50, 126) on screen, so the cover's safe area is ignored.
+    private let panelOrigin = CGPoint(x: 50, y: 126)
+    private let rowHeight: CGFloat = 208
     private let columns = [
         GridItem(.fixed(180), spacing: -4),
         GridItem(.fixed(180))
@@ -43,12 +46,14 @@ struct ProfileSwitcherPopup: View {
                 .padding(EdgeInsets(top: 14, leading: 14, bottom: 34, trailing: 14))
             }
             .frame(width: 384)
-            .frame(maxHeight: max(0, proxy.size.height - 70 - 40))
+            .frame(maxHeight: max(0, proxy.size.height - panelOrigin.y - 40))
             .fixedSize(horizontal: false, vertical: true)
             .clipShape(.rect(cornerRadius: 50))
             .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 50))
-            .padding(.top, 70)
+            .padding(.top, panelOrigin.y)
+            .padding(.leading, panelOrigin.x)
         }
+        .ignoresSafeArea()
         .onAppear {
             focusedUserId = profileManager.selectedUser?.id ?? profileManager.homeUsers.first?.id
         }
@@ -97,18 +102,12 @@ struct ProfileSwitcherPopup: View {
         return Button {
             selectProfile(user)
         } label: {
-            VStack(spacing: 10) {
+            VStack(spacing: -4) {
                 ZStack {
                     avatarView(for: user)
                         .frame(width: avatarSize, height: avatarSize)
                         .clipShape(Circle())
-                        .overlay(
-                            Circle()
-                                .strokeBorder(
-                                    isFocused ? Color.primary.opacity(0.8) : Color.primary.opacity(0.15),
-                                    lineWidth: isFocused ? 3 : 1
-                                )
-                        )
+                        .overlay(Circle().strokeBorder(Color.primary.opacity(0.15), lineWidth: 1))
 
                     if isLoadingThis {
                         Circle()
@@ -119,12 +118,13 @@ struct ProfileSwitcherPopup: View {
                 }
                 .overlay(alignment: .topTrailing) {
                     if isCurrent && !isLoadingThis {
-                        // 36pt badge, the TV app's size.
+                        // 40pt badge, 5pt out past the corner, the TV app's.
                         Image(systemName: "checkmark.circle.fill")
                             .resizable()
                             .symbolRenderingMode(.palette)
                             .foregroundStyle(.white, .green)
-                            .frame(width: 36, height: 36)
+                            .frame(width: 40, height: 40)
+                            .offset(x: 5, y: -5)
                     } else if user.protected && !isCurrent && !isLoadingThis {
                         Image(systemName: profileManager.usersWithRememberedPins.contains(user.uuid)
                               ? "lock.open.fill" : "lock.fill")
@@ -136,15 +136,19 @@ struct ProfileSwitcherPopup: View {
                             .offset(x: 4, y: -4)
                     }
                 }
-                // Only the avatar grows on focus; the name stays put.
                 .scaleEffect(isFocused ? 180 / avatarSize : 1.0)
+                // The focused avatar's size, so the grown avatar stays centred on its row.
+                .frame(width: 180, height: 180)
 
                 Text(firstName)
                     .font(Font(UIFont.preferredFont(forTextStyle: .caption2)).weight(isFocused ? .semibold : .regular))
                     .padding(.horizontal, 5)
-                    .foregroundStyle(Color.primary.opacity(isFocused ? 1.0 : 0.7))
+                    .foregroundStyle(Color.primary.opacity(isFocused ? 1.0 : 0.41))
                     .lineLimit(1)
+                    // The name steps down with the growing avatar.
+                    .offset(y: isFocused ? 10 : 0)
             }
+            .frame(height: rowHeight, alignment: .top)
         }
         .buttonStyle(ProfileSwitcherButtonStyle())
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isFocused)

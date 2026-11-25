@@ -22,6 +22,15 @@ final class PersonDetailViewController: UIViewController {
         case movies
         case shows
         case knownFor
+
+        var shelfTitle: String? {
+            switch self {
+            case .header: nil
+            case .movies: String(localized: "Movies")
+            case .shows: String(localized: "Shows")
+            case .knownFor: String(localized: "Known For")
+            }
+        }
     }
 
     /// One item per shelf, as on Home. `nonisolated` and `Sendable` for the diffable
@@ -218,6 +227,11 @@ final class PersonDetailViewController: UIViewController {
         collectionView.contentInsetAdjustmentBehavior = .never
         collectionView.clipsToBounds = false
         collectionView.delegate = self
+        // Apple does not scroll the page when the first shelf takes focus.
+        collectionView.unscrolledSectionIndex = 1
+        collectionView.register(HubHeaderView.self,
+                                forSupplementaryViewOfKind: UICollectionView.elementKindSectionHeader,
+                                withReuseIdentifier: HubHeaderView.reuseID)
         collectionView.register(PersonHeaderCell.self, forCellWithReuseIdentifier: PersonHeaderCell.reuseID)
         collectionView.register(ShelfRowCell.self, forCellWithReuseIdentifier: ShelfRowCell.reuseID)
         view.addSubview(collectionView)
@@ -233,6 +247,15 @@ final class PersonDetailViewController: UIViewController {
         dataSource = UICollectionViewDiffableDataSource<Int, ItemID>(collectionView: collectionView) {
             [weak self] collectionView, indexPath, itemID in
             self?.cell(for: itemID, at: indexPath, in: collectionView)
+        }
+        dataSource.supplementaryViewProvider = { [weak self] collectionView, kind, indexPath in
+            guard let self, kind == UICollectionView.elementKindSectionHeader,
+                  indexPath.section < self.sections.count,
+                  let title = self.sections[indexPath.section].shelfTitle else { return nil }
+            let header = collectionView.dequeueReusableSupplementaryView(
+                ofKind: kind, withReuseIdentifier: HubHeaderView.reuseID, for: indexPath) as! HubHeaderView
+            header.configure(title: title, style: .swiftUIInfiniteRow, color: MediaRowMetrics.pageHeaderColor)
+            return header
         }
     }
 
@@ -258,17 +281,16 @@ final class PersonDetailViewController: UIViewController {
         section.contentInsets = NSDirectionalEdgeInsets(
             top: 120,   // portrait top, measured on device (tvOS 27)
             leading: MediaRowMetrics.rowLeading,
-            bottom: 48,   // puts the first shelf header's cap top 67.5 below the portrait
+            bottom: 57.5,   // puts the first shelf header's cap top 67.5 below the portrait
             trailing: MediaRowMetrics.rowTrailing)
         return section
     }
 
-    /// One full-bleed ShelfRowCell per shelf, titled by the cell. Height is its header (44),
-    /// the poster tile and focus-growth padding.
+    /// One full-bleed ShelfRowCell per shelf under a section header; insets are Home's (`shelfInsets`),
+    /// so header-to-artwork and row pitch match.
     private func makeShelfSectionLayout() -> NSCollectionLayoutSection {
-        let shelfHeaderHeight: CGFloat = 44   // ShelfRowCell.headerHeight
-        let rowHeight = shelfHeaderHeight + MediaRowMetrics.posterHeight + MediaRowMetrics.focusGrowthPadding
-            + MediaRowMetrics.posterCaptionSpace
+        let tile = MediaRowMetrics.poster
+        let rowHeight = tile.frame.height + MediaRowMetrics.focusGrowthPadding + MediaRowMetrics.posterCaptionSpace
         let size = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1),
                                           heightDimension: .absolute(rowHeight))
         let item = NSCollectionLayoutItem(layoutSize: size)
@@ -277,11 +299,16 @@ final class PersonDetailViewController: UIViewController {
         // Full-bleed: ShelfRowCell owns the leading margin + peeking slivers
         // internally.
         section.contentInsetsReference = .none
-        section.contentInsets = NSDirectionalEdgeInsets(
-            top: MediaRowMetrics.rowTopInset,
-            leading: 0,
-            bottom: MediaRowMetrics.rowBottomInset,
-            trailing: 0)
+        let insets = MediaRowMetrics.shelfInsets(for: tile)
+        section.contentInsets = NSDirectionalEdgeInsets(top: insets.top, leading: 0, bottom: insets.bottom, trailing: 0)
+        let header = NSCollectionLayoutBoundarySupplementaryItem(
+            layoutSize: NSCollectionLayoutSize(widthDimension: .fractionalWidth(1),
+                                               heightDimension: .absolute(MediaRowMetrics.headerHeight)),
+            elementKind: UICollectionView.elementKindSectionHeader,
+            alignment: .top)
+        header.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: MediaRowMetrics.rowLeading,
+                                                       bottom: 0, trailing: MediaRowMetrics.rowTrailing)
+        section.boundarySupplementaryItems = [header]
         return section
     }
 
@@ -305,21 +332,21 @@ final class PersonDetailViewController: UIViewController {
             return cell
         case .movies:
             let cell = collectionView.dequeueReusableCell(withReuseIdentifier: ShelfRowCell.reuseID, for: indexPath) as! ShelfRowCell
-            configureShelf(cell, section: .movies, title: String(localized: "Movies"), entries: movies)
+            configureShelf(cell, section: .movies, entries: movies)
             return cell
         case .shows:
             let cell = collectionView.dequeueReusableCell(withReuseIdentifier: ShelfRowCell.reuseID, for: indexPath) as! ShelfRowCell
-            configureShelf(cell, section: .shows, title: String(localized: "Shows"), entries: shows)
+            configureShelf(cell, section: .shows, entries: shows)
             return cell
         case .knownFor:
             let cell = collectionView.dequeueReusableCell(withReuseIdentifier: ShelfRowCell.reuseID, for: indexPath) as! ShelfRowCell
-            configureShelf(cell, section: .knownFor, title: String(localized: "Known For"), entries: knownFor)
+            configureShelf(cell, section: .knownFor, entries: knownFor)
             return cell
         }
     }
 
-    private func configureShelf(_ cell: ShelfRowCell, section: Section, title: String, entries: [FilmographyEntry]) {
-        cell.headerTitle = title
+    private func configureShelf(_ cell: ShelfRowCell, section: Section, entries: [FilmographyEntry]) {
+        cell.liftingHeader = { [weak self] in self?.shelfHeaderText(for: section) }
         cell.cellProvider = { [weak self] innerCV, indexPath in
             guard let self else {
                 return innerCV.dequeueReusableCell(withReuseIdentifier: PosterCell.reuseID, for: indexPath)
@@ -350,6 +377,14 @@ final class PersonDetailViewController: UIViewController {
             contentToken: contentToken(for: entries),
             initialOffset: shelfOffsets[section] ?? 0,
             captionHeight: MediaRowMetrics.posterCaptionSpace)
+    }
+
+    /// The section header's title text, which lifts over a focused first tile.
+    private func shelfHeaderText(for section: Section) -> UIView? {
+        guard let index = sections.firstIndex(of: section) else { return nil }
+        let header = collectionView.supplementaryView(forElementKind: UICollectionView.elementKindSectionHeader,
+                                                      at: IndexPath(item: 0, section: index))
+        return (header as? HubHeaderView)?.textView
     }
 
     private func entries(for section: Section) -> [FilmographyEntry] {
@@ -442,15 +477,15 @@ final class PersonDetailViewController: UIViewController {
                     onMore: { [weak self] in self?.presentBiography() })
             case .movies:
                 if let row = cell as? ShelfRowCell {
-                    configureShelf(row, section: .movies, title: String(localized: "Movies"), entries: movies)
+                    configureShelf(row, section: .movies, entries: movies)
                 }
             case .shows:
                 if let row = cell as? ShelfRowCell {
-                    configureShelf(row, section: .shows, title: String(localized: "Shows"), entries: shows)
+                    configureShelf(row, section: .shows, entries: shows)
                 }
             case .knownFor:
                 if let row = cell as? ShelfRowCell {
-                    configureShelf(row, section: .knownFor, title: String(localized: "Known For"), entries: knownFor)
+                    configureShelf(row, section: .knownFor, entries: knownFor)
                 }
             }
         }
@@ -467,6 +502,15 @@ final class PersonDetailViewController: UIViewController {
 }
 
 extension PersonDetailViewController: UICollectionViewDelegate {
+    /// Moving up, a row takes focus before its header is on screen: lift the header as it appears.
+    func collectionView(_ collectionView: UICollectionView, willDisplaySupplementaryView view: UICollectionReusableView,
+                        forElementKind elementKind: String, at indexPath: IndexPath) {
+        guard elementKind == UICollectionView.elementKindSectionHeader,
+              let row = collectionView.cellForItem(at: IndexPath(item: 0, section: indexPath.section)) as? ShelfRowCell
+        else { return }
+        row.refreshHeaderLift(header: (view as? HubHeaderView)?.textView)
+    }
+
     func scrollViewWillEndDragging(_ scrollView: UIScrollView, withVelocity velocity: CGPoint,
                                    targetContentOffset: UnsafeMutablePointer<CGPoint>) {
         guard scrollView === collectionView else { return }

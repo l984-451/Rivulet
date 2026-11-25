@@ -103,7 +103,7 @@ final class SeasonPillView: UIControl {
         // Matches the ATV+ reference: the active season is a bright frosted
         // capsule even when focus is currently on an episode. Focus can scale
         // that same capsule, but selection owns the visible chip.
-        label.font = .systemFont(ofSize: 31, weight: (isFocusedPill || isSelectedSeason) ? .semibold : .medium)
+        label.font = .systemFont(ofSize: 29, weight: (isFocusedPill || isSelectedSeason) ? .semibold : .medium)
 
         let fill: UIColor
         let textColor: UIColor
@@ -116,7 +116,7 @@ final class SeasonPillView: UIControl {
             textColor = .white
         } else {
             fill = .clear
-            textColor = UIColor.white.withAlphaComponent(0.72)
+            textColor = UIColor.white.withAlphaComponent(0.52)
         }
         backgroundColor = fill
         label.textColor = textColor

@@ -18,6 +18,8 @@ final class MediaDetailChromeView: UIView {
     /// Sizes shared with the home hero's buttons. The pill width is a floor; long titles grow past it.
     private static let actionButtonHeight: CGFloat = HeroPillButton.buttonHeight
     private static let actionPillWidth: CGFloat = HeroPillButton.pillWidth
+    /// The glyph's box: the 30 pt hero box drew 19.5 x 22, Apple's is 23 x 26.
+    private static let playGlyphSize: CGFloat = 35.5
     private static let playProgressTrackWidth: CGFloat = 50
     private static let playProgressTrackHeight: CGFloat = 8
     /// Apple's description cap: wider on an episode.
@@ -26,6 +28,18 @@ final class MediaDetailChromeView: UIView {
     private static let captionFont = UIFont.systemFont(ofSize: 25, weight: .medium)
     private static let descriptionFont = UIFont.systemFont(ofSize: 23, weight: .medium)
     private static let rolesLabelAlpha: CGFloat = 0.6
+    private static let descriptionAlpha: CGFloat = 0.5
+    /// Apple's line pitches: 30 for the synopsis, 32.5 for the Starring block.
+    private static let descriptionLineHeight: CGFloat = 30
+    private static let castLineHeight: CGFloat = 32.5
+
+    private static func paragraphStyle(lineHeight: CGFloat) -> NSParagraphStyle {
+        let p = NSMutableParagraphStyle()
+        p.minimumLineHeight = lineHeight
+        p.maximumLineHeight = lineHeight
+        p.lineBreakMode = .byTruncatingTail
+        return p
+    }
 
     // MARK: - Public surface
 
@@ -62,6 +76,8 @@ final class MediaDetailChromeView: UIView {
     /// Action callbacks; never invoked in `.carouselStable`, where the action row is inert.
     var onPlay: (() -> Void)?
     var onPlayVersion: ((String) -> Void)?
+    /// Plays a file of another item: another copy of this title, or a show's Play episode.
+    var onPlayCopy: ((MediaItem, String) -> Void)?
     var onToggleWatchlist: (() -> Void)?
     var onShowFullDescription: ((MediaItemDetail) -> Void)?
 
@@ -168,7 +184,7 @@ final class MediaDetailChromeView: UIView {
         let l = UILabel()
         l.translatesAutoresizingMaskIntoConstraints = false
         l.font = MediaDetailChromeView.descriptionFont
-        l.textColor = UIColor.white.withAlphaComponent(0.85)
+        l.textColor = UIColor.white.withAlphaComponent(MediaDetailChromeView.descriptionAlpha)
         l.numberOfLines = 4
         l.lineBreakMode = .byTruncatingTail
         return l
@@ -241,6 +257,9 @@ final class MediaDetailChromeView: UIView {
         metadataBlock.addArrangedSubview(genreRow)
         metadataBlock.addArrangedSubview(descriptionLabel)
         metadataBlock.addArrangedSubview(qualityRow)
+        // Measured: genre to synopsis 35 and synopsis to date 34.5 against 32 and 30 at 18.
+        metadataBlock.setCustomSpacing(21, after: genreRow)
+        metadataBlock.setCustomSpacing(22.5, after: descriptionLabel)
         chromeStack.addArrangedSubview(metadataBlock)
 
         // Apple's rhythm: 18 between the text rows, 32 above the buttons.
@@ -359,6 +378,7 @@ final class MediaDetailChromeView: UIView {
         detail = nil
         episodeDescription = nil
         playTargetSource = nil
+        clearVersionState()
         if let prev = logoAspectConstraint {
             prev.isActive = false
             logoAspectConstraint = nil
@@ -439,6 +459,7 @@ final class MediaDetailChromeView: UIView {
         readyWaiters = []
         episodeDescription = nil
         playTargetSource = nil
+        clearVersionState()
 
         titleLogoImageView.image = nil
         titleFallbackLabel.text = nil
@@ -552,6 +573,8 @@ final class MediaDetailChromeView: UIView {
                 self.detail = fetched
                 self.resolvedGenres = genres
                 self.applyDetail(item: item, detail: fetched)
+                // A show's or season's Versions are its Play episode's, loaded with that episode.
+                if item.kind != .show, item.kind != .season { self.loadCopies(of: fetched, token: token) }
             }
         }
     }
@@ -571,9 +594,22 @@ final class MediaDetailChromeView: UIView {
                   self.loadToken == token
             else { return }
             self.setPlayTarget(episode)
-            // One fetch for both: the episode's file names the badges, and its overview fills a bare list item's.
+            self.playTargetRef = episode.ref
+            // A new target drops the last one's files at once: Versions must never list E3 under a pill that says E4.
+            if self.playTargetDetail?.item.ref != episode.ref {
+                self.playTargetDetail = nil
+                self.dropCopies()
+                self.refreshVersionsButton()
+            }
+            // One fetch for all three: the episode's file names the badges, its overview fills a bare list
+            // item's, and its files are the show's Versions.
             let episodeDetail = await Self.fetchDetail(episode.ref)
-            guard self.loadToken == token else { return }
+            // A later resolve may have moved the target while this one fetched.
+            guard self.loadToken == token, self.playTargetRef == episode.ref else { return }
+            // A failed fetch leaves no Versions button rather than another episode's.
+            self.playTargetDetail = episodeDetail
+            self.refreshVersionsButton()
+            if let episodeDetail { self.loadCopies(of: episodeDetail, token: token) }
             // A failed fetch keeps the badges already shown.
             if let source = episodeDetail?.primarySource { self.playTargetSource = source }
             if let shown = self.item { self.rebuildQualityRow(item: shown, detail: self.detail) }
@@ -615,20 +651,24 @@ final class MediaDetailChromeView: UIView {
             let attr = NSMutableAttributedString(string: String(localized: "Starring "), attributes: [
                 .foregroundColor: UIColor.white.withAlphaComponent(Self.rolesLabelAlpha)])
             attr.append(NSAttributedString(string: topCast.joined(separator: ", ")))
+            attr.addAttribute(.paragraphStyle, value: Self.paragraphStyle(lineHeight: Self.castLineHeight),
+                              range: NSRange(location: 0, length: attr.length))
             castLabel.attributedText = attr
         } else {
             castLabel.attributedText = nil
         }
-        addVersionsButton(detail)
+        refreshVersionsButton()
     }
 
     private func renderDescription(item: MediaItem, detail: MediaItemDetail) {
-        let color = UIColor.white.withAlphaComponent(0.85)
+        let color = UIColor.white.withAlphaComponent(Self.descriptionAlpha)
+        let style = Self.paragraphStyle(lineHeight: Self.descriptionLineHeight)
         func prefixed(_ prefix: String, _ body: String) {
             let attr = NSMutableAttributedString(string: prefix, attributes: [
-                .font: UIFont.systemFont(ofSize: 23, weight: .bold), .foregroundColor: color])
+                .font: UIFont.systemFont(ofSize: 23, weight: .bold), .foregroundColor: color,
+                .paragraphStyle: style])
             attr.append(NSAttributedString(string: body, attributes: [
-                .font: Self.descriptionFont, .foregroundColor: color]))
+                .font: Self.descriptionFont, .foregroundColor: color, .paragraphStyle: style]))
             descriptionLabel.attributedText = attr
         }
         if let episode = episodeDescription {
@@ -637,27 +677,98 @@ final class MediaDetailChromeView: UIView {
                   let overview = detail.item.overview, !overview.isEmpty {
             prefixed(String(localized: "S\(s), E\(e): "), overview)   // episode page
         } else if let overview = detail.item.overview, !overview.isEmpty {
-            descriptionLabel.attributedText = nil
-            descriptionLabel.text = overview
-            descriptionLabel.font = Self.descriptionFont
+            descriptionLabel.attributedText = NSAttributedString(string: overview, attributes: [
+                .font: Self.descriptionFont, .foregroundColor: color, .paragraphStyle: style])
         }
     }
 
-    /// Versions button after Info, once the detail shows two or more files.
-    private func addVersionsButton(_ detail: MediaItemDetail) {
-        let versions = VersionPicker.versions(in: detail)
-        guard !versions.isEmpty, versionsButton == nil, let info = infoButton,
+    // MARK: - Versions
+
+    /// The full detail of the episode Play starts. A show has no files of its own, so its
+    /// Versions are that episode's. Cleared the moment the target changes.
+    private var playTargetDetail: MediaItemDetail?
+    private var playTargetRef: MediaItemRef?
+    /// Other copies of what Versions plays, from other libraries and servers.
+    private var otherCopies: [VersionPicker.Copy] = []
+    /// The ref `otherCopies` belong to; set only once a lookup answers completely, so a failed one is asked again.
+    private var otherCopiesKey: String?
+    private var copiesTask: Task<Void, Never>?
+    /// The menu's rows, computed once per change.
+    private var versionOptions: [VersionPicker.Option] = []
+
+    private func clearVersionState() {
+        playTargetDetail = nil
+        playTargetRef = nil
+        dropCopies()
+    }
+
+    private func dropCopies() {
+        copiesTask?.cancel()
+        copiesTask = nil
+        otherCopies = []
+        otherCopiesKey = nil
+    }
+
+    /// What Versions plays: the movie or episode itself, or for a show or season the episode Play starts.
+    private var versionSubject: (detail: MediaItemDetail, isPlayTarget: Bool)? {
+        guard let item else { return nil }
+        if item.kind == .show || item.kind == .season { return playTargetDetail.map { ($0, true) } }
+        return detail.map { ($0, false) }
+    }
+
+    /// Versions button after Info while the files and the other copies add up to two or more;
+    /// removed when a change leaves fewer.
+    private func refreshVersionsButton() {
+        versionOptions = versionSubject.map { VersionPicker.options(for: $0.detail, copies: otherCopies) } ?? []
+        if versionOptions.isEmpty {
+            versionsButton?.removeFromSuperview()
+            versionsButton = nil
+            return
+        }
+        guard versionsButton == nil, let info = infoButton,
               let index = actionButtonsStack.arrangedSubviews.firstIndex(of: info) else { return }
         let button = makeCircleButton(systemImage: "square.stack")
         button.onPrimaryAction = { [weak self, weak button] in
-            guard let self, let button, let host = self.hostViewController else { return }
-            VersionPicker.present(versions, from: host, sourceFrame: button.convert(button.bounds, to: nil)) {
-                [weak self] id in self?.onPlayVersion?(id)
+            guard let self, let button, let host = self.hostViewController,
+                  let subject = self.versionSubject, let shown = self.item else { return }
+            let target = subject.detail.item
+            let title = subject.isPlayTarget
+                ? EpisodePicker.playTitle(for: target, on: shown.kind) : String(localized: "Play Version")
+            VersionPicker.present(self.versionOptions, title: title, from: host,
+                                  sourceFrame: button.convert(button.bounds, to: nil)) { [weak self] option in
+                switch VersionPicker.pick(option, playTarget: subject.isPlayTarget ? target : nil, shown: target) {
+                case .version(let id): self?.onPlayVersion?(id)
+                case .item(let item, let id): self?.onPlayCopy?(item, id)
+                }
             }
         }
         actionButtonsStack.insertArrangedSubview(button, at: index + 1)
         versionsButton = button
     }
+
+    /// Versions' other copies of `subject`: the movie or episode itself, or a show's Play episode.
+    private func loadCopies(of subject: MediaItemDetail, token: UInt64) {
+        let key = Self.copiesKey(subject.item.ref)
+        guard otherCopiesKey != key, let shown = item else { return }
+        let servers = TitleCopies.servers(for: shown)
+        guard !servers.isEmpty else { return }
+        copiesTask?.cancel()
+        copiesTask = Task { @MainActor [weak self] in
+            let found = await TitleCopies.versions(of: subject, on: servers)
+            self?.landCopies(found, key: key, token: token)
+        }
+    }
+
+    private func landCopies(_ found: TitleCopies.Result, key: String, token: UInt64) {
+        // The Play target moved on while this was asked.
+        guard !Task.isCancelled, loadToken == token,
+              let subject = versionSubject, Self.copiesKey(subject.detail.item.ref) == key else { return }
+        if found.complete { otherCopiesKey = key }
+        otherCopies = found.copies
+        refreshVersionsButton()
+    }
+
+    private static func copiesKey(_ ref: MediaItemRef) -> String { ref.providerID + "/" + ref.itemID }
 
     // MARK: - Row builders
 
@@ -978,6 +1089,18 @@ final class MediaDetailChromeView: UIView {
             qualityRow.addArrangedSubview(Self.makeBadge(badge, alpha: Self.qualityRowAlpha,
                                                          filled: MediaSource.filledBadges.contains(badge)))
         }
+        // With more than one server signed in, which copy this is matters.
+        if let server = Self.serverName(for: item) {
+            qualityRow.addArrangedSubview(Self.makeCaptionLabel(server, alpha: Self.qualityRowAlpha))
+        }
+    }
+
+    /// The item's server by name, only while more than one server is signed in.
+    static func serverName(for item: MediaItem, in registry: MediaProviderRegistry? = nil) -> String? {
+        let registry = registry ?? .shared
+        guard !registry.secondaryProviders.isEmpty,
+              let provider = registry.provider(for: item.ref.providerID) else { return nil }
+        return provider.displayName
     }
 
     /// The score (glyph or source name, then value) and the Common Sense age with its green seal.
@@ -1048,7 +1171,8 @@ final class MediaDetailChromeView: UIView {
         pill.layer.cornerRadius = Self.actionButtonHeight / 2
         pill.layer.cornerCurve = .continuous
 
-        let playIcon = UIImageView(image: UIImage(systemName: "play.fill"))
+        let playIcon = UIImageView(image: UIImage(systemName: "play.fill")?.withConfiguration(
+            UIImage.SymbolConfiguration(pointSize: Self.playGlyphSize, weight: .semibold)))
         playIcon.translatesAutoresizingMaskIntoConstraints = false
         playIcon.tintColor = .white
         playIcon.contentMode = .scaleAspectFit
@@ -1087,8 +1211,8 @@ final class MediaDetailChromeView: UIView {
         pill.addSubview(contentStack)
 
         NSLayoutConstraint.activate(Self.pillConstraints(pill, content: contentStack) + [
-            playIcon.widthAnchor.constraint(equalToConstant: 24),
-            playIcon.heightAnchor.constraint(equalToConstant: 24),
+            playIcon.widthAnchor.constraint(equalToConstant: Self.playGlyphSize),
+            playIcon.heightAnchor.constraint(equalToConstant: Self.playGlyphSize),
 
             progressTrack.heightAnchor.constraint(equalToConstant: Self.playProgressTrackHeight),
             progressTrack.widthAnchor.constraint(equalToConstant: Self.playProgressTrackWidth),

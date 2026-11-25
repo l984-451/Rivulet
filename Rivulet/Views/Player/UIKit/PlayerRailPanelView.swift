@@ -43,10 +43,11 @@ final class PlayerRailPanelView: UIView {
         static let contentFade: TimeInterval = 0.17
         static let contentFadeCurve = UICubicTimingParameters(
             controlPoint1: CGPoint(x: 0.33, y: 0), controlPoint2: CGPoint(x: 0.67, y: 1))
-        // AVKit's info pane: a 1760-wide area whose bottom sits 50pt above the
-        // screen's, 30pt below the risen pills; content starts 14pt down.
-        static let paneBottomInset: CGFloat = 50
-        static let paneHeight: CGFloat = 300
+        // AVKit's info pane (device): a 1760-wide area whose bottom sits 52pt above
+        // the screen's, 30pt below the risen pills; content starts 14pt down.
+        // The pills rise 300; the 334 once used here came from the 1080p simulator.
+        static let paneBottomInset: CGFloat = 52
+        static let paneHeight: CGFloat = 264
         static let paneContentTop: CGFloat = 14
         static let panePillGap: CGFloat = 30
         static let paneCardRadius: CGFloat = 48
@@ -55,6 +56,10 @@ final class PlayerRailPanelView: UIView {
         static let closeCatcherHeight: CGFloat = 10
         static let closeCatcherGap: CGFloat = 30
     }
+
+    /// The risen pill row's top, measured from the screen bottom.
+    static let risenPillTop: CGFloat = Metrics.paneBottomInset + Metrics.paneHeight
+        + Metrics.panePillGap + PlayerInfoPillButton.regularHeight
 
     var onDismiss: (() -> Void)?
 
@@ -168,7 +173,7 @@ final class PlayerRailPanelView: UIView {
 
     /// AVKit's info pane: the area under the risen pills. `cardWidth` puts
     /// free-form content on a glass card that wide; nil gives the content the
-    /// full 1760 x 300 area to draw its own surfaces in. `replacing` swaps an
+    /// full 1760 x 264 area to draw its own surfaces in. `replacing` swaps an
     /// open pane's tab in place, as moving across AVKit's pills does.
     @discardableResult
     static func presentPane(content: UIView, cardWidth: CGFloat?, in container: UIView,

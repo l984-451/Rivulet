@@ -31,6 +31,9 @@ final class LiveWindowSeekController {
         var play: () -> Void
         /// The viewer paused on purpose; a seek must not resume them.
         var isUserPaused: () -> Bool
+        /// Seconds a skip may go past the window's lower and upper bounds: a session that
+        /// joined behind live (Start from Beginning) is still fetching toward its head.
+        var reach: () -> (before: TimeInterval, after: TimeInterval) = { (0, 0) }
     }
 
     enum Request: Equatable {
@@ -55,6 +58,11 @@ final class LiveWindowSeekController {
     private var player: Player?
     private var commitTask: Task<Void, Never>?
     private var activeSeekID: UUID?
+    /// Presses made while a seek lands, applied from where it landed.
+    private var carriedDelta: TimeInterval = 0
+
+    /// A seek is landing; presses meanwhile are held for it, not sent to the player.
+    var isLanding: Bool { activeSeekID != nil }
     /// Bumped on every attach/reset so a seek from a torn-down session never
     /// writes into the next one.
     private var generation = 0
@@ -69,6 +77,7 @@ final class LiveWindowSeekController {
         commitTask?.cancel()
         commitTask = nil
         activeSeekID = nil
+        carriedDelta = 0
         pendingRequest = nil
         timeShifted = false
         player = nil
@@ -123,10 +132,14 @@ final class LiveWindowSeekController {
 
     /// Step through the window by a signed number of seconds.
     func step(by delta: TimeInterval) {
-        guard let window, let player else { return }
+        guard let player else { return }
+        // While a seek lands (a recording can reload onto a new axis), hold the press for it.
+        if activeSeekID != nil { carriedDelta += delta; return }
+        guard let window else { return }
         let base: TimeInterval
         switch pendingRequest {
-        case .liveEdge: base = window.upperBound
+        // Past the window, live is the far end of the player's reach (a recording's head).
+        case .liveEdge: base = window.upperBound + player.reach().after
         case .position(let target): base = target
         case nil: base = player.position()
         }
@@ -148,10 +161,26 @@ final class LiveWindowSeekController {
         }
     }
 
-    private func stage(_ requested: TimeInterval, in window: LiveSeekableWindow) {
+    /// Where `requested` lands: in the window, or in the reach the player offers past it.
+    /// The far end of the forward reach is the live edge itself.
+    private func landing(_ requested: TimeInterval, in window: LiveSeekableWindow) -> (target: TimeInterval, atLive: Bool) {
+        let reach: (before: TimeInterval, after: TimeInterval) = player?.reach() ?? (0, 0)
+        if reach.after > 0 {
+            let head = window.upperBound + reach.after
+            if requested >= head { return (head, true) }
+            if requested > window.upperBound { return (requested, false) }
+        }
+        if reach.before > 0, requested < window.seekTarget(window.lowerBound) {
+            return (max(requested, window.lowerBound - reach.before), false)
+        }
         let target = window.seekTarget(requested)
-        pendingRequest = window.isAtLiveEdge(target) ? .liveEdge : .position(target)
-        timeShifted = !window.isAtLiveEdge(target)
+        return (target, reach.after == 0 && window.isAtLiveEdge(target))
+    }
+
+    private func stage(_ requested: TimeInterval, in window: LiveSeekableWindow) {
+        let (target, atLive) = landing(requested, in: window)
+        pendingRequest = atLive ? .liveEdge : .position(target)
+        timeShifted = !atLive
         onChange?()
         commitTask?.cancel()
         let generation = generation
@@ -177,7 +206,7 @@ final class LiveWindowSeekController {
             case .position(let target):
                 // Re-clamp against the window as it is now: it slid while the presses settled.
                 guard let window = player.window() else { pendingRequest = nil; return }
-                await player.seek(window.seekTarget(target))
+                await player.seek(landing(target, in: window).target)
             }
             guard generation == self.generation, activeSeekID == owner else { return }
             if pendingRequest == request { pendingRequest = nil }
@@ -186,5 +215,14 @@ final class LiveWindowSeekController {
             // A newer target still settling will commit through its own task.
             if commitTask != nil { return }
         }
+        // A reload lands on a new axis whose window takes a moment to appear: presses wait for it.
+        for _ in 0..<25 where window == nil {
+            try? await Task.sleep(for: .milliseconds(200))
+            guard generation == self.generation, activeSeekID == owner else { return }
+        }
+        let carried = carriedDelta
+        carriedDelta = 0
+        activeSeekID = nil
+        if carried != 0 { step(by: carried) }
     }
 }

@@ -50,6 +50,12 @@ struct MediaItemDetail: Sendable {
     /// External ids keyed lowercase: "tmdb", "imdb", "tvdb".
     var externalIDs: [String: String] = [:]
 
+    /// Plex's guid for the item: "plex://…" on a modern agent, the same on every server.
+    var plexGUID: String? = nil
+
+    /// The library the item sits in ("TV Shows 4K"), when the server says.
+    var library: String? = nil
+
     /// The YouTube trailer the Trailers & Extras row offers, only when the title has no trailer of its own.
     var youTubeTrailerID: String? {
         guard !extras.contains(where: \.isTrailer) else { return nil }

@@ -486,6 +486,7 @@ final class PlayerInfoPillButton: UIControl {
     private enum Metrics {
         static let focusGrowth: CGFloat = 4
     }
+    static let regularHeight: CGFloat = 64
     private let height: CGFloat
 
     var onPress: (() -> Void)?
@@ -499,7 +500,7 @@ final class PlayerInfoPillButton: UIControl {
 
     /// `compact` is the smaller pill Insights' sub-tabs use, so they read as a second level.
     init(title: String, compact: Bool = false) {
-        height = compact ? 52 : 64
+        height = compact ? 52 : Self.regularHeight
         let padding: CGFloat = compact ? 24 : 30
         super.init(frame: .zero)
         accessibilityLabel = title

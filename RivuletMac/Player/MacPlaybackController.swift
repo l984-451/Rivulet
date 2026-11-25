@@ -99,6 +99,9 @@ final class MacPlaybackController: NSObject, ObservableObject {
             self?.startNowPlaying()
         }
         observe(newSession)
+        (newSession as? MacPlexPlayback)?.$nextEpisode
+            .sink { [weak self] in self?.nowPlaying.hasNext = $0 != nil }
+            .store(in: &cancellables)
         startNowPlaying()
         isPresented = true
         beginTask = Task { await newSession.begin() }
@@ -312,7 +315,8 @@ final class MacPlaybackController: NSObject, ObservableObject {
                 play: { [weak self] in self?.play() },
                 pause: { [weak self] in self?.pause() },
                 skip: { [weak self] seconds in self?.skip(by: seconds) },
-                seek: item.isLive ? nil : { [weak self] time in self?.seek(to: time) }
+                seek: item.isLive ? nil : { [weak self] time in self?.seek(to: time) },
+                next: item.isLive ? nil : { [weak self] in self?.plexSession?.playNext() }
             ),
             skipBackward: back,
             skipForward: forward

@@ -408,6 +408,10 @@ final class InfoColumnsView: UIView {
         if !detail.studios.isEmpty { info.append((String(localized: "Studio"), detail.studios.prefix(2).joined(separator: ", "))) }
         if let ratio = detail.primarySource?.aspectRatioLabel { info.append((String(localized: "Aspect Ratio"), ratio)) }
         information.configure(title: String(localized: "Information"), rows: info, style: style)
+        // A title not in the library has no file, so no tracks to describe.
+        languages.isHidden = detail.item.isMetadataOnly
+        accessibility.isHidden = detail.item.isMetadataOnly
+        if detail.item.isMetadataOnly { return }
 
         // Languages — from the first media source's tracks.
         let source = detail.primarySource

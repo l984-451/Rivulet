@@ -73,6 +73,16 @@ nonisolated struct PlexTag: Codable, Identifiable, Hashable, Sendable {
     }
 }
 
+extension PlexTag {
+    /// A server's tag id is a number; Plex Discover's is an opaque string ("5d7768…"), which is
+    /// no collection or genre id here.
+    nonisolated init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        _id = c.lenientInt(forKey: ._id)
+        tag = try c.decodeIfPresent(String.self, forKey: .tag)
+    }
+}
+
 /// External ID reference (e.g. "tmdb://12345", "tvdb://67890", "imdb://tt1234567")
 nonisolated struct PlexGuid: Codable, Sendable {
     var id: String?

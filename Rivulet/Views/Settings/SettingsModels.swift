@@ -45,6 +45,7 @@ enum CrossfadeOption: String, CaseIterable, Hashable, CustomStringConvertible {
 // MARK: - Settings Page
 
 enum SettingsPage: Hashable, CaseIterable {
+    case seerr
     case root
     case appearance, playback, music, liveTV, photos, servers, about
     case plex, plexServerDetail, jellyfin, emby, iptv, libraries, cache
@@ -60,6 +61,7 @@ enum SettingsPage: Hashable, CaseIterable {
 
     var title: String {
         switch self {
+        case .seerr: return "Seerr"
         case .root: return String(localized: "Settings")
         case .appearance: return String(localized: "Appearance")
         case .playback: return String(localized: "Playback")

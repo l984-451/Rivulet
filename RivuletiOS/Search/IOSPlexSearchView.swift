@@ -32,6 +32,8 @@ struct IOSPlexSearchView: View {
     @State private var query = ""
     @State private var scope = Scope.all
     @State private var results = SearchHits()
+    /// Seerr's results: titles to request, minus what is already available.
+    @State private var requestable: [SeerrTitle] = []
     @State private var isSearching = false
     @State private var error: String?
 
@@ -59,7 +61,7 @@ struct IOSPlexSearchView: View {
             recentSearches
         } else if let error {
             ContentUnavailableView("Couldn’t Search", systemImage: "exclamationmark.triangle", description: Text(error))
-        } else if groups.isEmpty {
+        } else if groups.isEmpty, shownRequestable.isEmpty {
             if isSearching {
                 ProgressView()
             } else {
@@ -74,6 +76,13 @@ struct IOSPlexSearchView: View {
                         }
                         ForEach(group.people) { person in
                             NavigationLink(value: person) { IOSPlexSearchPersonRow(person: person) }
+                        }
+                    }
+                }
+                if !shownRequestable.isEmpty {
+                    Section("Request") {
+                        ForEach(shownRequestable) { title in
+                            NavigationLink(value: title.mediaItem) { IOSSeerrSearchRow(title: title) }
                         }
                     }
                 }
@@ -119,6 +128,15 @@ struct IOSPlexSearchView: View {
 
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
 
+    /// Seerr's results in the chosen scope.
+    private var shownRequestable: [SeerrTitle] {
+        switch scope {
+        case .all: requestable
+        case .movies: requestable.filter { $0.kind == .movie }
+        case .shows: requestable.filter { $0.kind == .tv }
+        }
+    }
+
     private var recents: [String] { recentsRaw.split(separator: "\n").map(String.init) }
 
     /// By kind; with several servers, each server's own, under its name.
@@ -149,12 +167,14 @@ struct IOSPlexSearchView: View {
         error = nil
         guard !value.isEmpty, browse.hasServers else {
             results = SearchHits()
+            requestable = []
             isSearching = false
             return
         }
         isSearching = true
         try? await Task.sleep(for: .milliseconds(300))
         guard !Task.isCancelled else { return }
+        async let seerr = SeerrCatalog.search(value)
         do {
             results = try await SearchResults.search(value, providers: browse.searchProviders)
             #if DEBUG
@@ -165,6 +185,9 @@ struct IOSPlexSearchView: View {
             if Task.isCancelled || isCancellationError(error) { return }
             self.error = error.localizedDescription
         }
+        // Seerr answers on its own time; its section joins the results when it does.
+        let found = await seerr
+        if !Task.isCancelled { requestable = found }
         isSearching = false
     }
 }

@@ -6889,6 +6889,15 @@ final class PlexHomeViewController: UIViewController {
 // MARK: - Delegate
 
 extension PlexHomeViewController: UICollectionViewDelegate {
+    /// Moving up, a row takes focus before its header is on screen: lift the header as it appears.
+    func collectionView(_ collectionView: UICollectionView, willDisplaySupplementaryView view: UICollectionReusableView,
+                        forElementKind elementKind: String, at indexPath: IndexPath) {
+        guard elementKind == UICollectionView.elementKindSectionHeader,
+              let row = collectionView.cellForItem(at: IndexPath(item: 0, section: indexPath.section)) as? ShelfRowCell
+        else { return }
+        row.refreshHeaderLift(header: (view as? HubHeaderView)?.textView)
+    }
+
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         // The Select that dropped a moved tile must not also open it.
         if let entryMove, entryMove.swallowsNextSelect { entryMove.swallowsNextSelect = false; return }

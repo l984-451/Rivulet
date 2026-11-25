@@ -49,8 +49,8 @@ enum VersionPicker {
     /// library too when a server repeats; the shown copy's rows read "This Copy" when its server is unknown.
     static func options(current: [MediaSource], currentServer: String?, currentLibrary: String? = nil,
                         copies: [Copy]) -> [Option] {
-        let servers = [currentServer] + copies.map { Optional($0.server) }
-        let repeats = Set(servers.compactMap { $0 }).count < servers.count
+        let servers = [currentServer].compactMap { $0 } + copies.map(\.server)
+        let repeats = Set(servers).count < servers.count
         func name(_ server: String?, _ library: String?) -> String? {
             guard !copies.isEmpty else { return nil }
             let server = server ?? String(localized: "This Copy")
@@ -69,15 +69,22 @@ enum VersionPicker {
         return VersionRanking.rankedIndices(all.map { VersionRanking.key($0.source) }).map { all[$0] }
     }
 
+    /// A page's rows for `subject`, its own files named by its server.
+    @MainActor
+    static func options(for subject: MediaItemDetail, copies: [Copy]) -> [Option] {
+        options(current: subject.mediaSources,
+                currentServer: MediaProviderRegistry.shared.provider(for: subject.item.ref.providerID)?.displayName,
+                currentLibrary: subject.library, copies: copies)
+    }
+
     /// What picking an option plays: a file of the item on screen, or a file of another item.
     enum Pick {
         case version(String)
         case item(MediaItem, String)
     }
 
-    /// A copy's file plays that copy, from `shown`'s resume point when that is further in: progress
-    /// lives on the shown item's server, and the copy's own is usually 0. With `playTarget` (a show's
-    /// Play episode) every other file plays that episode; otherwise the file is a version of the item on screen.
+    /// A copy's file plays that copy, from `shown`'s resume point when that is further in (the copy's
+    /// server rarely has one). Otherwise the file plays `playTarget`, or is a version of the item on screen.
     static func pick(_ option: Option, playTarget: MediaItem?, shown: MediaItem? = nil) -> Pick {
         if var copy = option.copy {
             if let shown, shown.userState.viewOffset > copy.userState.viewOffset {

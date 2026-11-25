@@ -20,10 +20,15 @@ struct MacDetailHeader: View {
     @State private var onList: Bool?
     @State private var onScreen = false
     @State private var inView = true
+    /// What Versions plays (a show's Play episode) and the other copies of it.
+    @State private var versionSubject: MediaItemDetail?
+    @State private var otherCopies: [VersionPicker.Copy] = []
 
     private var height: CGFloat { min(max(width * 0.42, 380), 640) }
     private var canPlay: Bool { IOSPlaybackGate.canPlay(item.ref) }
-    private var versions: [MediaSource] { detail.map(VersionPicker.versions(in:)) ?? [] }
+    private var versionOptions: [VersionPicker.Option] {
+        versionSubject.map { VersionPicker.options(for: $0, copies: otherCopies) } ?? []
+    }
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -52,6 +57,7 @@ struct MacDetailHeader: View {
         .onDisappear { onScreen = false }
         .onScrollVisibilityChange(threshold: 0.3) { inView = $0 }
         .task(id: item.ref) { await loadWatchlistState() }
+        .task(id: [detail?.item.ref, playTarget?.ref]) { await loadVersions() }
         .onReceive(watchlist.$watchlistItems.dropFirst()) { _ in Task { await loadWatchlistState() } }
     }
 
@@ -100,7 +106,7 @@ struct MacDetailHeader: View {
                         Label("From Beginning", systemImage: "arrow.counterclockwise")
                     }
                 }
-                if item.isPlayable, !versions.isEmpty { versionMenu }
+                if !versionOptions.isEmpty { versionMenu }
                 if item.kind == .show {
                     Button { actions.shuffleShow(item) } label: {
                         if actions.preparingID == MacActions.shuffleID(providerID: item.ref.providerID, itemID: item.ref.itemID) {
@@ -170,19 +176,43 @@ struct MacDetailHeader: View {
         .opacity(playTarget == nil && isLoading ? 0.6 : 1)
     }
 
-    /// Plays one of the title's files instead of the best one.
+    /// Plays one of the title's files, or another copy's, instead of the best one.
     private var versionMenu: some View {
-        Menu {
-            ForEach(Array(zip(versions, VersionPicker.labels(for: versions))), id: \.0.id) { source, label in
-                Button(label) {
-                    if let playTarget { playback.play(playTarget, sourceID: source.id) }
-                }
+        let options = versionOptions
+        return Menu {
+            ForEach(Array(zip(options.indices, VersionPicker.labels(for: options))), id: \.0) { index, label in
+                Button(label) { pick(options[index]) }
             }
         } label: {
             Label("Version", systemImage: "square.stack.3d.up")
         }
         .fixedSize()
         .help("Play a different version")
+    }
+
+    private func pick(_ option: VersionPicker.Option) {
+        guard let subject = versionSubject?.item else { return }
+        switch VersionPicker.pick(option, playTarget: nil, shown: subject) {
+        case .version(let id): playback.play(subject, sourceID: id)
+        case .item(let copy, let id):
+            // The copy carries this page's resume point when that is further in.
+            let offset = copy.userState.viewOffset
+            playback.play(copy, sourceID: id, startOffset: offset > 0 ? offset : nil)
+        }
+    }
+
+    /// Versions' files first, then the other libraries' and servers' copies.
+    private func loadVersions() async {
+        versionSubject = nil
+        otherCopies = []
+        guard let detail, let subject = await TitleCopies.subject(of: detail, playTarget: playTarget),
+              !Task.isCancelled else { return }
+        versionSubject = subject
+        let servers = TitleCopies.servers(for: item, libraries: browse.libraries)
+        guard !servers.isEmpty else { return }
+        let found = await TitleCopies.versions(of: subject, on: servers)
+        guard !Task.isCancelled else { return }
+        otherCopies = found.copies
     }
 
     /// Plex answers from its watchlist; an episode or season stands for its show.

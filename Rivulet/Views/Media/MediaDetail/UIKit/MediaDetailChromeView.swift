@@ -573,11 +573,8 @@ final class MediaDetailChromeView: UIView {
                 self.detail = fetched
                 self.resolvedGenres = genres
                 self.applyDetail(item: item, detail: fetched)
-                if item.kind == .movie, let guid = fetched.plexGUID {
-                    self.loadMovieCopies(of: item, guid: guid, token: token)
-                } else {
-                    self.loadEpisodeCopies(token: token)
-                }
+                // A show's or season's Versions are its Play episode's, loaded with that episode.
+                if item.kind != .show, item.kind != .season { self.loadCopies(of: fetched, token: token) }
             }
         }
     }
@@ -597,19 +594,22 @@ final class MediaDetailChromeView: UIView {
                   self.loadToken == token
             else { return }
             self.setPlayTarget(episode)
+            self.playTargetRef = episode.ref
             // A new target drops the last one's files at once: Versions must never list E3 under a pill that says E4.
             if self.playTargetDetail?.item.ref != episode.ref {
                 self.playTargetDetail = nil
                 self.dropCopies()
+                self.refreshVersionsButton()
             }
             // One fetch for all three: the episode's file names the badges, its overview fills a bare list
             // item's, and its files are the show's Versions.
             let episodeDetail = await Self.fetchDetail(episode.ref)
-            guard self.loadToken == token else { return }
+            // A later resolve may have moved the target while this one fetched.
+            guard self.loadToken == token, self.playTargetRef == episode.ref else { return }
             // A failed fetch leaves no Versions button rather than another episode's.
             self.playTargetDetail = episodeDetail
             self.refreshVersionsButton()
-            self.loadEpisodeCopies(token: token)
+            if let episodeDetail { self.loadCopies(of: episodeDetail, token: token) }
             // A failed fetch keeps the badges already shown.
             if let source = episodeDetail?.primarySource { self.playTargetSource = source }
             if let shown = self.item { self.rebuildQualityRow(item: shown, detail: self.detail) }
@@ -687,19 +687,18 @@ final class MediaDetailChromeView: UIView {
     /// The full detail of the episode Play starts. A show has no files of its own, so its
     /// Versions are that episode's. Cleared the moment the target changes.
     private var playTargetDetail: MediaItemDetail?
+    private var playTargetRef: MediaItemRef?
     /// Other copies of what Versions plays, from other libraries and servers.
     private var otherCopies: [VersionPicker.Copy] = []
-    /// What `otherCopies` hold (a movie's guid or the Play episode's ref); set only once a lookup
-    /// answers completely, so a failed one is asked again.
+    /// The ref `otherCopies` belong to; set only once a lookup answers completely, so a failed one is asked again.
     private var otherCopiesKey: String?
-    /// The shown copy's library, from the same lookup; named only when a server repeats.
-    private var currentLibrary: String?
     private var copiesTask: Task<Void, Never>?
     /// The menu's rows, computed once per change.
     private var versionOptions: [VersionPicker.Option] = []
 
     private func clearVersionState() {
         playTargetDetail = nil
+        playTargetRef = nil
         dropCopies()
     }
 
@@ -708,26 +707,19 @@ final class MediaDetailChromeView: UIView {
         copiesTask = nil
         otherCopies = []
         otherCopiesKey = nil
-        currentLibrary = nil
     }
 
     /// What Versions plays: the movie or episode itself, or for a show or season the episode Play starts.
-    private var versionSubject: (item: MediaItem, files: [MediaSource], isPlayTarget: Bool)? {
+    private var versionSubject: (detail: MediaItemDetail, isPlayTarget: Bool)? {
         guard let item else { return nil }
-        if item.kind == .show || item.kind == .season {
-            return playTargetDetail.map { ($0.item, $0.mediaSources, true) }
-        }
-        return detail.map { (item, $0.mediaSources, false) }
+        if item.kind == .show || item.kind == .season { return playTargetDetail.map { ($0, true) } }
+        return detail.map { ($0, false) }
     }
 
     /// Versions button after Info while the files and the other copies add up to two or more;
     /// removed when a change leaves fewer.
     private func refreshVersionsButton() {
-        versionOptions = versionSubject.map { subject in
-            VersionPicker.options(current: subject.files,
-                                  currentServer: Self.serverName(for: subject.item, always: true),
-                                  currentLibrary: currentLibrary, copies: otherCopies)
-        } ?? []
+        versionOptions = versionSubject.map { VersionPicker.options(for: $0.detail, copies: otherCopies) } ?? []
         if versionOptions.isEmpty {
             versionsButton?.removeFromSuperview()
             versionsButton = nil
@@ -739,12 +731,12 @@ final class MediaDetailChromeView: UIView {
         button.onPrimaryAction = { [weak self, weak button] in
             guard let self, let button, let host = self.hostViewController,
                   let subject = self.versionSubject, let shown = self.item else { return }
+            let target = subject.detail.item
             let title = subject.isPlayTarget
-                ? EpisodePicker.playTitle(for: subject.item, on: shown.kind) : String(localized: "Play Version")
+                ? EpisodePicker.playTitle(for: target, on: shown.kind) : String(localized: "Play Version")
             VersionPicker.present(self.versionOptions, title: title, from: host,
                                   sourceFrame: button.convert(button.bounds, to: nil)) { [weak self] option in
-                switch VersionPicker.pick(option, playTarget: subject.isPlayTarget ? subject.item : nil,
-                                          shown: subject.item) {
+                switch VersionPicker.pick(option, playTarget: subject.isPlayTarget ? target : nil, shown: target) {
                 case .version(let id): self?.onPlayVersion?(id)
                 case .item(let item, let id): self?.onPlayCopy?(item, id)
                 }
@@ -754,81 +746,29 @@ final class MediaDetailChromeView: UIView {
         versionsButton = button
     }
 
-    /// The signed-in Plex servers that can hold another copy of `shown` (`TitleCopies.servers`),
-    /// counted from the library lists the sidebar already loaded.
-    private static func plexServers(for shown: MediaItem, kind: MediaLibrary.LibraryKind) -> [PlexOwnedLookup.Server] {
-        var servers: [PlexOwnedLookup.Server] = []
-        var libraries: [String: Int] = [:]
-        let auth = PlexAuthManager.shared
-        if let selected = MediaProviderRegistry.shared.plexProvider,
-           let url = auth.selectedServerURL, let token = auth.selectedServerToken {
-            servers.append(.init(id: selected.id, url: url, token: token))
-            let own = PlexDataStore.shared.libraries
-            if !own.isEmpty {
-                let type = kind == .movies ? "movie" : "show"
-                libraries[selected.id] = own.filter { $0.type == type }.count
-            }
-        }
-        let extras = PlexExtraServers.shared
-        servers += extras.current.compactMap { server in
-            extras.token(for: server).map { PlexOwnedLookup.Server(id: server.providerID, url: server.url, token: $0) }
-        }
-        for library in ServerDataStore.shared.libraries where library.kind == kind {
-            libraries[library.providerID, default: 0] += 1
-        }
-        return TitleCopies.servers(servers, besides: shown.ref.providerID, libraries: libraries)
-    }
-
-    /// A movie's copies (`TitleCopies.movie`).
-    private func loadMovieCopies(of subject: MediaItem, guid: String, token: UInt64) {
-        guard otherCopiesKey != guid else { return }
-        let servers = Self.plexServers(for: subject, kind: .movies)
+    /// Versions' other copies of `subject`: the movie or episode itself, or a show's Play episode.
+    private func loadCopies(of subject: MediaItemDetail, token: UInt64) {
+        let key = Self.copiesKey(subject.item.ref)
+        guard otherCopiesKey != key, let shown = item else { return }
+        let servers = TitleCopies.servers(for: shown)
         guard !servers.isEmpty else { return }
-        let ids = detail?.externalIDs ?? [:]
         copiesTask?.cancel()
         copiesTask = Task { @MainActor [weak self] in
-            let found = await TitleCopies.movie(subject, guid: guid, externalIDs: ids, on: servers)
-            self?.landCopies(found, key: guid, token: token)
-        }
-    }
-
-    /// A show or season: the Play episode's copies, found through the show (`TitleCopies.episode`).
-    private func loadEpisodeCopies(token: UInt64) {
-        guard let shown = item, shown.kind == .show || shown.kind == .season, let shownDetail = detail,
-              let episode = playTargetDetail?.item,
-              episode.seasonNumber != nil, episode.episodeNumber != nil else { return }
-        let key = episode.ref.providerID + "/" + episode.ref.itemID
-        guard otherCopiesKey != key else { return }
-        let servers = Self.plexServers(for: shown, kind: .shows)
-        // Plex only, as movies are (they need a plex guid): a Jellyfin or Emby show lists no copies.
-        guard !servers.isEmpty, let provider = MediaProviderRegistry.shared.provider(for: shown.ref.providerID),
-              provider.kind == .plex
-        else { return }
-        copiesTask?.cancel()
-        copiesTask = Task { @MainActor [weak self] in
-            // A season's guid and ids are a season's; the show's are what other servers match.
-            var show = shown
-            var showDetail: MediaItemDetail? = shownDetail
-            if shown.kind == .season, let showRef = shown.parentRef {
-                showDetail = try? await provider.fullDetail(for: showRef)
-                show = showDetail?.item ?? shown
-            }
-            guard let showDetail, !Task.isCancelled else { return }
-            let found = await TitleCopies.episode(episode, of: show, showDetail: showDetail, on: servers)
+            let found = await TitleCopies.versions(of: subject, on: servers)
             self?.landCopies(found, key: key, token: token)
         }
     }
 
     private func landCopies(_ found: TitleCopies.Result, key: String, token: UInt64) {
-        guard !Task.isCancelled, loadToken == token else { return }
         // The Play target moved on while this was asked.
-        if let target = playTargetDetail?.item, item?.kind != .movie,
-           target.ref.providerID + "/" + target.ref.itemID != key { return }
+        guard !Task.isCancelled, loadToken == token,
+              let subject = versionSubject, Self.copiesKey(subject.detail.item.ref) == key else { return }
         if found.complete { otherCopiesKey = key }
         otherCopies = found.copies
-        currentLibrary = found.library ?? detail?.library
         refreshVersionsButton()
     }
+
+    private static func copiesKey(_ ref: MediaItemRef) -> String { ref.providerID + "/" + ref.itemID }
 
     // MARK: - Row builders
 
@@ -1155,11 +1095,10 @@ final class MediaDetailChromeView: UIView {
         }
     }
 
-    /// The item's server by name: only while more than one server is signed in, unless `always`.
-    static func serverName(for item: MediaItem, always: Bool = false,
-                           in registry: MediaProviderRegistry? = nil) -> String? {
+    /// The item's server by name, only while more than one server is signed in.
+    static func serverName(for item: MediaItem, in registry: MediaProviderRegistry? = nil) -> String? {
         let registry = registry ?? .shared
-        guard always || !registry.secondaryProviders.isEmpty,
+        guard !registry.secondaryProviders.isEmpty,
               let provider = registry.provider(for: item.ref.providerID) else { return nil }
         return provider.displayName
     }

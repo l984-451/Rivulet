@@ -37,3 +37,14 @@ extension VersionPicker {
         host.topmostPresented.present(popup, animated: false)
     }
 }
+
+extension TitleCopies {
+    /// The servers that can hold another copy of `shown`, from the library lists the sidebar already loaded.
+    static func servers(for shown: MediaItem) -> [any MediaProvider] {
+        var libraries = ServerDataStore.shared.libraries
+        if let selected = MediaProviderRegistry.shared.plexProvider?.id {
+            libraries += PlexDataStore.shared.libraries.map { PlexMediaMapper.library($0, providerID: selected) }
+        }
+        return servers(for: shown, libraries: libraries)
+    }
+}

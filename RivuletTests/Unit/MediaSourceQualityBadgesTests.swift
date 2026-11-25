@@ -310,7 +310,6 @@ final class MediaSourceQualityBadgesTests: XCTestCase {
         registry.register(StubMediaProvider(id: "plex:home", displayName: "Home"))
         let item = JellyfinFixtures.mediaItem("m1", providerID: "plex:home")
         XCTAssertNil(MediaDetailChromeView.serverName(for: item, in: registry))
-        XCTAssertEqual(MediaDetailChromeView.serverName(for: item, always: true, in: registry), "Home")
 
         registry.register(StubMediaProvider(id: "jellyfin:den", kind: .jellyfin, displayName: "Den"))
         XCTAssertEqual(MediaDetailChromeView.serverName(for: item, in: registry), "Home")

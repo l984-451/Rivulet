@@ -21,6 +21,13 @@ final class MacNowPlaying {
         var skip: (Double) -> Void
         /// nil disables position seeking (live).
         var seek: ((Double) -> Void)?
+        /// The next-track command (Siri, the media keys): plays what Up Next would. nil on live.
+        var next: (() -> Void)? = nil
+    }
+
+    /// Whether anything follows this item; the next-track command is on only then.
+    var hasNext = false {
+        didSet { nextTrackCommandChanged() }
     }
 
     private var item: Item?
@@ -102,6 +109,16 @@ final class MacNowPlaying {
                 return .success
             }
         }
+        if let next = commands.next {
+            add(center.nextTrackCommand) { _ in next(); return .success }
+            nextTrackCommandChanged()
+        }
+    }
+
+    private func nextTrackCommandChanged() {
+        let command = MPRemoteCommandCenter.shared().nextTrackCommand
+        guard targets.contains(where: { $0.0 === command }) else { return }
+        command.isEnabled = hasNext
     }
 
     private func add(_ command: MPRemoteCommand, handler: @escaping (MPRemoteCommandEvent) -> MPRemoteCommandHandlerStatus) {

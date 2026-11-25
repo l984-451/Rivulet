@@ -45,6 +45,8 @@ final class NowPlayingService: ObservableObject {
     private var publishedSubtitleTracks: [MediaTrack] = []
     /// Applies a remote's track pick; a nil id turns subtitles off.
     private var selectTrack: ((MPNowPlayingInfoLanguageOptionType, Int?) -> Void)?
+    /// The video's next-track target, present only while a view model is attached.
+    private var nextTrackTarget: Any?
 
     // MARK: - Initialization
 
@@ -260,6 +262,23 @@ final class NowPlayingService: ObservableObject {
                                    subtitleId: viewModel.chosenSubtitleTrackId)
             }
             .store(in: &cancellables)
+        // Siri's "next episode": what Up Next would play. Added per attach so it never answers beside
+        // Music's target; on a movie or a known last episode the command is off.
+        nextTrackTarget = MPRemoteCommandCenter.shared().nextTrackCommand.addTarget { [weak viewModel] _ in
+            guard let viewModel, viewModel.hasNextItem else { return .noSuchContent }
+            Task { await viewModel.skipToNextItem() }
+            return .success
+        }
+        // Next track follows whether anything may come after this item; a swap or a lookup can change that.
+        // Delivered a run-loop pass later, so `hasNextItem` reads the values after `@Published`'s willSet.
+        viewModel.$nextEpisode.map { _ in () }
+            .merge(with: viewModel.$itemGeneration.map { _ in () },
+                   viewModel.$nextEpisodeMissing.map { _ in () })
+            .receive(on: RunLoop.main)
+            .sink { [weak viewModel] in
+                MPRemoteCommandCenter.shared().nextTrackCommand.isEnabled = viewModel?.hasNextItem ?? false
+            }
+            .store(in: &cancellables)
         selectTrack = { [weak viewModel] type, id in
             if type == .audible {
                 if let id { viewModel?.selectAudioTrack(id: id) }
@@ -276,6 +295,9 @@ final class NowPlayingService: ObservableObject {
     /// Per WWDC17 guidance, the session should remain active while the app could receive remote commands.
     func detach() {
         cancellables.removeAll()
+        if let nextTrackTarget { MPRemoteCommandCenter.shared().nextTrackCommand.removeTarget(nextTrackTarget) }
+        nextTrackTarget = nil
+        MPRemoteCommandCenter.shared().nextTrackCommand.isEnabled = false
         viewModel = nil
         inputCoordinator = nil
         artworkTask?.cancel()
@@ -479,7 +501,8 @@ final class NowPlayingService: ObservableObject {
     }
 
     /// The video's half of the one shared command center: skip and seek on,
-    /// Music's next/previous, shuffle and repeat off. Asserted on every attach
+    /// Music's next/previous, shuffle and repeat off (next comes back on while an
+    /// item follows, for Siri's "next episode"). Asserted on every attach
     /// because `MusicNowPlayingBridge.claimRemoteCommands` flips them back
     /// whenever a song starts; set only once at init, a song played between
     /// two films left the second film with no skip buttons.

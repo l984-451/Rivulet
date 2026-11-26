@@ -847,6 +847,21 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         doubleTap.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
         doubleTap.allowedPressTypes = []
         view.addGestureRecognizer(doubleTap)
+
+        // A bare touch-surface tap shows the controls, as in VOD.
+        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTouchSurfaceTap))
+        tap.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
+        tap.allowedPressTypes = []
+        tap.require(toFail: doubleTap)
+        view.addGestureRecognizer(tap)
+    }
+
+    @objc private func handleTouchSurfaceTap() {
+        // A click's touch half belongs to the press.
+        guard CACurrentMediaTime() - MenuPressInterceptor.lastPressBeganAt > 0.6,
+              !RemoteInputHandler.isClickpadDown, presentedViewController == nil,
+              scrubTarget == nil, descriptionOverlay == nil, !railVisible else { return }
+        flashTimeline()
     }
 
     @objc private func handleZoomDoubleTap() {
@@ -867,7 +882,11 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         directionalBinding = DirectionalInputBinding(
             view: focusCatcher,
             directions: [.left, .right, .up, .down],
-            onTap: { [weak self] direction in self?.handleHiddenChromeDirection(direction) }
+            onTap: { [weak self] direction in self?.handleHiddenChromeDirection(direction) },
+            // A sideways swipe while playing does nothing, as in VOD; edge clicks still skip.
+            swipeGate: { [weak self] direction in
+                direction == .up || direction == .down || self?.isUserPaused == true
+            }
         )
 
         // AVKit's control dimming, behind the rail and the timeline. Below the
@@ -925,7 +944,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         scrubberProxy.onShuttle = scrubberProxy.onSkip
         scrubberProxy.onSelect = { [weak self] in self?.timelineSelected() }
         timelinePan.isEnabled = { [weak self] in
-            guard let self, self.scrubberProxy.isFocused, self.activePanel == nil,
+            // Scrubs only while paused, as VOD and AVKit do.
+            guard let self, self.isUserPaused, self.scrubberProxy.isFocused, self.activePanel == nil,
                   self.lastResortPlayer == nil else { return false }
             return self.aetherPlayer?.liveTimeshift.seekableRange != nil
         }
@@ -2160,7 +2180,10 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 }
                 if descriptionOverlay != nil { return }
                 if !railVisible {
-                    showRail()
+                    // A click plays or pauses with the controls up on the bar, as AVKit's and
+                    // VOD's do; a touch-surface tap only shows them.
+                    railView.resetFocusMemory()
+                    inputCoordinator.handle(action: .playPause, source: .irPress)
                     return
                 }
             case .playPause:
@@ -2475,6 +2498,12 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         }
         resetTouchScrub()
         touchScrubEndedAt = Date()
+        // One Select ends a paused scrub and plays from there, as in VOD.
+        if isUserPaused, let shift = aetherPlayer?.liveTimeshift, lastResortPlayer == nil {
+            scrubTarget = shift.edgeTime - landing
+            resumePlayback()
+            return
+        }
         windowSeeker.seek(behindLive: landing)
         flashTimeline()
     }

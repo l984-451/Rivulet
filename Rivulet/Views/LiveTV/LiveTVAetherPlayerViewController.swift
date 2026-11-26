@@ -2727,16 +2727,14 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
             if stage == 1 {
                 // Retry through the engine demuxer, with Plex dropping to
-                // directPlay=0. A playlist cannot take the demuxer (its raw path
-                // refuses m3u8), so a start.m3u8 re-resolve retries natively.
+                // directPlay=0. A playlist goes through HLSLiveIngestReader, which
+                // reads a TS stream AVPlayer refused (#770) and opens anything else natively.
                 let retryURL = Self.forcingDirectStream(freshURL)
-                let isPlaylist = AetherPlayer.liveRoute(for: retryURL,
-                                                        forceEngineDemux: false) == .nativeHLS
                 do {
                     aetherPlayer?.stop()
                     try await aetherPlayer?.loadLive(url: retryURL,
                                                      headers: LiveTVClientIdentity.streamHeaders(for: channel),
-                                                     forceEngineDemux: !isPlaylist)
+                                                     forceEngineDemux: true)
                     if Task.isCancelled { return }
                     aetherPlayer?.play()
                     didStartPlaying()

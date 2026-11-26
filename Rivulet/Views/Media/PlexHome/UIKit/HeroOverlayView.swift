@@ -1017,10 +1017,11 @@ private final class MediaItemSlideView: UIView {
 
     /// Same labels as the Plex hero (`HeroSlideView`): a season or episode
     /// slide is the show's, so it reads "TV Show", without the episode's year.
-    /// An episode adds which one it is.
+    /// An episode adds which one it is; anything else its first genre, as the Plex hero does (#775).
     private func metaLine(for item: MediaItem) -> String? {
         var parts: [String] = []
         if let kindLabel = typeLabel(for: item.kind) { parts.append(kindLabel) }
+        if item.kind != .episode, let genre = item.genres?.first, !genre.isEmpty { parts.append(genre) }
         if item.kind != .season, item.kind != .episode, let year = item.year { parts.append(String(year)) }
         if item.kind == .episode {
             if let s = item.seasonNumber, let e = item.episodeNumber { parts.append(String(localized: "S\(s), E\(e)")) }

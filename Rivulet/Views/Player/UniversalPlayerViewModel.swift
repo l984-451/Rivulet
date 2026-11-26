@@ -90,14 +90,9 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     @Published var controlsFocusActive = false
     /// The scrub bar itself holds focus (a subset of `controlsFocusActive`).
     var scrubberOwnsFocus = false
-    @Published var isScrubbing = false
-
-    /// True while iPod-style circular clickpad rotation is actively
-    /// driving the scrub (see `handleWheelScrub(by:)`). Distinct from
-    /// `isScrubbing`, which also covers swipe/click-step scrubbing — this
-    /// flag is only for the wheel-specific ring indicator in
-    /// `PlayerProgressBarView`. Cleared 0.8s after the last rotation tick,
-    /// or immediately on `commitScrub()` / `cancelScrub()`.
+    // The scrub model lives in `scrub`; these mirror it for the chrome's observers.
+    @Published private(set) var isScrubbing = false
+    /// The clickpad ring is driving the scrub (the ring indicator in `PlayerProgressBarView`).
     @Published private(set) var wheelScrubbing = false
 
     /// The tiers of the pause screen (`PauseScreenView`), by time paused:
@@ -233,7 +228,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     /// marker (Menu press): keeps the manual pill up without restarting the
     /// countdown. Reset when the active marker clears or the user seeks back.
     private var userDeclinedAutoSkip = false
-    @Published var scrubTime: TimeInterval = 0
+    @Published private(set) var scrubTime: TimeInterval = 0
 
     // MARK: - Post-Video State
     @Published var postVideoState: PostVideoState = .hidden
@@ -289,7 +284,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     private var episodesInARow = 1
     @Published var scrubThumbnail: UIImage?
     @Published private(set) var scrubSpeed: Int = 0  // -8...8 shuttle level (0 = not shuttling); see ShuttleGrammar
-    private var scrubStartTime: Date?  // When scrubbing started (for YouTube-style acceleration)
+    private let scrub = PlayerScrubSession()
     @Published private(set) var audioTracks: [MediaTrack] = []
     @Published private(set) var subtitleTracks: [MediaTrack] = []
     @Published private(set) var currentAudioTrackId: Int?
@@ -497,7 +492,6 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     private var controlsTimer: Timer?
     /// AVKit hides its controls 8s after the last press or focus move.
     private let controlsHideDelay: TimeInterval = 8
-    private var scrubTimer: Timer?
     /// Holds the rail at a seek's target until the picture lands there. Fed by
     /// Aether's `seekEvents`; inert on the hls route, whose AVPlayer seek
     /// completion already means landed.
@@ -508,8 +502,6 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     /// Bumped by every seek, so only the newest relative seek clears the
     /// in-flight target (two targets can be EQUAL when both clamp to an end).
     private var seekGeneration = 0
-    private var wheelScrubbingTimer: Timer?
-    private let wheelScrubbingIdleDelay: TimeInterval = 0.8
     private var appBecameActiveObserver: Any?
     private var appBackgroundObserver: Any?
     private var appResignActiveObserver: Any?
@@ -518,7 +510,6 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     /// has to be stored to be removable.
     private var itemDidPlayToEndObserver: Any?
     private var pausedDueToAppInactive: Bool = false
-    private let scrubUpdateInterval: TimeInterval = 0.1  // 100ms updates for smooth scrubbing
     private var seekIndicatorTimer: Timer?
     private var pausedPosterTimers: [Timer] = []
     private static let pauseScreenSchedule: [(delay: TimeInterval, tier: PausePresentation)] =
@@ -838,9 +829,22 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
 
         DiagLog.notice(.playback, "Selected: DV=\(hasDolbyVision) profile=\(dvProfile ?? -1) container=\(container) airPlay=\(isAirPlayRoute)")
 
+        bindScrubSession()
         setupPlayer()
 
         addPlaybackSelectionBreadcrumb(reason: "init")
+    }
+
+    private func bindScrubSession() {
+        scrub.range = { [weak self] in 0...max(0, self?.duration ?? 0) }
+        scrub.position = { [weak self] in self?.currentTime ?? 0 }
+        scrub.holdsWheel = { RemoteInputHandler.isRingJogging }
+        scrub.onBegan = { [weak self] in self?.controlsTimer?.invalidate() }
+        scrub.onScrubTimeChanged = { [weak self] in self?.loadThumbnail(for: $0) }
+        scrub.$isScrubbing.assign(to: &$isScrubbing)
+        scrub.$scrubTime.assign(to: &$scrubTime)
+        scrub.$scrubSpeed.assign(to: &$scrubSpeed)
+        scrub.$wheelScrubbing.assign(to: &$wheelScrubbing)
     }
 
     /// Play any `MediaProvider` item. The chrome reads a display-only
@@ -4217,9 +4221,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         stopOutgoingTranscode()
 
         controlsTimer?.invalidate()
-        wheelScrubbingTimer?.invalidate()
-        wheelScrubbingTimer = nil
-        wheelScrubbing = false
+        scrub.stopWheel()
         // The pause screen comes down through its one path (`pausePresentation`
         // back to `.frame`), so the container restores the picture and stops the
         // screen's timers however the player is left.
@@ -4646,193 +4648,55 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     /// - Parameter forward: true for forward, false for backward
     func scrubInDirection(forward: Bool) {
         hidePausedPoster()
-
-        let speedBefore = scrubSpeed
-        let newSpeed = ShuttleGrammar.step(current: isScrubbing ? scrubSpeed : 0, clickForward: forward)
-        if newSpeed == 0 {
-            cancelScrub()
-            return
-        }
-
-        if !isScrubbing {
-            // Start scrubbing
-            isScrubbing = true
-            scrubTime = currentTime
-            controlsTimer?.invalidate()
-            loadThumbnail(for: scrubTime)
-        }
-        // Restart the shuttle timer on any 0 -> nonzero transition, not just
-        // fresh-entry. A wheel tick mid-shuttle can zero scrubSpeed and stop
-        // the timer while leaving isScrubbing true; without this, a later
-        // hold re-enters shuttle with a live badge but a frozen playhead.
-        // startScrubTimer() invalidates before rescheduling, so calling it
-        // when already running is safe.
-        if speedBefore == 0 && newSpeed != 0 {
-            startScrubTimer()
-        }
-        scrubSpeed = newSpeed
-
-        // Immediate jump on each press
-        let jumpAmount: TimeInterval = forward ? 10 : -10
-        scrubTime = max(0, min(duration, scrubTime + jumpAmount))
-        loadThumbnail(for: scrubTime)
+        if !scrub.shuttle(forward: forward) { cancelScrub() }
     }
 
     func startScrubbing() {
-        isScrubbing = true
-        scrubTime = currentTime
-        scrubSpeed = 0
-        controlsTimer?.invalidate()
-        loadThumbnail(for: scrubTime)
+        scrub.start()
     }
 
     /// Start swipe-based scrubbing (proportional, no speed acceleration)
     func startSwipeScrubbing() {
         hidePausedPoster()
-        isScrubbing = true
-        scrubTime = currentTime
-        scrubSpeed = 0  // No direction-based speed for swipe scrubbing
-        scrubStartTime = nil  // No time-based acceleration for swipe
-        controlsTimer?.invalidate()
-        loadThumbnail(for: scrubTime)
+        scrub.start()
     }
 
     /// Update scrub position by a relative amount (for swipe gestures)
     /// - Parameter seconds: Amount to seek (positive = forward, negative = backward)
     func updateSwipeScrubPosition(by seconds: TimeInterval) {
-        if !isScrubbing {
-            startSwipeScrubbing()
-        } else if scrubSpeed != 0 {
-            // A swipe mid-shuttle takes over from the shuttle, as a wheel tick
-            // does (`handleWheelScrub`), so the playhead stops where the finger
-            // stops instead of the timer carrying it on.
-            stopScrubTimer()
-            scrubSpeed = 0
-            scrubStartTime = nil
-        }
-        scrubTime = max(0, min(duration, scrubTime + seconds))
-        loadThumbnail(for: scrubTime)
+        if !scrub.isScrubbing { hidePausedPoster() }
+        scrub.swipe(by: seconds)
     }
 
     /// Clickpad-ring rotation scrub; `seekDelta` is already converted from the rotation.
     func handleWheelScrub(by seekDelta: TimeInterval) {
-        if !isScrubbing {
-            hidePausedPoster()
-            isScrubbing = true
-            scrubTime = currentTime
-            scrubSpeed = 0
-            scrubStartTime = nil  // No time-based acceleration for wheel
-            controlsTimer?.invalidate()
-        } else if scrubSpeed != 0 {
-            // A wheel tick arrived mid-shuttle. Cancel the timer-driven shuttle
-            // and hand control to the wheel delta alone, same as
-            // startSwipeScrubbing neutralizes speed for passive scrub.
-            stopScrubTimer()
-            scrubSpeed = 0
-            scrubStartTime = nil
-        }
-
-        scrubTime = max(0, min(duration, scrubTime + seekDelta))
-        loadThumbnail(for: scrubTime)
-
-        wheelScrubbing = true
-        startWheelScrubbingIdleTimer()
-    }
-
-    /// Resets the 0.8s idle timer that clears `wheelScrubbing` after
-    /// rotation ticks stop arriving. A single Timer is reused (reset on
-    /// each call) rather than accumulating one per rotation event.
-    private func startWheelScrubbingIdleTimer() {
-        wheelScrubbingTimer?.invalidate()
-        wheelScrubbingTimer = Timer.scheduledTimer(withTimeInterval: wheelScrubbingIdleDelay, repeats: false) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                // A finger resting on the ring keeps it up, as AVKit's does.
-                if RemoteInputHandler.isRingJogging { self?.startWheelScrubbingIdleTimer(); return }
-                self?.wheelScrubbing = false
-            }
-        }
-    }
-
-    private func stopWheelScrubbingTimer() {
-        wheelScrubbingTimer?.invalidate()
-        wheelScrubbingTimer = nil
-        wheelScrubbing = false
+        if !scrub.isScrubbing { hidePausedPoster() }
+        scrub.wheel(by: seekDelta)
     }
 
     func updateScrubPosition(_ time: TimeInterval) {
-        scrubTime = max(0, min(duration, time))
-        loadThumbnail(for: scrubTime)
+        scrub.jump(to: time)
     }
 
     func scrubRelative(by seconds: TimeInterval) {
-        if !isScrubbing {
-            startScrubbing()
-        }
-        scrubTime = max(0, min(duration, scrubTime + seconds))
-        loadThumbnail(for: scrubTime)
+        scrub.step(by: seconds)
     }
 
     func commitScrub() async {
-        stopScrubTimer()
-        stopWheelScrubbingTimer()
-        if isScrubbing {
+        if let target = scrub.commitTarget() {
             endReplayWindow(reason: "scrub")
-            await seek(to: scrubTime)
-            isScrubbing = false
-            scrubSpeed = 0
-            scrubStartTime = nil
+            await seek(to: target)
+            scrub.finish()
             scrubThumbnail = nil
             cancelEngineThumbnail()
         }
     }
 
     func cancelScrub() {
-        stopScrubTimer()
-        stopWheelScrubbingTimer()
-        isScrubbing = false
-        scrubSpeed = 0
-        scrubStartTime = nil
-        scrubTime = currentTime
+        scrub.cancel()
         scrubThumbnail = nil
         cancelEngineThumbnail()
         startControlsHideTimer()
-    }
-
-    private func startScrubTimer() {
-        scrubTimer?.invalidate()
-        scrubTimer = Timer.scheduledTimer(withTimeInterval: scrubUpdateInterval, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            Task { @MainActor [weak self] in
-                self?.updateScrubFromTimer()
-            }
-        }
-    }
-
-    private func stopScrubTimer() {
-        scrubTimer?.invalidate()
-        scrubTimer = nil
-    }
-
-    private func updateScrubFromTimer() {
-        guard isScrubbing, scrubSpeed != 0 else { return }
-
-        let direction: TimeInterval = scrubSpeed > 0 ? 1 : -1
-        // ShuttleGrammar.rate(forLevel:) is content-seconds per REAL-second;
-        // scale by the timer's actual firing interval to get the per-tick advance.
-        let secondsPerSecond = ShuttleGrammar.rate(forLevel: scrubSpeed)
-        let secondsPerTick = secondsPerSecond * scrubUpdateInterval
-
-        let newTime = scrubTime + (secondsPerTick * direction)
-        scrubTime = max(0, min(duration, newTime))
-
-        // Stop at boundaries
-        if scrubTime <= 0 || scrubTime >= duration {
-            scrubSpeed = 0
-            scrubStartTime = nil
-            stopScrubTimer()
-        }
-
-        loadThumbnail(for: scrubTime)
     }
 
     static func scrubThumbnailSource(hasServerThumbnails: Bool) -> ScrubThumbnailSource {
@@ -4924,8 +4788,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         let forward = scrubSpeed >= 0
         guard let target = ChapterNavigator.snapTarget(
             from: scrubTime, chapterStarts: chapterStartTimes, forward: forward) else { return }
-        scrubTime = min(max(0, target), duration)
-        loadThumbnail(for: scrubTime)
+        scrub.jump(to: target)
     }
 
     /// Preload thumbnails when playback starts
@@ -7486,8 +7349,6 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         }
 
         controlsTimer?.invalidate()
-        scrubTimer?.invalidate()
-        wheelScrubbingTimer?.invalidate()
         countdownTimer?.invalidate()
         seekIndicatorTimer?.invalidate()
         skipCountdownTimer?.invalidate()

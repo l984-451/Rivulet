@@ -65,6 +65,19 @@ final class PlexLiveChannelListTests: XCTestCase {
         XCTAssertFalse(network.requested.contains { $0.path.hasSuffix("/grid") })
     }
 
+    /// #771: the tune takes the grid's identifier, which an XMLTV lineup can give apart from `id`.
+    func test_lineupChannel_isKeyedByItsGridKey() async throws {
+        let network = makeNetwork()
+        network.bodies["\(provider)/lineups/dvr/channels"] = """
+        {"MediaContainer":{"Channel":[{"id":"www.PRO TV HD.co.un","gridKey":"12","vcn":"12","title":"PRO TV"}]}}
+        """
+
+        let result = try await channels(network)
+
+        XCTAssertEqual(result.map(\.channelIdentifier), ["12"])
+        XCTAssertEqual(result[0].key, "\(provider)/metadata/12")
+    }
+
     func test_lineupFailure_fallsBackToTheGrid_withTheLongTimeout() async throws {
         let network = makeNetwork()
         network.bodies["\(provider)/grid"] = """

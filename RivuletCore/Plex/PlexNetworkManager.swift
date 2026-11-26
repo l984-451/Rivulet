@@ -2537,6 +2537,9 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         }
         nonisolated struct LineupChannel: Codable {
             let id: String?
+            /// The grid's `channelIdentifier`, which the tune and the guide use. Usually `id`;
+            /// an XMLTV lineup can differ (#771).
+            let gridKey: String?
             let title: String?
             let callSign: String?
             let vcn: String?
@@ -2585,7 +2588,7 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             return lineupChannels.map { channel in
                 GridMedia(
                     channelCallSign: channel.callSign,
-                    channelIdentifier: channel.id,
+                    channelIdentifier: channel.gridKey ?? channel.id,
                     channelThumb: channel.thumb,
                     // The grid's channelTitle is "<number> <name>". Same form
                     // here, so displayName strips the same thing from either.

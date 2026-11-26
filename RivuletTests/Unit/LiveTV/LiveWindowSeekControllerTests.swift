@@ -230,4 +230,27 @@ final class LiveWindowSeekControllerTests: XCTestCase {
         fake.position = 1_990
         XCTAssertFalse(controller.isBehindLive(in: window))
     }
+
+    func testScrubRangeIsTheWindowWidenedByTheRecordingsReach() {
+        let window = LiveSeekableWindow(lowerBound: 100, upperBound: 400)
+        XCTAssertEqual(window.scrubRange(reach: (0, 0)), 100...400)
+        XCTAssertEqual(window.scrubRange(reach: (40, 90)), 60...490)
+    }
+
+    func testScrubRangeNeverInverts() {
+        let window = LiveSeekableWindow(lowerBound: 100, upperBound: 90)
+        XCTAssertEqual(window.scrubRange(reach: (0, 0)), 100...100)
+    }
+
+    /// Live's scrub is the shared session over that range: it starts at the playhead,
+    /// holds inside the window, and hands back the session-axis target to seek to.
+    func testScrubSessionOverTheWindowCommitsAClampedSessionTarget() {
+        let window = LiveSeekableWindow(lowerBound: 100, upperBound: 400)
+        let session = PlayerScrubSession(range: { window.scrubRange(reach: (0, 0)) }, position: { 390 })
+        session.shuttle(forward: false)
+        XCTAssertEqual(session.scrubTime, 380)
+        session.swipe(by: -1_000)
+        XCTAssertEqual(session.commit(), 100)
+        XCTAssertFalse(session.isScrubbing)
+    }
 }

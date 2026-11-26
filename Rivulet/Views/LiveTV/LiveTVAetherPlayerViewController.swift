@@ -62,7 +62,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private var lastResortPlayer: AVPlayer?
     private var lastResortLayer: AVPlayerLayer?
 
-    /// Touch-surface double tap zooms the picture to fill the screen (#589).
+    /// The double tap's zoom: the picture fills the screen (#589).
     private var fillsScreen = false
 
     /// Escalating recovery for playback failures (a Plex session can die
@@ -181,17 +181,6 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         }
     }
 
-    /// tvOS processes a Menu press on a present()-ed modal through a system
-    /// gesture that calls `dismiss(animated:)` on this VC, IN PARALLEL to the
-    /// responder-chain press. After we consume a Menu press to peel one chrome
-    /// layer (close panel / hide rail), this swallows that system echo so it
-    /// can't peel a second layer on the same physical press. Same mechanism
-    /// the VOD player (PlayerContainerViewController) uses.
-    private var blockNextDismiss = false
-    /// Cancellable reset for `blockNextDismiss`, so two arms inside the window
-    /// can't leave an early-firing timer that clears the flag mid-press.
-    private var blockDismissResetWorkItem: DispatchWorkItem?
-
     // MARK: Chrome state
 
     /// The glass rail shared with VOD (Up Next and Insights hidden: they mean
@@ -214,65 +203,46 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private var autoHideTimer: Timer?
     private var programInfoTimer: Timer?
 
-    /// Invisible focus target that holds focus while the chrome is hidden so
-    /// remote presses reach this VC through the responder chain (tvOS routes
-    /// presses via the focused view; a fullscreen video with no focusable
-    /// content would swallow them).
-    private final class FocusCatcherView: UIView {
-        override var canBecomeFocused: Bool { true }
-    }
-    private let focusCatcher = FocusCatcherView()
+    /// The one reading of the remote, shared with VOD. Presses, taps, swipes, holds and the
+    /// content anchor that holds focus while no chrome control does.
+    private lazy var remoteInput: PlayerRemoteInput = {
+        let input = PlayerRemoteInput(coordinator: inputCoordinator)
+        input.host = self
+        return input
+    }()
 
     /// One front door for transport input. A Play/Pause can reach this VC as a
     /// press and ALSO as a system remote command for the same click; both go
     /// through here and it dedupes them, so the stream toggles once.
     private let inputCoordinator = PlaybackInputCoordinator()
-    private var isHandlingPlayPausePress = false
 
-    /// Left/Right skip and Up/Down while the chrome is hidden, for every remote
-    /// transport. Installed on the focus catcher, so it only sees input while
-    /// the catcher holds focus: exactly while this surface is focusless.
-    private var directionalBinding: DirectionalInputBinding?
+    /// The rail's own controls hold focus (not the content anchor): set by an Up or Down from
+    /// the picture or a click, cleared when the rail hides.
+    private var controlsFocusMode = false
+    /// Whether the rail was up before the content Up/Down that is being handled.
+    private var railWasUpAtVerticalPress = false
 
     /// The viewer's own pause. Kept apart from engine state: a paused live
     /// session keeps buffering, and the timeline stays up while paused.
     private var isUserPaused = false
 
-    /// Paused and moving through the rewind window: where Play will resume,
-    /// on the engine's session axis. nil when not scrubbing.
-    private var scrubTarget: Double?
+    /// Scrubbing the rewind window, on the engine's session axis. Same model as VOD's.
+    private let scrub = PlayerScrubSession()
+    private var scrubObservation: AnyCancellable?
     /// Skips while playing stack here and land as one seek once the presses
     /// settle: AVPlayer cancelling its segment loads for every superseded
     /// seek is what takes a live item down under a held button. Re-attached
     /// to each session's player.
     private let windowSeeker = LiveWindowSeekController()
 
-    // MARK: Touch scrub (the remote's touch surface on the focused timeline)
-    //
-    // A horizontal drag moves a preview through the rewind window; lifting is
-    // not a choice on the remote, so the position is held for Select to
-    // confirm, a click moves it by a step, and Back or a few idle seconds
-    // drop it. Playback never moves until it is confirmed.
-    private let timelinePan = LiveTimelineScrubPan()
-    private var touchScrub = LiveTimelineScrub()
-    /// Seconds behind live the drag is showing, while it is up or held.
-    private var touchScrubBehind: Double?
-    private var touchScrubActive = false
-    /// Lifted, waiting for Select.
-    private var touchScrubPending = false
-    private var touchScrubConfirmTask: Task<Void, Never>?
-    /// A click right after a swipe is often the swipe's own end: ignore it.
-    private var touchScrubEndedAt: Date?
-    /// How long a lifted scrub waits for Select before it is dropped.
-    private static let touchScrubConfirmTimeout: Duration = .seconds(5)
     /// The preview the next fetch is for; see `requestScrubThumbnail`.
     private var thumbnailWanted: Double?
-    /// The engine's frame at `scrubTarget`, decoded from what it already holds.
+    /// The engine's frame at the preview, decoded from what it already holds.
     private var scrubThumbnail: UIImage?
     private var scrubThumbnailTask: Task<Void, Never>?
 
     /// Timeline without the rail: the programme bar and live badge, shown for
-    /// a skip or a pause. Focus stays on the catcher, so Left/Right keep
+    /// a skip or a pause. Focus stays on the content anchor, so Left/Right keep
     /// skipping instead of walking the rail buttons.
     private var timelineVisible = false
     private var timelineHideTimer: Timer?
@@ -308,15 +278,6 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// Built once and reused: a board is up to ~60 cards, too slow to rebuild on every visit.
     private var scoresPane: LiveScoresPaneView?
 
-    /// The rail's panes, for Down reopening the last one used.
-    enum LivePane { case info, scores, channels, details }
-    private var lastPane = LivePane.info
-
-    /// Down's pane: the last one used while it is still offered, else Info.
-    static func paneForDown(last: LivePane, available: Set<LivePane>) -> LivePane {
-        available.contains(last) ? last : .info
-    }
-
     init(channel: UnifiedChannel, adopting session: LiveTVSessionHandoff? = nil) {
         self.channel = session?.channel ?? channel
         self.pendingAdoption = session
@@ -332,10 +293,10 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     #if DEBUG
     /// The live player on screen, for DEBUG launch hooks.
     static weak var debugCurrent: LiveTVAetherPlayerViewController?
-    func debugHiddenDirection(up: Bool) { handleHiddenChromeDirection(up ? .up : .down) }
+    func debugHiddenDirection(up: Bool) { remoteInput.handleContentVertical(up: up) }
     func debugHideRail() { hideRail() }
     func debugPresent(_ name: String) { name == "info" ? presentInfoPanel() : presentChannelListPanel() }
-    func debugMenu() { dismiss(animated: true) }
+    func debugMenu() { remoteInput.handleMenuPress() }
     #endif
 
     override func viewDidLoad() {
@@ -376,7 +337,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         mountSubtitleOverlay()
         observeCaptionAppearance()
         setupChrome()
-        setupZoomGesture()
+        bindScrubSession()
 
         inputCoordinator.target = self
         NowPlayingService.shared.attachLive(inputCoordinator: inputCoordinator)
@@ -624,7 +585,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         super.viewDidAppear(animated)
         // Multiview's full-screen hand-off left a cover behind this screen.
         LiveHandoffCover.hide(in: view.window)
-        if let window = view.window { timelinePan.attach(to: window) }
+        remoteInput.start()
     }
 
     // Safety net: a dismissal the guard below misses must not leave Music stood down.
@@ -635,16 +596,14 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
+        remoteInput.stop()
         guard isBeingDismissed || isMovingFromParent else { return }
-        timelinePan.detach()
         cancelRetune()
         teardownPlaybackSession()
         autoHideTimer?.invalidate()
         autoHideTimer = nil
         programInfoTimer?.invalidate()
         programInfoTimer = nil
-        blockDismissResetWorkItem?.cancel()
-        blockDismissResetWorkItem = nil
         activePanel?.dismissPanel()
         activePanel = nil
         subtitleOverlay?.removeFromSuperview()
@@ -672,7 +631,6 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         activePanel = nil
         railVisible = false
         timelineVisible = false
-        blockNextDismiss = false
         super.dismiss(animated: animated, completion: completion)
     }
 
@@ -782,7 +740,6 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         liveLag = 0
         recordingStart = nil
         endScrub()
-        resetTouchScrub()
         // The fetch belongs to the outgoing player.
         scrubThumbnailTask?.cancel()
         scrubThumbnailTask = nil
@@ -841,61 +798,16 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
     // MARK: - Chrome (glass rail + panels)
 
-    private func setupZoomGesture() {
-        let doubleTap = UITapGestureRecognizer(target: self, action: #selector(handleZoomDoubleTap))
-        doubleTap.numberOfTapsRequired = 2
-        doubleTap.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
-        doubleTap.allowedPressTypes = []
-        view.addGestureRecognizer(doubleTap)
-
-        // A bare touch-surface tap shows the controls, as in VOD.
-        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTouchSurfaceTap))
-        tap.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.indirect.rawValue)]
-        tap.allowedPressTypes = []
-        tap.require(toFail: doubleTap)
-        view.addGestureRecognizer(tap)
-    }
-
-    @objc private func handleTouchSurfaceTap() {
-        // A click's touch half belongs to the press.
-        guard CACurrentMediaTime() - MenuPressInterceptor.lastPressBeganAt > 0.6,
-              !RemoteInputHandler.isClickpadDown, presentedViewController == nil,
-              scrubTarget == nil, descriptionOverlay == nil, !railVisible else { return }
-        flashTimeline()
-    }
-
-    @objc private func handleZoomDoubleTap() {
-        // A double click lands as two taps too; it belongs to the presses.
-        guard CACurrentMediaTime() - MenuPressInterceptor.lastPressBeganAt > 0.6,
-              scrubTarget == nil, descriptionOverlay == nil else { return }
-        fillsScreen.toggle()
-        aetherPlayer?.fillsScreen = fillsScreen
-        lastResortLayer?.videoGravity = fillsScreen ? .resizeAspectFill : .resizeAspect
-        syncSubtitleOverlay()
-    }
-
     private func setupChrome() {
-        // Focus catcher: 1pt, transparent, always present.
-        focusCatcher.frame = CGRect(x: 0, y: 0, width: 1, height: 1)
-        focusCatcher.backgroundColor = .clear
-        view.addSubview(focusCatcher)
-        directionalBinding = DirectionalInputBinding(
-            view: focusCatcher,
-            directions: [.left, .right, .up, .down],
-            onTap: { [weak self] direction in self?.handleHiddenChromeDirection(direction) },
-            // A sideways swipe while playing does nothing, as in VOD; edge clicks still skip.
-            swipeGate: { [weak self] direction in
-                direction == .up || direction == .down || self?.isUserPaused == true
-            }
-        )
+        // The content anchor: above the video, captions and join cover, below the scrim and
+        // every control (the engine's occlusion test is geometric).
+        remoteInput.install(in: view, above: nil)
 
-        // AVKit's control dimming, behind the rail and the timeline. Below the
-        // 1pt focus catcher too: a full-screen view above a focus target makes
-        // it unfocusable.
+        // AVKit's control dimming, behind the rail and the timeline, below the anchor.
         timelineScrim.isHidden = true
         timelineScrim.alpha = 0
         timelineScrim.isUserInteractionEnabled = false
-        view.insertSubview(timelineScrim, belowSubview: focusCatcher)
+        view.insertSubview(timelineScrim, belowSubview: remoteInput.contentAnchor)
         timelineScrim.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             timelineScrim.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -940,19 +852,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             scrubberProxy.bottomAnchor.constraint(equalTo: progressBar.topAnchor, constant: 56),
         ])
         railView.scrubberFocusProxy = scrubberProxy
-        scrubberProxy.onSkip = { [weak self] forward in self?.timelineArrow(forward: forward) }
-        scrubberProxy.onShuttle = scrubberProxy.onSkip
-        scrubberProxy.onSelect = { [weak self] in self?.timelineSelected() }
-        timelinePan.isEnabled = { [weak self] in
-            // Scrubs only while paused, as VOD and AVKit do.
-            guard let self, self.isUserPaused, self.scrubberProxy.isFocused, self.activePanel == nil,
-                  self.lastResortPlayer == nil else { return false }
-            return self.aetherPlayer?.liveTimeshift.seekableRange != nil
-        }
-        timelinePan.began = { [weak self] in self?.touchScrubBegan() }
-        timelinePan.changed = { [weak self] translation, speed in self?.touchScrubChanged(translation, speed: speed) }
-        timelinePan.ended = { [weak self] committed in self?.touchScrubEnded(committed: committed) }
-
+        remoteInput.wire(scrubberProxy: scrubberProxy)
         // Where the picture sits relative to live. Right-aligned just above the
         // track, which keeps it below the rail's button row.
         timeshiftBadge.isHidden = true
@@ -1078,7 +978,9 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 scrubTime: scrubAt,
                 scrubThumbnail: scrubAt == nil ? nil : scrubThumbnail,
                 seekableStart: layout.seekableStart.map(date),
-                sectionBoundaries: layout.boundaries.map(date)
+                sectionBoundaries: layout.boundaries.map(date),
+                scanLevel: scrub.scrubSpeed,
+                isWheelScrubbing: scrub.wheelScrubbing
             )
         } else if let current, current.endTime > current.startTime {
             progressBar.isHidden = false
@@ -1088,7 +990,9 @@ final class LiveTVAetherPlayerViewController: UIViewController {
                 endTime: current.endTime,
                 liveEdgeTime: isBehindLive ? now : nil,
                 scrubTime: scrubAt,
-                scrubThumbnail: scrubAt == nil ? nil : scrubThumbnail
+                scrubThumbnail: scrubAt == nil ? nil : scrubThumbnail,
+                scanLevel: scrub.scrubSpeed,
+                isWheelScrubbing: scrub.wheelScrubbing
             )
         } else {
             progressBar.isHidden = true
@@ -1146,6 +1050,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     private func hideRail() {
         guard railVisible else { return }
         railVisible = false
+        controlsFocusMode = false
         updateScrubberFocus()
         autoHideTimer?.invalidate()
         autoHideTimer = nil
@@ -1166,10 +1071,13 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         updateFocusIfNeeded()
     }
 
-    /// The bar takes focus only while the rail is up with nothing over it.
+    /// The bar takes focus only while the rail is up with nothing over it; the content
+    /// anchor holds it whenever no control and no overlay does.
     private func updateScrubberFocus() {
         scrubberProxy.isFocusEnabled = railVisible && activePanel == nil
             && descriptionOverlay == nil && !progressBar.isHidden
+        remoteInput.contentAnchor.isFocusEnabled = !controlsFocusMode && activePanel == nil
+            && descriptionOverlay == nil
     }
 
     /// Chrome auto-hides after a few idle seconds, same spirit as the VOD
@@ -1184,7 +1092,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         if inPane { return }
         autoHideTimer = Timer.scheduledTimer(withTimeInterval: 8, repeats: false) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self, self.descriptionOverlay == nil else { return }
+                guard let self, self.descriptionOverlay == nil, !self.scrub.isScrubbing else { return }
                 if let pane = self.activePanel, pane.isPane {
                     pane.dismissPanel()
                 } else if self.activePanel != nil {
@@ -1271,18 +1179,13 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         if let descriptionOverlay { return [descriptionOverlay] }
         // A pane leaves focus on its pill, as AVKit's tabs do.
         if let activePanel { return activePanel.isPane ? [railView] : [activePanel] }
-        return railVisible ? [railView] : [focusCatcher]
+        return controlsFocusMode && railVisible ? [railView] : [remoteInput.contentAnchor]
     }
 
     override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
         super.didUpdateFocus(in: context, with: coordinator)
         if let next = context.nextFocusedView {
             progressBar.setFocusDimmed(next !== scrubberProxy && next.isDescendant(of: railView), coordinator: coordinator)
-        }
-        if context.previouslyFocusedView === scrubberProxy, context.nextFocusedView !== scrubberProxy,
-           touchScrubBehind != nil || touchScrubActive {
-            resetTouchScrub()
-            updateRailContent()
         }
         if activePanel?.isPane == true {
             restartAutoHide()
@@ -1313,13 +1216,8 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             self.updateFocusIfNeeded()
             self.restartAutoHide()
         }
-        // While focus is inside the panel it owns Menu itself (its own
-        // pressesBegan closes it), so the VC's dismiss() funnel is bypassed —
-        // arm the echo block here instead so the parallel system dismiss
-        // can't peel the rail (or the player) on the same press.
-        panel.onMenuHandled = { [weak self] in
-            self?.armDismissEchoBlock()
-        }
+        // Focus inside the panel: it owns Menu itself, so block the system's echo dismiss.
+        panel.onMenuHandled = { [weak self] in self?.remoteInput.blockDismissTemporarily() }
         activePanel = panel
         updateScrubberFocus()
         setNeedsFocusUpdate()
@@ -1337,12 +1235,6 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             riders: [progressBar, timeshiftBadge], replacing: openPane)
         railView.setSelectedPill(pill)
         openPanePill = pill
-        switch pill {
-        case railView.scoresButton: lastPane = .scores
-        case railView.upNextButton: lastPane = .channels
-        case railView.detailsButton: lastPane = .details
-        default: lastPane = .info
-        }
         panel.onDismiss = { [weak self, weak panel] in
             guard let self, self.activePanel === panel else { return }
             self.activePanel = nil
@@ -1361,7 +1253,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
             self.updateFocusIfNeeded()
             self.restartAutoHide()
         }
-        panel.onMenuHandled = { [weak self] in self?.armDismissEchoBlock() }
+        panel.onMenuHandled = { [weak self] in self?.remoteInput.blockDismissTemporarily() }
         activePanel = panel
         syncSubtitleOverlay(animated: true)
         updateScrubberFocus()
@@ -2159,185 +2051,65 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     }
 
     // MARK: - Remote handling
+    // Every press goes to `PlayerRemoteInput`, the same reading VOD uses. Live keeps its
+    // channel keys and its own layers (the host hooks below).
 
     override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
         guard presentedViewController == nil else { super.pressesBegan(presses, with: event); return }
         if activePanel?.isPane == true { restartAutoHide() }
         for press in presses {
-            switch press.type {
-            case .menu:
-                // Route through dismiss(animated:): its override peels one
-                // layer at a time (panel → rail → timeline → player) and is the
-                // SAME funnel the parallel system Menu gesture hits, so both
-                // delivery routes make one consistent decision.
-                dismiss(animated: true)
-                return
-            case .select:
-                if scrubTarget != nil {
-                    // Click to play from the scrubbed spot.
-                    resumePlayback()
-                    return
-                }
-                if descriptionOverlay != nil { return }
-                if !railVisible {
-                    // A click plays or pauses with the controls up on the bar, as AVKit's and
-                    // VOD's do; a touch-surface tap only shows them.
-                    railView.resetFocusMemory()
-                    inputCoordinator.handle(action: .playPause, source: .irPress)
-                    return
-                }
-            case .playPause:
-                // Honored whatever holds focus. The coordinator dedupes this
-                // against the same click arriving as a system remote command.
-                isHandlingPlayPausePress = true
-                inputCoordinator.handle(action: .playPause, source: .irPress)
-                return
-            case .pageUp:
-                // The channel keys some IR and HDMI-CEC remotes carry.
-                zapChannel(by: 1)
-                return
-            case .pageDown:
-                zapChannel(by: -1)
-                return
-            default:
-                break
-            }
+            // The channel keys some IR and HDMI-CEC remotes carry.
+            if press.type == .pageUp { zapChannel(by: 1); return }
+            if press.type == .pageDown { zapChannel(by: -1); return }
         }
+        if remoteInput.pressesBegan(presses) { return }
         super.pressesBegan(presses, with: event)
     }
 
     override func pressesEnded(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        // Menu is fully consumed at began; an unswallowed ended phase bubbles
-        // to the system and peels an extra layer. Same for a Play/Pause taken
-        // at began: its ended phase must not reach the system as a second one.
+        // A key taken at began must not reach the system as a second one in its ended phase.
         guard presentedViewController == nil else { super.pressesEnded(presses, with: event); return }
-        for press in presses where press.type == .menu { return }
-        for press in presses where press.type == .playPause && isHandlingPlayPausePress {
-            isHandlingPlayPausePress = false
-            return
-        }
         for press in presses where press.type == .pageUp || press.type == .pageDown { return }
+        if remoteInput.pressesEnded(presses) { return }
         super.pressesEnded(presses, with: event)
     }
 
     override func pressesCancelled(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
-        for press in presses where press.type == .playPause && isHandlingPlayPausePress {
-            isHandlingPlayPausePress = false
-            return
-        }
+        if remoteInput.pressesCancelled(presses) { return }
         super.pressesCancelled(presses, with: event)
     }
 
-    /// Menu peels ONE layer at a time: panel → rail → timeline → player. Both
-    /// delivery routes — the responder-chain press (pressesBegan) and tvOS's
-    /// parallel system Menu gesture — reach dismiss(), so the layering
-    /// decision lives HERE and stays consistent whichever fires first.
+    override func pressesChanged(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        if remoteInput.pressesChanged(presses) { return }
+        super.pressesChanged(presses, with: event)
+    }
+
+    /// tvOS also runs a Menu press on a presented modal through a system gesture that calls
+    /// `dismiss(animated:)` here. The press has already peeled a layer, so that echo is
+    /// swallowed; a dismiss with no press behind it peels one layer or leaves.
     override func dismiss(animated flag: Bool, completion: (() -> Void)? = nil) {
-        // Something presented over the player (an alert) is dismissing
-        // itself, which UIKit routes through here. That is its dismissal, not
-        // a Menu press on the player.
+        // Something presented over the player (an alert) dismissing itself routes here too.
         if presentedViewController != nil {
             super.dismiss(animated: flag, completion: completion)
             return
         }
-        if blockNextDismiss {
-            blockNextDismiss = false
+        if remoteInput.consumesDismissEcho() || remoteInput.peelForSystemDismiss() {
             completion?()
             return
         }
-        if descriptionOverlay != nil {
-            dismissDescription()
-            armDismissEchoBlock()
-            completion?()
-            return
-        }
-        if touchScrubBehind != nil || touchScrubActive {
-            // Back out of the drag: playback never moved.
-            resetTouchScrub()
-            updateRailContent()
-            armDismissEchoBlock()
-            completion?()
-            return
-        }
-        if scrubTarget != nil {
-            // Back out of the scrub, still paused where the picture is.
-            endScrub()
-            updateRailContent()
-            armDismissEchoBlock()
-            completion?()
-            return
-        }
-        if let activePanel {
-            if !activePanel.contentHandlesMenuPress() { activePanel.dismissPanel() }
-            armDismissEchoBlock()
-            completion?()
-            return
-        }
-        if railVisible {
-            hideRail()
-            armDismissEchoBlock()
-            completion?()
-            return
-        }
-        if timelineVisible {
-            hideTimeline()
-            armDismissEchoBlock()
-            completion?()
-            return
-        }
-        // Leaving: hand the channel to the host's corner player when it keeps
-        // one (issue #318), so it goes on playing with its audio.
+        leavePlayer(animated: flag, completion: completion)
+    }
+
+    /// Leaving: hand the channel to the host's corner player when it keeps
+    /// one (issue #318), so it goes on playing with its audio.
+    private func leavePlayer(animated: Bool = true, completion: (() -> Void)? = nil) {
         if let onMinimize, let session = detachSession() {
             onMinimize(session)
         }
-        super.dismiss(animated: flag, completion: completion)
-    }
-
-    /// After consuming a Menu press to peel a layer, swallow the parallel
-    /// system-gesture echo that would otherwise peel a second. Time-limited
-    /// (and cancellable) so a stuck flag can't eat the user's next real press.
-    private func armDismissEchoBlock() {
-        blockNextDismiss = true
-        blockDismissResetWorkItem?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.blockNextDismiss = false }
-        blockDismissResetWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+        super.dismiss(animated: animated, completion: completion)
     }
 
     // MARK: - Transport
-
-    /// Directions while the chrome is hidden (the binding only fires then):
-    /// Left/Right skip within the rewind window, Up/Down bring the rail up.
-    private func handleHiddenChromeDirection(_ direction: DirectionalInputBinding.Direction) {
-        switch direction {
-        case .left:
-            skip(by: -InputConfig.tapSeekBackSeconds)
-        case .right:
-            skip(by: InputConfig.tapSeekSeconds)
-        case .up:
-            // AVKit lands Up from the picture on the first tool button.
-            if let tool = railView.firstToolButton { railView.setFocusLanding(tool) }
-            showRail()
-        case .down:
-            // And Down reopens the last pane used, Info at first.
-            var available: Set<LivePane> = [.info]
-            if matchedGame != nil { available.insert(.scores) }
-            if !LiveTVDataStore.shared.channels.isEmpty { available.insert(.channels) }
-            available.insert(.details)
-            let pane = Self.paneForDown(last: lastPane, available: available)
-            let pills: [LivePane: PlayerInfoPillButton] = [
-                .info: railView.infoButton, .scores: railView.scoresButton, .channels: railView.upNextButton,
-                .details: railView.detailsButton]
-            if let pill = pills[pane] { railView.setFocusLanding(pill) }
-            showRail()
-            switch pane {
-            case .info: presentInfoPanel()
-            case .scores: presentScoresPanel()
-            case .channels: presentChannelListPanel()
-            case .details: presentDetailsPanel()
-            }
-        }
-    }
 
     private func pausePlayback() {
         guard !isUserPaused else { return }
@@ -2357,17 +2129,6 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 
     private func resumePlayback() {
         guard isUserPaused else { return }
-        if let target = scrubTarget, let aether = aetherPlayer, lastResortPlayer == nil {
-            endScrub()
-            isUserPaused = false
-            Task { @MainActor [weak self] in
-                await aether.seekLive(to: target)
-                aether.play()
-                self?.updateRailContent()
-            }
-            flashTimeline()
-            return
-        }
         isUserPaused = false
         if let lastResortPlayer {
             lastResortPlayer.play()
@@ -2388,14 +2149,6 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     /// live. Shows where that landed either way, so a skip with nothing to skip
     /// into (a source with no window) still answers the press.
     private func skip(by seconds: TimeInterval) {
-        // Paused with a window to move in, Left/Right scrub instead: the bar
-        // and a frame from the engine show where Play will pick up, and
-        // nothing moves until then (the Apple TV app's pause-and-scrub).
-        if isUserPaused, liveLag == 0, let aether = aetherPlayer, lastResortPlayer == nil,
-           aether.liveTimeshift.seekableRange != nil {
-            moveScrub(by: seconds, on: aether)
-            return
-        }
         if aetherPlayer != nil, lastResortPlayer == nil {
             windowSeeker.step(by: seconds)
         }
@@ -2415,114 +2168,10 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         updateRailContent()
     }
 
-    /// Where the bar previews, on the session axis: a paused scrub, a touch
-    /// drag, or skips still settling, in that order. nil when none is up.
+    /// Where the bar previews, on the session axis: a scrub, or skips still
+    /// settling. nil when neither is up.
     private func previewTarget(in shift: AetherPlayer.LiveTimeshift) -> Double? {
-        if let scrubTarget { return scrubTarget }
-        if let touchScrubBehind { return shift.edgeTime - touchScrubBehind }
-        return stagedSkipTarget
-    }
-
-    // MARK: - Touch scrub
-
-    private func touchScrubBegan() {
-        guard let aether = aetherPlayer else { return }
-        let shift = aether.liveTimeshift
-        touchScrubActive = true
-        touchScrubConfirmTask?.cancel()
-        touchScrubConfirmTask = nil
-        // A swipe after a lift carries on from the pending position.
-        touchScrub.begin(behindLive: touchScrubBehind ?? (shift.edgeTime - shift.playhead))
-    }
-
-    private func touchScrubChanged(_ translation: CGPoint, speed: Double) {
-        guard touchScrubActive, let shift = aetherPlayer?.liveTimeshift,
-              let range = shift.seekableRange else { return }
-        touchScrub.change(translationX: Double(translation.x), translationY: Double(translation.y),
-                          speed: speed, windowSeconds: shift.edgeTime - range.lowerBound)
-        // Undecided or vertical leaves any pending position where it is.
-        guard let behind = touchScrub.behindLive else { return }
-        touchScrubBehind = behind
-        restartAutoHide()
-        requestScrubThumbnail()
-        updateRailContent()
-    }
-
-    private func touchScrubEnded(committed: Bool) {
-        touchScrubActive = false
-        let landing = committed ? touchScrub.end() : nil
-        if !committed { touchScrub.cancel() }
-        if landing != nil || touchScrubBehind != nil { touchScrubEndedAt = Date() }
-        if let landing {
-            touchScrubBehind = landing
-            touchScrubPending = true
-            awaitTouchScrubConfirmation()
-        } else if touchScrubPending {
-            awaitTouchScrubConfirmation()
-        } else {
-            touchScrubBehind = nil
-        }
-        requestScrubThumbnail()
-        updateRailContent()
-    }
-
-    private func awaitTouchScrubConfirmation() {
-        touchScrubConfirmTask?.cancel()
-        touchScrubConfirmTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: Self.touchScrubConfirmTimeout)
-            guard let self, !Task.isCancelled, self.touchScrubPending else { return }
-            self.resetTouchScrub()
-            self.updateRailContent()
-        }
-    }
-
-    private func resetTouchScrub() {
-        touchScrubConfirmTask?.cancel()
-        touchScrubConfirmTask = nil
-        timelinePan.interrupt()
-        touchScrub.cancel()
-        touchScrubActive = false
-        touchScrubPending = false
-        touchScrubBehind = nil
-        requestScrubThumbnail()
-    }
-
-    /// Select on the timeline: confirms a drag (held, or still under the
-    /// finger), otherwise plays or pauses.
-    private func timelineSelected() {
-        let landing = touchScrubActive ? (touchScrub.end() ?? touchScrubBehind)
-            : touchScrubPending ? touchScrubBehind : nil
-        guard let landing else {
-            togglePlayPause()
-            return
-        }
-        resetTouchScrub()
-        touchScrubEndedAt = Date()
-        // One Select ends a paused scrub and plays from there, as in VOD.
-        if isUserPaused, let shift = aetherPlayer?.liveTimeshift, lastResortPlayer == nil {
-            scrubTarget = shift.edgeTime - landing
-            resumePlayback()
-            return
-        }
-        windowSeeker.seek(behindLive: landing)
-        flashTimeline()
-    }
-
-    /// Left/Right on the timeline. A held drag moves by a step, as VOD's skip
-    /// does mid-scrub; a click just after a swipe is the swipe's own end.
-    private func timelineArrow(forward: Bool) {
-        guard !touchScrubActive else { return }
-        if let ended = touchScrubEndedAt, Date().timeIntervalSince(ended) < 0.5 { return }
-        if touchScrubPending, let pending = touchScrubBehind,
-           let shift = aetherPlayer?.liveTimeshift, let range = shift.seekableRange {
-            let step = LiveWindowSeekController.step
-            touchScrubBehind = min(max(pending + (forward ? -step : step), 0), shift.edgeTime - range.lowerBound)
-            awaitTouchScrubConfirmation()
-            requestScrubThumbnail()
-            updateRailContent()
-            return
-        }
-        skip(by: InputConfig.tapSeekDelta(forward: forward))
+        scrub.isScrubbing ? scrub.scrubTime : stagedSkipTarget
     }
 
     /// A seek on the session axis. The engine fetches a recording's backlog at 1x, so a target
@@ -2606,14 +2255,65 @@ final class LiveTVAetherPlayerViewController: UIViewController {
         }
     }
 
-    private func moveScrub(by seconds: TimeInterval, on aether: AetherPlayer) {
-        let shift = aether.liveTimeshift
-        guard let range = shift.seekableRange else { return }
-        let target = min(max((scrubTarget ?? shift.playhead) + seconds, range.lowerBound), shift.edgeTime)
-        scrubTarget = target
-        requestScrubThumbnail()
+    // MARK: - Scrub (the shared session over the rewind window)
+
+    /// What a scrub may reach, on the session axis: the engine's window, widened by the
+    /// reach a recording joined from its start offers. nil with nothing to scrub (no
+    /// rewind window, or the last-resort player).
+    private var scrubWindow: ClosedRange<TimeInterval>? {
+        guard lastResortPlayer == nil, let shift = aetherPlayer?.liveTimeshift,
+              let range = shift.seekableRange else { return nil }
+        let reach = recordingStart.map { $0.reach(lag: liveLag) } ?? (0, 0)
+        return LiveSeekableWindow(lowerBound: range.lowerBound, upperBound: shift.edgeTime)
+            .scrubRange(reach: reach)
+    }
+
+    private func bindScrubSession() {
+        scrub.range = { [weak self] in self?.scrubWindow ?? 0...0 }
+        scrub.position = { [weak self] in self?.aetherPlayer?.liveTimeshift.playhead ?? 0 }
+        scrub.holdsWheel = { RemoteInputHandler.isRingJogging }
+        scrub.onBegan = { [weak self] in
+            self?.autoHideTimer?.invalidate()
+            self?.autoHideTimer = nil
+        }
+        scrub.onScrubTimeChanged = { [weak self] _ in
+            self?.requestScrubThumbnail()
+            self?.updateRailContent()
+        }
+        // The wheel indicator and scan glyph follow the session's own state.
+        scrubObservation = Publishers.Merge(scrub.$wheelScrubbing.map { _ in }, scrub.$scrubSpeed.map { _ in })
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.updateRailContent() }
+    }
+
+    /// Shuttle one level in a direction; the grammar reaching zero ends the scrub.
+    private func shuttleScrub(forward: Bool) {
+        guard scrubWindow != nil else { return }
+        if !scrub.shuttle(forward: forward) { cancelScrub() }
+        keepScrubControlsUp()
+    }
+
+    /// A scrub keeps the controls up, without a second bar refresh per sample.
+    private func keepScrubControlsUp() {
+        if railVisible { restartAutoHide() } else { flashTimeline() }
+    }
+
+    /// Select or Play on a scrub: seek to the target through the live seek path, then play.
+    private func commitScrub() {
+        guard let target = scrub.commitTarget() else { return }
+        RemoteInputHandler.active?.reset()
+        isUserPaused = false
+        windowSeeker.cancelPending()
         flashTimeline()
-        updateRailContent()
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.seekLive(to: target)
+            self.aetherPlayer?.play()
+            self.scrub.finish()
+            self.requestScrubThumbnail()
+            self.updateRailContent()
+            if self.railVisible { self.restartAutoHide() }
+        }
     }
 
     /// Fetches the frame for wherever the preview is now. A fetch in flight
@@ -2644,7 +2344,7 @@ final class LiveTVAetherPlayerViewController: UIViewController {
     }
 
     private func endScrub() {
-        scrubTarget = nil
+        scrub.cancel()
         // Any fetch in flight finishes unshown (see `requestScrubThumbnail`).
         requestScrubThumbnail()
     }
@@ -2937,37 +2637,166 @@ final class LiveTVAetherPlayerViewController: UIViewController {
 // MARK: - Transport input
 
 extension LiveTVAetherPlayerViewController: PlaybackInputTarget {
-    /// Only while paused and scrubbing the rewind window; otherwise every
-    /// seek is a discrete skip.
-    var isScrubbingForInput: Bool { scrubTarget != nil }
+    /// While a scrub is up every seek moves its preview; otherwise each is a discrete skip.
+    var isScrubbingForInput: Bool { scrub.isScrubbing }
 
+    /// Follows VOD's target action by action; Live differs in how it seeks and in what it has to scrub.
     func handleInputAction(_ action: PlaybackInputAction, source: PlaybackInputSource) {
         switch action {
         case .play:
-            resumePlayback()
+            if scrub.isScrubbing { commitScrub() } else { resumePlayback() }
         case .pause:
-            pausePlayback()
+            if scrub.isScrubbing { commitScrub() } else { pausePlayback() }
         case .playPause:
-            togglePlayPause()
+            if scrub.isScrubbing { commitScrub() } else { togglePlayPause() }
+
         case .seekRelative(let seconds):
-            skip(by: seconds)
-        case .stepSeek(let forward), .scrubNudge(let forward):
-            skip(by: InputConfig.tapSeekDelta(forward: forward))
-        case .jumpSeek(let forward):
-            skip(by: forward ? InputConfig.jumpSeekSeconds : -InputConfig.jumpSeekSeconds)
-        case .showInfo:
-            showRail()
+            if scrub.isScrubbing && scrub.scrubSpeed != 0 && source != .mpRemoteCommand {
+                // Active shuttle: a click bumps the level, as a hold does.
+                shuttleScrub(forward: seconds > 0)
+            } else if scrub.isScrubbing {
+                scrub.swipe(by: seconds)
+                keepScrubControlsUp()
+            } else {
+                skip(by: seconds)
+            }
+
+        case .scrubNudge(let forward):
+            shuttleScrub(forward: forward)
+
+        case .scrubRelative(let seconds):
+            guard scrubWindow != nil else { return }
+            if source == .siriMicroGamepad {
+                scrub.wheel(by: seconds)
+            } else {
+                scrub.swipe(by: seconds)
+            }
+            keepScrubControlsUp()
+
         case .scrubCommit:
-            resumePlayback()
+            guard scrub.isScrubbing else { return }
+            commitScrub()
+
         case .scrubCancel:
-            endScrub()
-            updateRailContent()
-        default:
-            // Absolute positions (Control Center) mean nothing on a live
-            // stream's wall-clock bar, and scrub commits never start here.
+            guard scrub.isScrubbing else { return }
+            cancelScrub()
+
+        case .showInfo:
+            flashTimeline()
+
+        case .back:
+            if scrub.isScrubbing {
+                cancelScrub()
+            } else if !peelChromeLayer() {
+                leavePlayer()
+            }
+
+        case .stepSeek, .jumpSeek, .seekAbsolute:
+            // Steps arrive as `seekRelative`; absolute positions (Control Center) mean
+            // nothing on a live stream's wall-clock bar.
             break
         }
     }
+}
+
+// MARK: - PlayerRemoteInputHost
+
+extension LiveTVAetherPlayerViewController: PlayerRemoteInputHost {
+    var isScrubbing: Bool { scrub.isScrubbing }
+    var scrubSpeed: Int { scrub.scrubSpeed }
+    /// A full swipe covers the rewind window.
+    var scrubSpan: TimeInterval { scrubWindow.map { $0.upperBound - $0.lowerBound } ?? 0 }
+    var isPaused: Bool { isUserPaused }
+    var postVideoUp: Bool { false }
+    var playbackFailed: Bool { false }
+    var descriptionUp: Bool { descriptionOverlay != nil }
+    var controlsVisible: Bool { railVisible }
+    var controlsFocusActive: Bool { controlsFocusMode }
+    var controlsOwnFocus: Bool { controlsFocusMode || activePanel != nil }
+    var scrubberFocused: Bool { scrubberProxy.isFocused }
+    var scrubberOwnsFocus: Bool { scrubberProxy.isFocused }
+    var panelOwnsPresses: Bool { activePanel?.window != nil }
+
+    func showControlsTemporarily() { flashTimeline() }
+    func hideControls() { hideRail() }
+
+    /// The bar already reads in clock times, so there is nothing to toggle.
+    func toggleClockTimes() {}
+
+    func toggleFill() {
+        fillsScreen.toggle()
+        aetherPlayer?.fillsScreen = fillsScreen
+        lastResortLayer?.videoGravity = fillsScreen ? .resizeAspectFill : .resizeAspect
+        syncSubtitleOverlay()
+    }
+
+    func cancelScrub() {
+        scrub.cancel()
+        RemoteInputHandler.active?.reset()
+        requestScrubThumbnail()
+        updateRailContent()
+        if railVisible { restartAutoHide() }
+    }
+
+    func scrubInDirection(forward: Bool) { shuttleScrub(forward: forward) }
+
+    func contentVerticalBegan() { railWasUpAtVerticalPress = railVisible }
+
+    func focusControls(on landing: PlayerControlsLanding) {
+        flashTimeline()
+        updateScrubberFocus()
+        switch landing {
+        case .scrubber:
+            // AVKit lands a click on the bar; with nothing to focus there the rail stays up.
+            guard scrubberProxy.isFocusEnabled else { return }
+            railView.resetFocusMemory()
+        case .firstTool:
+            if let tool = railView.firstToolButton { railView.setFocusLanding(tool) }
+        case .infoPane:
+            railView.setFocusLanding(railView.infoButton)
+            if !railWasUpAtVerticalPress { presentInfoPanel() }
+        }
+        controlsFocusMode = true
+        updateScrubberFocus()
+        setNeedsFocusUpdate()
+        updateFocusIfNeeded()
+    }
+
+    func closeDescription() { dismissDescription() }
+    func exitPlayer() { dismissPlayer() }
+
+    /// Only a system dismiss closes the description here; a Menu press closed it already.
+    func closeHostLayer(for source: PlayerBackSource) -> Bool {
+        guard source == .systemDismiss, descriptionOverlay != nil else { return false }
+        dismissDescription()
+        return true
+    }
+
+    func closeOpenPanel(for source: PlayerBackSource) -> Bool {
+        guard let panel = activePanel else { return false }
+        switch source {
+        case .menuPress:
+            guard panel.window != nil else { return false }
+            if !panel.contentHandlesMenuPress() { panel.dismissPanel() }
+        case .systemDismiss:
+            panel.dismissPanel()
+        }
+        return true
+    }
+
+    /// Menu closes the rail, then the lone timeline; false when neither is up.
+    func peelChromeLayer() -> Bool {
+        if railVisible {
+            hideRail()
+        } else if timelineVisible {
+            hideTimeline()
+        } else {
+            return false
+        }
+        return true
+    }
+
+    var backClosesChrome: Bool { scrub.isScrubbing || railVisible || timelineVisible }
 }
 
 /// How many automatic retunes a channel may make, and how far apart. Each

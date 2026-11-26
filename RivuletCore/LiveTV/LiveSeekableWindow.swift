@@ -53,6 +53,12 @@ struct LiveSeekableWindow: Equatable {
         return min(max(requested, floor), upperBound)
     }
 
+    /// What a scrub may reach: the window, widened by the reach a player offers past it.
+    func scrubRange(reach: (before: TimeInterval, after: TimeInterval)) -> ClosedRange<TimeInterval> {
+        let low = lowerBound - reach.before
+        return low...max(low, upperBound + reach.after)
+    }
+
     func isAtLiveEdge(_ position: TimeInterval) -> Bool {
         upperBound - position <= Self.liveEdgeTolerance
     }

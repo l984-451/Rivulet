@@ -65,12 +65,4 @@ final class LiveScoresPaneTests: XCTestCase {
         XCTAssertEqual(Pane.statusText(board: stale, isPaused: false, now: start), "Updated 1 min ago")
         XCTAssertNil(Pane.statusText(board: board(.nfl, games: []), isPaused: false, now: start))
     }
-
-    func test_down_reopensLastPane_whileAvailable_elseInfo() {
-        typealias VC = LiveTVAetherPlayerViewController
-        XCTAssertEqual(VC.paneForDown(last: .scores, available: [.info, .scores, .channels]), .scores)
-        XCTAssertEqual(VC.paneForDown(last: .channels, available: [.info, .channels]), .channels)
-        XCTAssertEqual(VC.paneForDown(last: .scores, available: [.info, .channels]), .info)
-        XCTAssertEqual(VC.paneForDown(last: .info, available: [.info]), .info)
-    }
 }

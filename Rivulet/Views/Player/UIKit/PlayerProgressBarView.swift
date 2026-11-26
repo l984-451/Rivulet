@@ -322,7 +322,8 @@ final class PlayerProgressBarView: UIView {
     /// stream in scrub mode.
     func updateLiveTimeline(startTime: Date, currentTime: Date, endTime: Date, liveEdgeTime: Date? = nil,
                             scrubTime: Date? = nil, scrubThumbnail: UIImage? = nil,
-                            seekableStart: Date? = nil, sectionBoundaries: [Date] = []) {
+                            seekableStart: Date? = nil, sectionBoundaries: [Date] = [],
+                            scanLevel: Int = 0, isWheelScrubbing: Bool = false) {
         let duration = endTime.timeIntervalSince(startTime)
         guard duration > 0 else { return }
         isLive = true
@@ -335,13 +336,13 @@ final class PlayerProgressBarView: UIView {
         }
         render(
             currentTime: offset(currentTime), duration: duration, isScrubbing: scrubTime != nil,
-            scrubTime: scrubTime.map(offset) ?? 0, isWheelScrubbing: false,
+            scrubTime: scrubTime.map(offset) ?? 0, isWheelScrubbing: isWheelScrubbing,
             labels: Labels(
                 elapsed: Self.clockFormatter.string(from: scrubTime ?? currentTime),
                 remaining: Self.clockFormatter.string(from: endTime),
                 leading: Self.clockFormatter.string(from: startTime)
             ),
-            ghostProgress: ghost, scanLevel: 0, scrubThumbnail: scrubThumbnail,
+            ghostProgress: ghost, scanLevel: scanLevel, scrubThumbnail: scrubThumbnail,
             markers: [], chapters: []
         )
     }

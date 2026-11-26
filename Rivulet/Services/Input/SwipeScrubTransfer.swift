@@ -3,14 +3,33 @@
 
 // VOD swipe-to-scrub: finger travel to playhead seconds, scaled to the runtime so a swipe
 // covers the same share of the bar on any title, with a modest gain for a fast swipe.
-// Built on Live TV's `LiveTimelineScrub` pieces.
 
 import Foundation
 
 enum SwipeScrubTransfer {
 
+    struct Tuning: Equatable {
+        /// Seconds per point of pad travel below the acceleration onset.
+        var baseSecondsPerPoint: Double
+        /// Pan speed (points/sec) below which travel stays 1:1.
+        var accelOnsetSpeed: Double
+        /// Pan speed at which the gain reaches `maxAccelMultiplier`.
+        var accelSaturationSpeed: Double
+        var maxAccelMultiplier: Double
+    }
+
+    /// Always >= 1: a smoothstep from 1 at the onset to the ceiling at saturation, so a
+    /// flick eases in and out rather than snapping on and clipping at the cap.
+    static func accelerationMultiplier(speed: Double, tuning: Tuning) -> Double {
+        let lo = tuning.accelOnsetSpeed
+        let hi = max(lo + 1, tuning.accelSaturationSpeed)
+        let t = min(max((speed - lo) / (hi - lo), 0), 1)
+        let smooth = t * t * (3 - 2 * t)
+        return 1 + (tuning.maxAccelMultiplier - 1) * smooth
+    }
+
     /// Seconds per point of slow travel on a 2-hour title (`referenceDuration`);
-    /// other runtimes scale from it. 0.18 is the Live TV scrub's base rate.
+    /// other runtimes scale from it.
     static let baseSecondsPerPointAtReference: Double = 0.18
     /// Swipe speed (points/sec) below which travel maps 1:1 at the base rate.
     static let accelOnsetSpeed: Double = 800
@@ -28,7 +47,7 @@ enum SwipeScrubTransfer {
 
     /// The scrub tuning for a title of `duration` seconds. A missing or invalid
     /// runtime (0, negative, NaN, infinite) gets a base rate of 0: no movement.
-    static func tuning(duration: TimeInterval) -> LiveTimelineScrub.Tuning {
+    static func tuning(duration: TimeInterval) -> Tuning {
         let base: Double
         if duration.isFinite, duration > 0 {
             let scale = min(max(duration / referenceDuration, minDurationScale), maxDurationScale)
@@ -36,7 +55,7 @@ enum SwipeScrubTransfer {
         } else {
             base = 0
         }
-        return LiveTimelineScrub.Tuning(
+        return Tuning(
             baseSecondsPerPoint: base,
             accelOnsetSpeed: accelOnsetSpeed,
             accelSaturationSpeed: accelSaturationSpeed,
@@ -48,8 +67,7 @@ enum SwipeScrubTransfer {
     /// the onset, easing up to `maxAccelMultiplier` at saturation.
     static func multiplier(speed: Double) -> Double {
         let magnitude = speed.isFinite ? abs(speed) : 0
-        return LiveTimelineScrub.accelerationMultiplier(
-            speed: magnitude, tuning: tuning(duration: referenceDuration))
+        return accelerationMultiplier(speed: magnitude, tuning: tuning(duration: referenceDuration))
     }
 
     /// Seconds for `dx` points of travel (positive = right = forward) made at

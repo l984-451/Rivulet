@@ -103,18 +103,21 @@ final class PlexMusicProvider: MusicProvider, @unchecked Sendable {
     // MARK: - Hierarchy
 
     func albums(for artistRef: MediaItemRef) async throws -> [MusicAlbum] {
-        try await plexCall {
-            let kids = try await networkManager.getChildren(
-                serverURL: serverURL, authToken: authToken, ratingKey: artistRef.itemID
-            )
-            return kids.compactMap { meta -> MusicAlbum? in
-                guard meta.type == "album" else { return nil }
-                return PlexMusicMapper.album(
-                    meta, providerID: id,
-                    serverURL: serverURL, authToken: authToken
-                )
-            }
+        try await artistDetail(for: artistRef).albums
+    }
+
+    /// The artist's albums by section search: with "group albums by type" on, PMS
+    /// leaves singles and EPs out of the artist's `/children` (#749).
+    private func albumsMetadata(of artist: PlexMetadata, key: String) async throws -> [PlexMetadata] {
+        guard let section = artist.librarySectionID else {
+            return try await networkManager.getChildren(
+                serverURL: serverURL, authToken: authToken, ratingKey: key
+            ).filter { $0.type == "album" }
         }
+        return try await networkManager.getLibraryItemsWithTotal(
+            serverURL: serverURL, authToken: authToken, sectionId: String(section),
+            size: 1000, type: 9, filters: [URLQueryItem(name: "artist.id", value: key)]
+        ).items
     }
 
     func tracks(for albumRef: MediaItemRef) async throws -> [MusicTrack] {
@@ -207,16 +210,10 @@ final class PlexMusicProvider: MusicProvider, @unchecked Sendable {
 
     func artistDetail(for ref: MediaItemRef) async throws -> MusicArtistDetail {
         try await plexCall {
-            async let metaFetch = networkManager.getFullMetadata(
+            let meta = try await networkManager.getFullMetadata(
                 serverURL: serverURL, authToken: authToken, ratingKey: ref.itemID
             )
-            async let childrenFetch = networkManager.getChildren(
-                serverURL: serverURL, authToken: authToken, ratingKey: ref.itemID
-            )
-            let meta = try await metaFetch
-            let albumsMeta = try await childrenFetch
-
-            let albums = albumsMeta.filter { $0.type == "album" }
+            let albums = try await albumsMetadata(of: meta, key: ref.itemID)
             // TODO(post-wave-1): wire /library/metadata/{id}/similar.
             return PlexMusicMapper.artistDetail(
                 meta,

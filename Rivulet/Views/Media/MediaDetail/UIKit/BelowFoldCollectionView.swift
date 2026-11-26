@@ -1065,6 +1065,9 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     /// The `onScroll` value at the details rest, where the pills sit at their resting Y.
     var detailsRestOff: CGFloat { max(0, bounds.height - Self.episodePeek - detailsTopY) }
 
+    /// False until a load lands: Down must not slide into an empty page, where focus has nowhere to go.
+    var hasRows: Bool { !sectionKinds.isEmpty }
+
     /// Whether focus is on the episodes (top) row vs a lower section. Drives the
     /// Up handler: episodes → pills; lower section → let the engine move up.
     var focusIsOnEpisodes: Bool { collectionView.focusedCellIsTopSection }

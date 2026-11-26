@@ -1342,7 +1342,7 @@ final class PreviewCarouselViewController: UIViewController {
 
     /// Down from the expanded hero: slides into the below-fold details, then hands focus in.
     private func enterBelowFold() {
-        guard state.phase == .expandedHero else { return }
+        guard state.phase == .expandedHero, expandedDetail.belowFoldCollection.hasRows else { return }
         state.markDetailsStable()
         // Always enter on the episodes, never stale on the pills.
         expandedDetail.detailsFocusTarget = .episodes

@@ -252,7 +252,7 @@ private struct IOSPlexLibraryRecommendedView: View {
         }
     }
 
-    private func reload() async {
+    private func reload(retriesCancellation: Bool = true) async {
         isLoading = true
         defer { isLoading = false }
         do {
@@ -260,7 +260,11 @@ private struct IOSPlexLibraryRecommendedView: View {
             rows = try await HomeFeed.libraryRows(provider, library)
             error = nil
             loadedRevision = browse.watchStateRevision
-        } catch let error where isCancellationError(error) {
+        } catch let error where isCancellationError(error) && Task.isCancelled {
+            // This task was cancelled: its replacement or reappearance loads again.
+        } catch let error where isCancellationError(error) && retriesCancellation {
+            // The request was cancelled under a live task (#701): ask once more.
+            await reload(retriesCancellation: false)
         } catch {
             self.error = error.localizedDescription
         }

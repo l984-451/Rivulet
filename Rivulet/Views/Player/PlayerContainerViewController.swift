@@ -919,18 +919,12 @@ class PlayerContainerViewController: UIViewController {
         }
     }
 
-    /// Select with nothing else focused brings the controls up on the scrubber,
-    /// where the next Select toggles playback (#410). With the controls already
-    /// on screen it toggles playback at once.
+    /// Select with nothing else focused toggles playback and brings the controls up
+    /// on the scrubber, as AVKit's click does (#410); a touch-surface tap only shows them.
     private func selectFromContent() {
-        guard let vm = viewModel, !vm.playbackState.isFailed else { return }
-        let chromeUp = vm.showControls && !vm.showPausedPoster
+        guard viewModel?.playbackState.isFailed == false else { return }
         withAnimation(.easeInOut(duration: 0.25)) {
-            if chromeUp {
-                inputCoordinator.handle(action: .playPause, source: .irPress)
-            } else {
-                vm.showControlsTemporarily()
-            }
+            inputCoordinator.handle(action: .playPause, source: .irPress)
         }
         focusScrubber()
     }

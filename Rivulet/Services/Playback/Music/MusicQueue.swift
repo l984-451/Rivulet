@@ -609,7 +609,10 @@ final class MusicQueue: ObservableObject {
 
         progressTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                guard let self, self.playbackState == .playing || self.playbackState == .paused else { return }
+                // A song paused under a film or channel stays quiet: its reports took over
+                // the device's one Jellyfin session from the film every 5 s (#763 diagnostics).
+                guard let self, !self.videoOwnsNowPlaying,
+                      self.playbackState == .playing || self.playbackState == .paused else { return }
                 let state = self.playbackState == .playing ? "playing" : "paused"
                 if let reporter = self.reporter {
                     let time = self.currentTime
@@ -623,15 +626,11 @@ final class MusicQueue: ObservableObject {
                     )
                 }
 
-                // Update Now Playing time, unless a video owns the entry
-                // (see `videoOwnsNowPlaying`).
-                if !self.videoOwnsNowPlaying {
-                    self.nowPlayingBridge.updateTime(
-                        currentTime: self.currentTime,
-                        duration: durationSec,
-                        isPlaying: self.playbackState == .playing
-                    )
-                }
+                self.nowPlayingBridge.updateTime(
+                    currentTime: self.currentTime,
+                    duration: durationSec,
+                    isPlaying: self.playbackState == .playing
+                )
             }
         }
     }

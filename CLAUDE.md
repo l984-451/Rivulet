@@ -477,15 +477,21 @@ focusless AND single-transport, or when a needed hand-off is press-only.
   `guard presentedViewController == nil else { super.pressesBegan(...); return }`
   and gate its swipe recognizers the same way. Without it, Down on the show
   page's Watched alert also scrolled `PreviewCarouselViewController` behind it.
-- **The VOD player's content state has ONE press owner.**
-  `PlayerContainerViewController`'s `pressesBegan`/`Ended` ("Content-state
-  presses") handle Left/Right/Up/Down/Select whenever no control holds focus,
-  reached from `ContentFocusAnchorView`, an invisible UIKit focus stop. Do not
+- **Both players share one control source: `PlayerRemoteInput`** (`Views/Player/UIKit/`).
+  VOD (`PlayerContainerViewController`) and Live TV (`LiveTVAetherPlayerViewController`)
+  forward presses to it and implement `PlayerRemoteInputHost`; each scrubs through its own
+  `PlayerScrubSession` (VOD over the duration, Live over the timeshift window). How a click,
+  tap, swipe, hold, edge click or ring jog is read lives there once, matching Apple's player
+  (a click pauses and shows the timeline, a tap only shows it, swipes scrub only while
+  paused). Never add input handling to one player alone.
+- **The players' content state has ONE press owner.**
+  `PlayerRemoteInput`'s press grammar handles Left/Right/Up/Down/Select whenever no
+  control holds focus, reached from `ContentFocusAnchorView`, an invisible UIKit focus stop. Do not
   put focus back on a SwiftUI layer there (arrow presses to a focused SwiftUI
   item never reliably reached UIKit, which is why IR/CEC and clicks-only Siri
   Remotes could not skip: #212, #232, #305), and do not add a GameController
   listener for anything that also arrives as a `UIPress`:
-  `RemoteInputHandler` (in `UniversalPlayerView.swift`) acts only on input
+  `RemoteInputHandler` (in `UniversalPlayerView.swift`, started by `PlayerRemoteInput`) acts only on input
   with no `UIPress` (clickpad rotation, shoulders, X). Tap-vs-hold is
   still duration-based (`DirectionalPressDetector`); how a held IR button
   arrives (#212) still wants InputProbe field data.

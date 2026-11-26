@@ -278,7 +278,11 @@ struct TVSidebarView: View {
         }
         .task(id: authManager.hasCredentials) {
             StartupTimer.mark("TVSidebar .task entry")
-            guard authManager.hasCredentials else { return }
+            guard authManager.hasCredentials else {
+                // No Plex account, so no profile gate: a Jellyfin or Emby link may open now (#763).
+                deepLinkHandler.isShellReady = true
+                return
+            }
 
             // A saved profile with no stored token of its own: nothing may load
             // until plex.tv lets it in, so resolve it now instead of deferring.

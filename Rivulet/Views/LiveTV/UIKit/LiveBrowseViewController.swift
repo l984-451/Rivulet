@@ -499,6 +499,14 @@ final class LiveBrowseViewController: UIViewController {
         snapshot.reconfigureItems(built.map(\.id).filter(existing.contains))
         dataSource.apply(snapshot, animatingDifferences: false)
 
+        // Stand-in cards take no focus, so the collection view itself holds it until real
+        // cards exist, and the shell sees that as content focus and stops asking.
+        if UIFocusSystem.focusSystem(for: view)?.focusedItem === collectionView, hasBuiltShelves {
+            collectionView.layoutIfNeeded()
+            setNeedsFocusUpdate()
+            updateFocusIfNeeded()
+        }
+
         // Keep the header in step with a card whose programme just changed,
         // and give it something to say before anything has focus.
         if let focused = focusedItem() {

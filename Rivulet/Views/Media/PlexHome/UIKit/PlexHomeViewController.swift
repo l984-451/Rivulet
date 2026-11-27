@@ -757,7 +757,10 @@ final class PlexHomeViewController: UIViewController {
             return false  // Watchlist is the grid alone
         case .collection, .playlist:
             return false  // A collection page is its title and grid
-        case .playlists, .favorites:
+        case .favorites:
+            // Favorites leads with a hero of its own titles, under the library pages' Hero switch.
+            return (UserDefaults.standard.object(forKey: "showLibraryHero") as? Bool) ?? true
+        case .playlists:
             return false  // The grid alone, like Watchlist
         }
     }
@@ -1644,6 +1647,7 @@ final class PlexHomeViewController: UIViewController {
                 // Favorites show the list as two rows, not a grid of slots: rebuild and repaint them.
                 if case .favorites = self.mode {
                     self.applySnapshot(animated: false)
+                    self.updateBackdropForCurrentHeroItem()
                     self.reconfigureFavoriteTiles()
                     self.updateHomeState()
                     return
@@ -1847,6 +1851,40 @@ final class PlexHomeViewController: UIViewController {
     /// so `applySnapshot` alone won't re-vend the cell. Guards on
     /// `sectionIdentifiers.contains` — NOT `itemIdentifiers(inSection:)`,
     /// which throws when the section is absent.
+    /// Clears the focused look TVPosterView sometimes leaves on unfocused tiles
+    /// (`PosterCell.resetStaleFocusAppearance`), here every tile of every visible row.
+    private func resetStaleTileFocus() {
+        func walk(_ view: UIView) {
+            if let cell = view as? PosterCell { cell.resetStaleFocusAppearance(); return }
+            view.subviews.forEach(walk)
+        }
+        walk(collectionView)
+    }
+
+    /// The Favorites header: title, the filtered count and one filter button.
+    private func configureFavoritesHeader(_ cell: MediaLibrarySortControl) {
+        let filter = FavoritesWatchFilter.current
+        let menu = UIMenu(children: FavoritesWatchFilter.allCases.map { option in
+            UIAction(title: option.title, state: option == filter ? .on : .off) { [weak self] _ in
+                guard let self, option != FavoritesWatchFilter.current else { return }
+                FavoritesWatchFilter.current = option
+                // Rows out, then back in, as a library reloads on a new sort: their tiles come back
+                // fresh, never with a focused look left from before. The header, holding focus, stays.
+                var cleared = self.dataSource.snapshot()
+                cleared.deleteSections([HomeSectionID.favoriteMovies, .favoriteShows].filter(cleared.sectionIdentifiers.contains))
+                self.dataSource.apply(cleared, animatingDifferences: false)
+                self.applySnapshot(animated: false)
+                self.refreshSortHeaderCount()
+                self.updateBackdropForCurrentHeroItem()
+                DispatchQueue.main.async { [weak self] in self?.resetStaleTileFocus() }
+            }
+        })
+        cell.configure(title: String(localized: "Favorites"),
+                       count: filter.apply(gridItems.compactMap { $0 }).count,
+                       sortName: filter.title, sortMenu: menu, view: .titles, viewMenu: nil,
+                       sortSymbol: "line.3.horizontal.decrease")
+    }
+
     private func refreshSortHeaderCount() {
         var snap = dataSource.snapshot()
         guard snap.sectionIdentifiers.contains(.sortHeader) else { return }
@@ -2060,6 +2098,8 @@ final class PlexHomeViewController: UIViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        // Favorites shown again (from Home or the sidebar) shows no tile left looking focused.
+        if case .favorites = mode { resetStaleTileFocus() }
         // Collection page: own Menu from the start of the blur-fade (see
         // handleMenuBack). The library that presented it already installed
         // the interceptor; viewDidAppear registering again is harmless.
@@ -2156,6 +2196,12 @@ final class PlexHomeViewController: UIViewController {
         let prevInside = context.previouslyFocusedView?.isDescendant(of: collectionView) == true
         let nextInside = context.nextFocusedView?.isDescendant(of: collectionView) == true
         guard !prevInside, nextInside else { return }
+        // Focus back on Favorites clears a focused look a rebuilt row's tiles were left with.
+        if case .favorites = mode {
+            // At once, before the move animates, and again once it ends.
+            resetStaleTileFocus()
+            coordinator.addCoordinatedAnimations(nil) { [weak self] in self?.resetStaleTileFocus() }
+        }
         let landed = context.nextFocusedView
         for case let row as ShelfRowCell in collectionView.visibleCells {
             let landedIndex = row.rowCollectionView.visibleCells.first {
@@ -2180,7 +2226,10 @@ final class PlexHomeViewController: UIViewController {
     /// (home, library, discover) tops out at the hero; Search has no hero, so
     /// its first section is the top.
     private var topSectionIndex: Int {
-        heroSectionIndex ?? (isDrillInPage ? gridSectionIndex : nil) ?? 0
+        // The Favorites filter header sits above the first row; the first row stays the
+        // top, so Menu from it (or from the header) goes to the sidebar as it did without the header.
+        if case .favorites = mode, case .sortHeader? = sectionsSnapshot.first?.kind, sectionsSnapshot.count > 1 { return 1 }
+        return heroSectionIndex ?? (isDrillInPage ? gridSectionIndex : nil) ?? 0
     }
 
     /// Set while a staged Menu back is pulling focus to the top section. Only
@@ -2336,6 +2385,8 @@ final class PlexHomeViewController: UIViewController {
         // the guard below clears the backdrop.
         var isMediaItemHero = providerLibrary != nil
         if case .discover = mode { isMediaItemHero = true }
+        // The Favorites hero is MediaItems too; read as Plex's, its empty list cleared the first slide.
+        if case .favorites = mode { isMediaItemHero = true }
         let isHomeMediaHero = { if case .home = mode { homeHeroSource != .plex } else { false } }()
         if isMediaItemHero || isHomeMediaHero || heroShowsList {
             // Home's list is computed rather than read off the snapshot: the
@@ -2982,8 +3033,10 @@ final class PlexHomeViewController: UIViewController {
         let section = NSCollectionLayoutSection(group: group)
         // On the content margin from the PANEL edge, like the grid below it.
         section.contentInsetsReference = .none
+        // Under the Favorites hero the header steps down, clear of the slide's dots.
+        let belowHero: Bool = { if case .favorites = mode { return heroSectionIndex != nil } else { return false } }()
         section.contentInsets = NSDirectionalEdgeInsets(
-            top: 0, leading: MediaRowMetrics.rowLeading, bottom: 24, trailing: MediaRowMetrics.rowTrailing)
+            top: belowHero ? 60 : 0, leading: MediaRowMetrics.rowLeading, bottom: 24, trailing: MediaRowMetrics.rowTrailing)
         return section
     }
 
@@ -3364,6 +3417,10 @@ final class PlexHomeViewController: UIViewController {
                 return cell
             }
             let cell = collectionView.dequeueReusableCell(withReuseIdentifier: MediaLibrarySortControl.reuseID, for: indexPath) as! MediaLibrarySortControl
+            if case .favorites = mode {
+                configureFavoritesHeader(cell)
+                return cell
+            }
             // Read only when the cell is dequeued or reconfigured, which is why
             // a changed list calls refreshSortHeaderCount().
             let modes: [LibraryViewMode] = [.titles] + (libraryCollections.isEmpty ? [] : [.collections])
@@ -4775,12 +4832,16 @@ final class PlexHomeViewController: UIViewController {
         // Every server's favorites as Home's rows: Movies, then Shows, each by title.
         // A Recently Added-kind row, so tap, tile menu and captions are Home's.
         if case .favorites = mode {
-            let items = gridItems.compactMap { $0 }
+            // The Favorites filter (All, Unwatched, Watched) under a header like a library's.
+            let items = FavoritesWatchFilter.current.apply(gridItems.compactMap { $0 })
+            let header: [HomeSectionData] = gridItems.isEmpty ? [] : [.sortHeader(title: String(localized: "Favorites"))]
+            let hero = showHomeHero ? HomeHero.favoriteItems(items) : []
+            let heroSection: [HomeSectionData] = hero.isEmpty ? [] : [.discoverHero(items: hero)]
             func row(_ id: HomeSectionID, _ title: String, _ items: [MediaItem]) -> [HomeSectionData] {
                 items.isEmpty ? [] : [.hub(id: id, title: title, items: items, isContinueWatching: false,
                                            hubKey: nil, hubIdentifier: nil)]
             }
-            return row(.favoriteMovies, String(localized: "Movies"), items.filter { $0.kind == .movie })
+            return heroSection + header + row(.favoriteMovies, String(localized: "Movies"), items.filter { $0.kind == .movie })
                 + row(.favoriteShows, String(localized: "Shows"), items.filter { $0.kind != .movie })
         }
         // Title, Play and Shuffle ride the header cell; `topSectionIndex` keeps Menu dismissing.
@@ -6834,6 +6895,13 @@ final class PlexHomeViewController: UIViewController {
         // would swallow Menu and arrows / Select would drive the hidden page.
         if isDrillInPage, case .loading = pageZero {
             return [collectionFocusAnchor]
+        }
+        // Focus coming back to Favorites lands on the first row, not the filter button it
+        // left from. Landing on the button flashed every tile focused; landing on a tile never did.
+        if case .favorites = mode, case .sortHeader? = sectionsSnapshot.first?.kind, sectionsSnapshot.count > 1,
+           (UIFocusSystem.focusSystem(for: view)?.focusedItem as? UIView)?.isDescendant(of: collectionView) != true,
+           let row = collectionView.cellForItem(at: IndexPath(item: 0, section: 1)) {
+            return [row]
         }
         // Strip idle return / letter stepping: land on the jumped-to slot.
         if wantsPendingGridFocus {

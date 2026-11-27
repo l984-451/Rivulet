@@ -339,6 +339,16 @@
         }
       }
     },
+    "No favorites match this filter." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Favoriten passen zu diesem Filter."
+          }
+        }
+      }
+    },
     "No room has that code. Rooms end when everyone leaves." : {
       "localizations" : {
         "de" : {
@@ -558,6 +568,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Conversion par le serveur"
+          }
+        }
+      }
+    },
+    "Show all favorites, the unwatched ones or the watched ones" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Favoriten zeigen, nur ungesehene oder nur gesehene"
           }
         }
       }

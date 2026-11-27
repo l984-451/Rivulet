@@ -48,6 +48,8 @@ struct IOSLibrarySettingsView: View {
 
 /// Account > Playback: streaming quality, skip buttons, automatic skips and the markers they use.
 struct IOSPlaybackSettingsView: View {
+    @AppStorage(IOSAutoLandscapePreference.key) private var autoLandscape = false
+    @State private var showsBetaSettings = false
     @AppStorage(SkipLengthKeys.back) private var skipBackwardSeconds = 10
     @AppStorage(SkipLengthKeys.forward) private var skipForwardSeconds = 30
     /// Observed so the skip pickers redraw (and Credits); read and written through `MarkerSkipMode`.
@@ -69,6 +71,14 @@ struct IOSPlaybackSettingsView: View {
 
     var body: some View {
         Form {
+            if showsBetaSettings {
+                Section {
+                    Toggle("Auto Landscape", isOn: $autoLandscape)
+                } footer: {
+                    Text("Starts full-screen video in landscape when supported, even with Portrait Orientation Lock on.")
+                }
+            }
+
             audioAndSubtitles
 
             Section {
@@ -132,6 +142,7 @@ struct IOSPlaybackSettingsView: View {
             }
         }
         .navigationTitle("Playback")
+        .task { showsBetaSettings = await IOSPlaybackBeta.isAvailable() }
     }
 
     /// Same intents as the tvOS Audio & Subtitles settings, saved per Plex profile.

@@ -251,8 +251,15 @@ private struct IOSPlaybackHost: ViewModifier {
                 message: { Text(controller.playbackError ?? "") }
             )
             .fullScreenCover(isPresented: $controller.isPresented, onDismiss: controller.presentationDismissed) {
-                if let session = controller.session {
-                    session.screen(controller)
+                Group {
+                    if let session = controller.session {
+                        session.screen(controller)
+                    }
+                }
+                .background {
+                    IOSAutoLandscape(isPlayerPresented: { controller.isPresented })
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
                 }
             }
     }

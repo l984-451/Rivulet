@@ -12,6 +12,7 @@ final class FocusScrollControlledCollectionView: UICollectionView {
     /// Fires on every focus change — the newly-focused index path, or nil when
     /// focus leaves the collection. Used to track which episode/season is current.
     var onFocusedIndexPath: ((IndexPath?) -> Void)?
+    var onFocusScrollRequest: ((CGFloat) -> Bool)?
 
     /// Focus is on the top section, the only one Up lifts to the pills from.
     private(set) var focusedCellIsTopSection = false {
@@ -63,13 +64,21 @@ final class FocusScrollControlledCollectionView: UICollectionView {
         focusedEpisodeIndexPath = isTop ? cellIndexPath : nil
         // The one place the path is resolved for every row shape.
         if let cellIndexPath { lastFocusedIndexPath = cellIndexPath }
-        nativeScroll.focusChanged(to: nextView, target: restingOffset(for: nextView))
+        let target = restingOffset(for: nextView)
+        if let target, onFocusScrollRequest?(target.y) == true {
+            nativeScroll.cancel()
+            return
+        }
+        nativeScroll.focusChanged(to: nextView, target: target)
     }
 
-    private func restingOffset(for view: UIView) -> CGPoint? {
+    func restingOffset(for view: UIView) -> CGPoint? {
         guard view.isDescendant(of: self), let cell = enclosingCell(of: view) else { return nil }
-        let frame = cell.convert(cell.bounds, to: self)
-        let path = indexPath(for: cell) ?? ownedCell(containing: view)?.indexPath
+        let owner = ownedCell(containing: view)
+        // A focus destination must outlive the outer row's temporary slide translation.
+        let rowTranslation = owner?.cell.transform.ty ?? 0
+        let frame = cell.convert(cell.bounds, to: self).offsetBy(dx: 0, dy: -rowTranslation)
+        let path = indexPath(for: cell) ?? owner?.indexPath
         let isTop = topSectionIndex != nil && path?.section == topSectionIndex
         let minY = -adjustedContentInset.top
         let maxY = max(minY, contentSize.height - bounds.height + adjustedContentInset.bottom)

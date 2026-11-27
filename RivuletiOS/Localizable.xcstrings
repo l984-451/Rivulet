@@ -2675,6 +2675,9 @@
         }
       }
     },
+    "Back" : {
+
+    },
     "Back %lld seconds" : {
       "localizations" : {
         "de" : {

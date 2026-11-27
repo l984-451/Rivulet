@@ -18,6 +18,7 @@ struct IOSRootView: View {
     @State private var choosingProfile = false
     @AppStorage("lastSeenBuild") private var lastSeenBuild = ""
     @AppStorage(IOSLibrarySettingsView.showPlaylistsKey) private var showPlaylists = true
+    @AppStorage("showFavoritesTab") private var showFavorites = false
     /// The iPad sidebar's own tab customization: a library dragged into the top bar stays there.
     @AppStorage("iosTabCustomization") private var tabCustomization = TabViewCustomization()
     @ObservedObject private var liveTV = LiveTVDataStore.shared
@@ -29,6 +30,11 @@ struct IOSRootView: View {
     /// Each sidebar library tab's pushed pages, by tab value, so they can follow the
     /// library into the Library tab when the window narrows and the tab goes away.
     @State private var sidebarPaths: [String: NavigationPath] = [:]
+    /// Where the tab view shows its tabs, as the tabs' content reports it (only content can
+    /// read it): the iPad sidebar or the top bar. Nil until the first report.
+    @State private var tabBarPlacement: TabBarPlacement?
+    /// The library menu on the top bar's Library item.
+    @State private var showingLibraryMenu = false
     @Namespace private var homeZoom
     @Namespace private var discoverZoom
     @Namespace private var libraryZoom
@@ -47,7 +53,7 @@ struct IOSRootView: View {
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
+        TabView(selection: tabSelection) {
             Tab("Home", systemImage: "house", value: "home") {
                 tabStack(homeZoom) {
                     IOSPlexHomeView().environment(\.launchHeroReady) { splashGate.heroIsReady() }
@@ -69,8 +75,10 @@ struct IOSRootView: View {
                         // A server or profile switch drops the split: its pages hold the old one's items.
                         .id(browse.sessionGeneration)
                         .environment(\.plexZoomNamespace, libraryZoom)
+                        .reportsTabBarPlacement($tabBarPlacement)
                 }
                 // The sidebar lists each library itself, so the list tab would repeat it.
+                // On iPad at full width this tab hands its library to the library's own tab.
                 .defaultVisibility(.hidden, for: .sidebar)
                 .customizationID("library")
                 .customizationBehavior(.disabled, for: .sidebar, .tabBar)
@@ -80,6 +88,13 @@ struct IOSRootView: View {
                     }
                     .defaultVisibility(.hidden, for: .tabBar)
                     .customizationID("downloads")
+                }
+                if showsSidebarLibraries, showsFavorites {
+                    Tab("Favorites", systemImage: "heart", value: "favorites") {
+                        sidebarStack("favorites") { IOSFavoritesView(showsAccount: true) }
+                    }
+                    .defaultVisibility(.hidden, for: .tabBar)
+                    .customizationID("favorites")
                 }
                 // Not by `id`: that is the server's own section number, so two servers collide and UIKit's sidebar throws.
                 ForEach(showsSidebarLibraries ? videoLibraries : [], id: \.self) { library in
@@ -100,10 +115,16 @@ struct IOSRootView: View {
                 }
             }
             .customizationID("librarySection")
+            // The top bar shows the whole section as one Library item, so the menu hangs from it.
+            .popover(isPresented: $showingLibraryMenu) {
+                IOSLibraryMenu(selection: librarySelection(forTab: selectedTab) ?? librarySelection, pick: pickLibrary)
+                    .iosSessionObjects(plex)
+            }
             // Only with a source, as tvOS's sidebar: adding the first one is under Account > Live TV.
             if showsLiveTV {
                 Tab("Live TV", systemImage: "play.tv", value: "live-tv") {
                     NavigationStack { IOSLiveTVView() }
+                        .reportsTabBarPlacement($tabBarPlacement)
                 }
                 .customizationID("live-tv")
             }
@@ -174,10 +195,15 @@ struct IOSRootView: View {
         }
         // Stage Manager and Split View resize the window: at compact width the sidebar's
         // library tabs vanish, and the one in use folds into the Library tab. Back at
-        // regular width the Library tab's library returns to its sidebar tab.
+        // regular width it returns to its own tab.
         .onChange(of: showsSidebarLibraries) { _, sidebar in
-            if sidebar { unfoldLibraryTab() } else { foldSidebarTab() }
+            if sidebar { placeLibraryTab() } else { foldSidebarTab() }
         }
+        // The tab view's first report, the Library tab picked, or a library loaded.
+        .onChange(of: tabBarPlacement) { placeLibraryTab() }
+        .onChange(of: selectedTab) { placeLibraryTab() }
+        .onChange(of: sidebarTabs) { placeLibraryTab() }
+        .onChange(of: browse.isLoadingContent) { placeLibraryTab() }
         // Without Plex there is no Discover tab, at launch or after signing out: Home takes its place.
         .onChange(of: showsDiscover, initial: true) { _, shows in
             if !shows, selectedTab == "discover" { selectedTab = "home" }
@@ -205,6 +231,35 @@ struct IOSRootView: View {
             if !loading, !browse.libraries.isEmpty { dropOrphanedLibraryTab() }
         }
         .onChange(of: playlistServers) { if !browse.isLoadingOtherServers { dropOrphanedLibraryTab() } }
+        .onChange(of: showsFavorites) { if !browse.isLoadingOtherServers { dropOrphanedLibraryTab() } }
+    }
+
+    /// The tab view's selection. Only a tap in the tab bar or sidebar writes through it; the
+    /// root's own switches set `selectedTab`. Under the top bar, a tap on Library, from another
+    /// tab or on Library itself, also opens the library menu. That item is the whole section and
+    /// selects whichever of its tabs was picked last, so any of them counts, except a library
+    /// dragged into the top bar as its own item: a tap there just opens it.
+    private var tabSelection: Binding<String> {
+        Binding(get: { selectedTab }, set: { tab in
+            if tab == "library" || Self.isSidebarTab(tab), showsSidebarLibraries, tabBarPlacement == .topBar,
+               tabCustomization[tab: tab].tabBarVisibility != .visible {
+                showingLibraryMenu = true
+            }
+            selectedTab = tab
+        })
+    }
+
+    /// A pick in the library menu opens that page's own tab as it was left, as the sidebar does.
+    private func pickLibrary(_ picked: IOSLibrarySelection) {
+        showingLibraryMenu = false
+        let tab = tab(for: picked)
+        if sidebarTabs.contains(tab) {
+            selectedTab = tab
+            return
+        }
+        if picked != librarySelection { libraryPath = NavigationPath() }
+        librarySelection = picked
+        selectedTab = "library"
     }
 
     /// A library gone from the server or hidden in Settings leaves the selection.
@@ -233,6 +288,14 @@ struct IOSRootView: View {
         selectedTab = "library"
     }
 
+    /// On iPad at full width each library has its own tab, under the sidebar and the top bar
+    /// alike: the sidebar selects it, and the top bar's Library reopens the one picked last and
+    /// its menu picks another. So the Library tab's library carries on in its own tab, and
+    /// showing or hiding the sidebar changes no page. Compact width is `foldSidebarTab`'s.
+    private func placeLibraryTab() {
+        if showsSidebarLibraries { unfoldLibraryTab() }
+    }
+
     /// The window narrowed: the sidebar tab's library, and the pages pushed over it,
     /// carry on in the Library tab's detail column.
     private func foldSidebarTab() {
@@ -247,26 +310,29 @@ struct IOSRootView: View {
         selectedTab = "library"
     }
 
-    /// The window widened: the Library tab's library, and the pages pushed over it,
-    /// carry on in that library's sidebar tab.
+    /// iPad at full width: the Library tab's library, and the pages pushed over it,
+    /// carry on in that library's own tab. With none picked (or one gone), the first
+    /// library opens, as the split view picks it; with no library loaded yet, it waits, and
+    /// a load that found none (offline, failed) leaves Downloads.
     private func unfoldLibraryTab() {
-        guard selectedTab == "library", let selection = librarySelection else { return }
-        let tab = tab(for: selection)
-        guard sidebarTabs.contains(tab) else { return }
-        sidebarPaths[tab] = libraryPath
+        guard selectedTab == "library" else { return }
+        let picked = librarySelection.map(tab(for:)).flatMap { sidebarTabs.contains($0) ? $0 : nil }
+        let settled = browse.hasRefreshed && !browse.isLoadingContent
+        guard let target = picked ?? videoLibraries.first.map(libraryTab) ?? (settled ? "downloads" : nil) else { return }
+        sidebarPaths[target] = picked != nil ? libraryPath : NavigationPath()
         libraryColumn = .sidebar
         libraryPath = NavigationPath()
-        selectedTab = tab
+        selectedTab = target
     }
 
     private static func isSidebarTab(_ tab: String) -> Bool {
-        tab.hasPrefix("library:") || tab.hasPrefix("playlists:") || tab == "downloads"
+        tab.hasPrefix("library:") || tab.hasPrefix("playlists:") || tab == "downloads" || tab == "favorites"
     }
 
     private func tab(for selection: IOSLibrarySelection) -> String {
         switch selection {
         case .downloads: "downloads"
-        case .favorites: "favorites"  // not a sidebar tab: stays under Library
+        case .favorites: "favorites"
         case .library(let library): libraryTab(library)
         case .playlists(let providerID): playlistsTab(providerID)
         }
@@ -274,6 +340,7 @@ struct IOSRootView: View {
 
     private func librarySelection(forTab tab: String) -> IOSLibrarySelection? {
         if tab == "downloads" { return .downloads }
+        if tab == "favorites", showsFavorites { return .favorites }
         if let library = videoLibraries.first(where: { libraryTab($0) == tab }) { return .library(library) }
         if let id = playlistServers.first(where: { playlistsTab($0) == tab }) { return .playlists(providerID: id) }
         return nil
@@ -283,7 +350,11 @@ struct IOSRootView: View {
     private var sidebarTabs: [String] {
         guard showsSidebarLibraries else { return [] }
         return videoLibraries.map(libraryTab) + playlistServers.map(playlistsTab) + ["downloads"]
+            + (showsFavorites ? ["favorites"] : [])
     }
+
+    /// The Library list's Favorites row, which Account > Library turns on.
+    private var showsFavorites: Bool { showFavorites && browse.offersFavorites }
 
     /// iPad only: a Plus/Max/Air iPhone is regular width in landscape, and tabs added
     /// there crashed UIKit's tab bar rebuild on rotation.
@@ -305,7 +376,6 @@ struct IOSRootView: View {
     private func libraryTab(_ library: MediaLibrary) -> String { "library:\(library.providerID)|\(library.id)" }
     private func playlistsTab(_ providerID: String) -> String { "playlists:\(providerID)" }
 
-    /// The sidebar's Downloads tab on iPad, else the list pushed on the Library tab.
     /// Once per build, at launch and only when signed in, so it never stacks on the sign-in sheet.
     private func showWhatsNewIfUpdated() {
         let current = IOSChangelog.currentVersion
@@ -343,10 +413,13 @@ struct IOSRootView: View {
             librarySelection = .library(library)
             try? await Task.sleep(for: .seconds(2))
         }
-        libraryPath = NavigationPath([IOSPlexDetailRoute(item: item, scope: "")])
+        let path = NavigationPath([IOSPlexDetailRoute(item: item, scope: "")])
+        // On iPad at full width, the library has moved to its own tab.
+        if Self.isSidebarTab(selectedTab) { sidebarPaths[selectedTab] = path } else { libraryPath = path }
     }
     #endif
 
+    /// The Downloads tab on iPad at full width, else Downloads in the Library tab.
     private func openDownloads() {
         if showsSidebarLibraries {
             selectedTab = "downloads"
@@ -366,6 +439,7 @@ struct IOSRootView: View {
         // A server or profile switch pops every stack: open pages hold the old one's items.
         .id(browse.sessionGeneration)
         .environment(\.plexZoomNamespace, namespace)
+        .reportsTabBarPlacement($tabBarPlacement)
     }
 
     /// A sidebar library tab's stack, its pages kept in `sidebarPaths` under the tab's value.
@@ -378,6 +452,28 @@ struct IOSRootView: View {
         }
         .id(browse.sessionGeneration)
         .environment(\.plexZoomNamespace, sidebarZoom)
+        .reportsTabBarPlacement($tabBarPlacement)
+    }
+}
+
+private extension View {
+    /// Passes the tab view's tab bar placement up to the root, which sits outside the
+    /// tab view where the value is never set. Every tab's content carries this, so the
+    /// root hears the sidebar shown or hidden on whichever tab is in front.
+    func reportsTabBarPlacement(_ placement: Binding<TabBarPlacement?>) -> some View {
+        modifier(TabBarPlacementReporter(reported: placement))
+    }
+}
+
+private struct TabBarPlacementReporter: ViewModifier {
+    @Environment(\.tabBarPlacement) private var placement
+    @Binding var reported: TabBarPlacement?
+
+    func body(content: Content) -> some View {
+        // Nil is an unknown placement, not a change: the last known one stands.
+        content.onChange(of: placement, initial: true) { _, now in
+            if let now, now != reported { reported = now }
+        }
     }
 }
 

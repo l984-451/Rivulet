@@ -4,8 +4,10 @@
 import SwiftUI
 
 /// Every server's favorite movies, then shows, each by title (`FavoritesFeed`).
-/// The tvOS sidebar's Favorites page, as a Library tab row.
+/// The tvOS sidebar's Favorites page, as a Library tab row (and an iPad sidebar tab).
 struct IOSFavoritesView: View {
+    /// Only a tab root shows the avatar; the page beside the Library list does not.
+    var showsAccount = false
     @EnvironmentObject private var browse: BrowseStore
     /// Nil until the first load lands.
     @State private var items: [MediaItem]?
@@ -32,6 +34,9 @@ struct IOSFavoritesView: View {
             }
         }
         .navigationTitle("Favorites")
+        .toolbar {
+            if showsAccount { IOSAccountToolbarItem() }
+        }
         // A favorite change and playback both bump the revision, so the page follows.
         .task(id: browse.watchStateRevision) { await load() }
     }

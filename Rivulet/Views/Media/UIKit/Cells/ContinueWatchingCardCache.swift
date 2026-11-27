@@ -42,18 +42,27 @@ nonisolated extension ContinueWatchingCardCompositor {
         let key = cacheKey(layer, url, geometry, scale)
         if let cached = cache.object(forKey: key) { return cached }
         let diskKey = key as String
-        var rendered = storedImage(diskKey)
-        if rendered == nil {
-            guard let source = await ImageCacheManager.shared.image(for: url)?.cgImage else { return nil }
-            rendered = await offPool {
-                let built: CGImage? = switch layer {
-                case .card: render(still: source, geometry: geometry, scale: scale)
-                case .title: renderTitle(logo: source, geometry: geometry, scale: scale)
-                case .titleStrong: renderTitle(logo: source, geometry: geometry, scale: scale, strongShadow: true)
-                }
-                if let built { store(built, diskKey) }
-                return built
+        // On its own serial queue: this function runs on its caller's actor, which is the main actor
+        // for a cell. The check and the insert happen on the queue, so of several callers for one
+        // layer (a cell and its neighbours' prewarms) only the first reads the file.
+        let stored: UIImage? = await offMain { () -> UIImage? in
+            let storedKey = diskKey as NSString
+            if let cached = cache.object(forKey: storedKey) { return cached }
+            guard let decoded = storedImage(diskKey) else { return nil }
+            let image = UIImage(cgImage: decoded, scale: scale, orientation: .up)
+            cache.setObject(image, forKey: storedKey, cost: decoded.bytesPerRow * decoded.height)
+            return image
+        }
+        if let stored { return stored }
+        guard let source = await ImageCacheManager.shared.image(for: url)?.cgImage else { return nil }
+        let rendered: CGImage? = await offPool {
+            let built: CGImage? = switch layer {
+            case .card: render(still: source, geometry: geometry, scale: scale)
+            case .title: renderTitle(logo: source, geometry: geometry, scale: scale)
+            case .titleStrong: renderTitle(logo: source, geometry: geometry, scale: scale, strongShadow: true)
             }
+            if let built { store(built, diskKey) }
+            return built
         }
         guard let rendered else { return nil }
         let image = UIImage(cgImage: rendered, scale: scale, orientation: .up)
@@ -69,6 +78,15 @@ nonisolated extension ContinueWatchingCardCompositor {
     private static func offPool<T: Sendable>(_ work: @escaping @Sendable () -> T) async -> T {
         await withCheckedContinuation { continuation in
             workQueue.async { continuation.resume(returning: work()) }
+        }
+    }
+
+    /// Reads of stored layers: short, and kept off `workQueue` so they never wait behind a still's analysis.
+    private static let diskQueue = DispatchQueue(label: "rivulet.artwork-disk", qos: .userInitiated)
+
+    private static func offMain<T: Sendable>(_ work: @escaping @Sendable () -> T) async -> T {
+        await withCheckedContinuation { continuation in
+            diskQueue.async { continuation.resume(returning: work()) }
         }
     }
 
@@ -160,7 +178,7 @@ nonisolated extension ContinueWatchingCardCompositor {
 
     private static func storedImage(_ key: String) -> CGImage? {
         guard let url = diskURL(key), let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-        // Decoded here, not on the main thread at first draw.
+        // Decoded here (on `diskQueue`), not on the main thread at first draw.
         return CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary)
     }
 

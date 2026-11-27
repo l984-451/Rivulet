@@ -332,8 +332,16 @@ final class NowPlayingService: ObservableObject {
 
     private func handleLanguageOption(_ event: MPRemoteCommandEvent, enable: Bool) -> MPRemoteCommandHandlerStatus {
         guard let selectTrack else { return .noActionableNowPlayingItem }
-        guard let option = (event as? MPChangeLanguageOptionCommandEvent)?.languageOption else { return .commandFailed }
-        let type = option.languageOptionType
+        guard let option = Self.languageOption(of: event) else {
+            DiagLog.error(.playback, "[tracks] language-option command without an option")
+            return .commandFailed
+        }
+        // A remote may send only an identifier: the published tracks say which kind it is.
+        let id = option.identifier.flatMap(Int.init)
+        let inAudio = id.map { id in publishedAudioTracks.contains { $0.id == id } } ?? false
+        let inSubtitles = id.map { id in publishedSubtitleTracks.contains { $0.id == id } } ?? false
+        let type: MPNowPlayingInfoLanguageOptionType =
+            inAudio != inSubtitles ? (inAudio ? .audible : .legible) : option.languageOptionType
         guard enable else {
             // Only subtitles can be turned off.
             guard type == .legible else { return .commandFailed }
@@ -344,6 +352,19 @@ final class NowPlayingService: ObservableObject {
         guard let id = NowPlayingLanguageOptions.trackId(for: option, in: tracks) else { return .commandFailed }
         selectTrack(type, id)
         return .success
+    }
+
+    /// The option the command carries. From another device (TV Remote app, Home Assistant,
+    /// Unfolded Circle) tvOS leaves `languageOption` nil and passes protobuf bytes in the
+    /// event's MediaRemote options instead (#458).
+    private static func languageOption(of event: MPRemoteCommandEvent) -> MPNowPlayingInfoLanguageOption? {
+        if let option = (event as? MPChangeLanguageOptionCommandEvent)?.languageOption { return option }
+        let key = "mediaRemoteOptions"
+        guard event.responds(to: NSSelectorFromString(key)),
+              let options = event.value(forKey: key) as? [String: Any],
+              let data = options[NowPlayingLanguageOptions.mediaRemoteOptionDataKey] as? Data
+        else { return nil }
+        return NowPlayingLanguageOptions.option(protobuf: data)
     }
 
     // MARK: - Live TV

@@ -92,6 +92,7 @@ final class MusicQueue: ObservableObject {
     func liveTVSessionBegan(_ owner: ObjectIdentifier) {
         liveTVSessions.insert(owner)
         if playbackState == .playing { pause() }  // A channel does not play over a song.
+        timeline.stop(at: currentTime)
     }
 
     func liveTVSessionEnded(_ owner: ObjectIdentifier) { liveTVSessions.remove(owner) }
@@ -109,6 +110,14 @@ final class MusicQueue: ObservableObject {
     private var musicRegistry: MusicProviderRegistry?
     /// The playing track's own play reports (Jellyfin). Nil sends Plex timeline reports.
     private var reporter: (any ProgressReporter)?
+    /// When the track reports to its server: the one rule every player follows.
+    private lazy var timeline = PlaybackTimeline(position: { [weak self] in self?.currentTime ?? 0 }) { [weak self] state, time in
+        self?.timelineReport(state, at: time) ?? { nil }
+    }
+    private let reportLedger = ProviderReportLedger()
+    /// The track the timeline reports for, and its session in the ledger. A new track starts both.
+    private var reportTrack: MusicTrack?
+    private var reportKey = UUID().uuidString
 
     // MARK: - Initialization
 
@@ -125,9 +134,11 @@ final class MusicQueue: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.filmOwnsNowPlaying = true
-                // A film does not play over a song.
-                if self?.playbackState == .playing { self?.pause() }
+                guard let self else { return }
+                self.filmOwnsNowPlaying = true
+                // A film does not play over a song, and the song's session ends under it.
+                if self.playbackState == .playing { self.pause() }
+                self.timeline.stop(at: self.currentTime)
             }
         }
 
@@ -255,7 +266,7 @@ final class MusicQueue: ObservableObject {
     }
 
     func stop() {
-        finishReport(at: currentTime)
+        endReport(at: currentTime)
         resetScan()
         player.stop()
         progressTimer?.invalidate()
@@ -476,7 +487,7 @@ final class MusicQueue: ObservableObject {
     // MARK: - Private Helpers
 
     private func startPlayback(track: MusicTrack) {
-        finishReport(at: currentTime)
+        endReport(at: currentTime)
         resetScan()
         playbackState = .loading
 
@@ -510,7 +521,9 @@ final class MusicQueue: ObservableObject {
                 player.load(url: url, headers: [:], useEngine: MusicCodecPolicy.needsEngine(codec: track.audioCodec),
                             gainDB: MusicAudioProcessor.levelsLoudness ? stream.normalizationGainDB : nil)
                 reporter = provider.progressReporter(for: track.ref, stream: stream)
-                if let reporter { Task { try? await reporter.start(position: 0) } }
+                reportTrack = track
+                reportKey = UUID().uuidString
+                timeline.begin()
 
                 // Update Now Playing
                 nowPlayingBridge.update(
@@ -523,7 +536,7 @@ final class MusicQueue: ObservableObject {
                 )
 
                 // Start progress reporting
-                startProgressTimer(trackRef: track.ref, durationSec: track.duration)
+                startProgressTimer(durationSec: track.duration)
             } catch {
                 print("[MusicQueue] resolveStream failed: \(error)")
                 playbackState = .idle
@@ -558,12 +571,15 @@ final class MusicQueue: ObservableObject {
                 case .loading: self.playbackState = .loading
                 case .playing:
                     self.playbackState = .playing
+                    if !self.videoOwnsNowPlaying { self.timeline.transportChanged(.playing) }
                     // Take back next/previous from the video player, which turns
                     // them off while it owns the command center. A resume after a
                     // film starts no new track, so claiming only on track change
                     // left them dead.
                     if !self.videoOwnsNowPlaying { self.nowPlayingBridge.claimRemoteCommands() }
-                case .paused: self.playbackState = .paused
+                case .paused:
+                    self.playbackState = .paused
+                    if !self.videoOwnsNowPlaying { self.timeline.transportChanged(.paused) }
                 case .ended: self.onTrackEnded()
                 }
             }
@@ -573,7 +589,9 @@ final class MusicQueue: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] time in
                 // A scan owns the clock while it runs.
-                if self?.scanLevel == 0 { self?.currentTime = time }
+                guard let self, self.scanLevel == 0 else { return }
+                self.currentTime = time
+                if !self.videoOwnsNowPlaying { self.timeline.tick(time) }
             }
             .store(in: &cancellables)
 
@@ -586,12 +604,13 @@ final class MusicQueue: ObservableObject {
     }
 
     private func onTrackEnded() {
-        // Mark as watched
-        if reporter != nil {
-            finishReport(at: max(duration, currentTrack?.duration ?? 0))
-        } else if let track = currentTrack {
-            // Plex counts a finished track from its timeline; a scrobble on top counted it twice.
+        let end = max(duration, currentTrack?.duration ?? 0)
+        let isPlex = reporter == nil, track = reportTrack
+        let stopped = endReport(at: end)
+        // Plex counts a finished track from its timeline; a scrobble on top counted it twice.
+        if isPlex, let track {
             Task {
+                await stopped?.value
                 await PlexProgressReporter.shared.markAsWatched(ratingKey: track.ref.itemID,
                                                                 playsBefore: track.userState.playCount)
             }
@@ -606,28 +625,14 @@ final class MusicQueue: ObservableObject {
         }
     }
 
-    private func startProgressTimer(trackRef: MediaItemRef, durationSec: TimeInterval) {
+    private func startProgressTimer(durationSec: TimeInterval) {
         progressTimer?.invalidate()
 
         progressTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
-                // A song paused under a film or channel stays quiet: its reports took over
-                // the device's one Jellyfin session from the film every 5 s (#763 diagnostics).
+                // Now Playing's clock only; the server hears from `timeline`. A film owns the entry.
                 guard let self, !self.videoOwnsNowPlaying,
                       self.playbackState == .playing || self.playbackState == .paused else { return }
-                let state = self.playbackState == .playing ? "playing" : "paused"
-                if let reporter = self.reporter {
-                    let time = self.currentTime
-                    if state == "playing" { await reporter.progress(position: time) } else { await reporter.paused(at: time) }
-                } else {
-                    await PlexProgressReporter.shared.reportProgress(
-                        ratingKey: trackRef.itemID,
-                        time: self.currentTime,
-                        duration: durationSec,
-                        state: state
-                    )
-                }
-
                 self.nowPlayingBridge.updateTime(
                     currentTime: self.currentTime,
                     duration: durationSec,
@@ -637,11 +642,32 @@ final class MusicQueue: ObservableObject {
         }
     }
 
-    /// Ends the previous track's report before a new one starts or the queue stops.
-    private func finishReport(at position: TimeInterval) {
-        guard let reporter else { return }
-        self.reporter = nil
-        Task { await reporter.stopped(at: position) }
+    /// Ends the track's report before a new one starts or the queue stops.
+    @discardableResult
+    private func endReport(at position: TimeInterval) -> Task<Void, Never>? {
+        let stopped = timeline.stop(at: position)
+        reporter = nil
+        reportTrack = nil
+        return stopped
+    }
+
+    /// One report for the timeline, built for the track it reports now.
+    private func timelineReport(_ state: PlaybackTimeline.State, at time: TimeInterval) -> @MainActor () async -> String? {
+        guard let track = reportTrack else { return { nil } }
+        if let reporter {
+            let ledger = reportLedger, key = reportKey
+            // "stopped" through `report`, not `stop`: a song resumed after a film opens again.
+            let name = state == .paused ? "paused" : state == .stopped ? "stopped" : "playing"
+            return { await ledger.report(key, make: { reporter }, state: name, time: time); return nil }
+        }
+        let duration = track.duration
+        return {
+            let result = await PlexProgressReporter.shared.reportProgress(
+                ratingKey: track.ref.itemID, time: time, duration: duration,
+                state: state.rawValue, forceReport: state == .stopped)
+            if case .sent(let termination) = result { return termination }
+            return nil
+        }
     }
 
     private func restoreOriginalOrder() {

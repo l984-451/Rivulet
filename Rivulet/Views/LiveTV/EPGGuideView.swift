@@ -189,27 +189,11 @@ struct EPGGuide: UIViewRepresentable {
         uiView.setMiniSession(miniSession, onSelect: onMiniPlayerSelect,
                               onFocus: { onFocus($0, nil) })
         context.coordinator.updateRecordingMarks(recordingProgramIds)
-        let timelineMoved = context.coordinator.lastTimelineStart.map { $0 != timelineStart } ?? false
-        let dataChanged = context.coordinator.apply(self, to: layout)
-        if dataChanged {
-            cv.reloadData()
-            if transparent, !context.coordinator.didRestScroll {
-                context.coordinator.didRestScroll = true
-                cv.contentOffset = CGPoint(x: -EPGTheme.channelColumnWidth, y: -layout.gridTopInset)
-            } else if timelineMoved {
-                // The grid now starts at a later half hour, so every x shifted.
-                // Keep "now" at the left edge rather than leaving the offset
-                // where it was, which reads as a jump hours to the right.
-                context.coordinator.resetHorizontalScroll()
-            }
-        } else {
-            // Likely just `now` advanced — move the now-line without a reload.
-            layout.invalidateLayout()
-        }
+        context.coordinator.apply(self, to: layout)
         uiView.setClock(now)
         if let request = focusRequest, request != context.coordinator.handledFocusRequest {
             context.coordinator.handledFocusRequest = request
-            context.coordinator.focusLiveProgramme(channelId: request.channelId)
+            context.coordinator.requestLiveFocus(channelId: request.channelId)
         }
     }
 
@@ -221,6 +205,17 @@ struct EPGGuide: UIViewRepresentable {
         private(set) var sections: [UnifiedChannel] = []
         private(set) var programs: [[UnifiedProgram]] = []
         private var lastSignature: Int = 0
+        /// The newest data a build has not started on, and whether one runs.
+        private var wanted: EPGGuide?
+        private var isBuilding = false
+        /// A focus request made while a build is pending; it lands once the rows do.
+        private var deferredFocusChannelId: String?
+        private(set) var installCount = 0
+        var hasDeferredFocus: Bool { deferredFocusChannelId != nil }
+        /// The timeline the installed rows were built for. Not `parent`'s, which
+        /// is ahead of the grid while a build runs.
+        private var gridStart = Date()
+        private var gridMinutes = 0
         private var currentSection = 0
         private var pendingFocus: IndexPath?
         var didRestScroll = false
@@ -233,7 +228,7 @@ struct EPGGuide: UIViewRepresentable {
         /// While `Date() < freeScrollUntil` the timeline may scroll horizontally.
         private var freeScrollUntil: Date = .distantPast
         private(set) var currentFocusedIsLive = false
-        var lastTimelineStart: Date?
+        private var lastTimelineStart: Date?
         var handledFocusRequest: EPGFocusRequest?
 
         /// The time a vertical move keeps. Up/Down should land on what airs at
@@ -248,14 +243,15 @@ struct EPGGuide: UIViewRepresentable {
 
         init(_ parent: EPGGuide) { self.parent = parent }
 
-        /// Pushes data into the layout. Returns true if channels/programs changed.
-        @discardableResult
-        func apply(_ p: EPGGuide, to layout: EPGLayout) -> Bool {
+        /// Rebuilds the rows when the data changed. A small guide builds in place;
+        /// a large one builds off the main actor, and the newest data wins.
+        func apply(_ p: EPGGuide, to layout: EPGLayout) {
             // Signature to detect data changes. Includes logoURL so a late
             // channel-logo patch triggers a reload, and per-channel programme
             // counts and ends so EPG arriving AFTER the channels (Rivulet loads
             // them separately) reloads the grid and the rows populate.
             var sig = Hasher()
+            var work = 0
             sig.combine(p.channels.count)
             for c in p.channels {
                 let guide = p.programsByChannel[c.id]
@@ -264,6 +260,7 @@ struct EPGGuide: UIViewRepresentable {
                 sig.combine(guide?.count ?? 0)
                 sig.combine(guide?.first?.id)
                 sig.combine(guide?.last?.id)
+                work += max(guide?.count ?? 0, 1)
             }
             sig.combine(p.timelineStart)
             sig.combine(p.totalMinutes)
@@ -271,79 +268,96 @@ struct EPGGuide: UIViewRepresentable {
             // Focus moves and the clock tick land here too: rebuilding every row
             // each time hung the main thread on lineups of thousands of channels.
             guard signature != lastSignature else {
+                // Likely just `now` advanced: move the now-line without a reload.
                 layout.now = p.now
-                return false
+                layout.invalidateLayout()
+                return
             }
             lastSignature = signature
 
-            let ppm = EPGTheme.pointsPerMinute
-            let total = Double(p.totalMinutes)
-            let placeholderTitle = String(localized: "No guide data available.")
-            var rows: [[EPGLayout.Span]] = []
-            var progs: [[UnifiedProgram]] = []
-            var chans: [UnifiedChannel] = []
-
-            for channel in p.channels {
-                let minStart = -Double(EPGTheme.channelColumnWidth) / Double(ppm)
-                let guide = p.programsByChannel[channel.id] ?? []
-                let rowGuide = guide.isEmpty
-                    ? Self.placeholderPrograms(channelId: channel.id, title: placeholderTitle,
-                                               from: p.timelineStart, spanMinutes: p.totalMinutes)
-                    : guide
-                let ranges = rowGuide.compactMap { program -> (cs: Double, ce: Double, prog: UnifiedProgram)? in
-                    let startMin = program.start.timeIntervalSince(p.timelineStart) / 60
-                    let endMin = program.stop.timeIntervalSince(p.timelineStart) / 60
-                    guard endMin > 0, startMin < total else { return nil }
-                    return (max(minStart, startMin), min(total, endMin), program)
-                }.sorted { $0.cs < $1.cs }
-
-                var spans: [EPGLayout.Span] = []
-                var rowProgs: [UnifiedProgram] = []
-                for (idx, r) in ranges.enumerated() {
-                    let x = CGFloat(r.cs) * ppm
-                    var w = CGFloat(r.ce - r.cs) * ppm
-                    if idx + 1 < ranges.count {
-                        w = min(w, CGFloat(ranges[idx + 1].cs) * ppm - x)
-                    }
-                    spans.append(EPGLayout.Span(x: x, width: max(w, 2)))
-                    rowProgs.append(r.prog)
-                }
-                rows.append(spans)
-                progs.append(rowProgs)
-                chans.append(channel)
+            if work <= Self.inlineBuildLimit, !isBuilding {
+                wanted = nil
+                install(Self.rows(for: p), for: p)
+            } else {
+                wanted = p
+                startBuild()
             }
-
-            sections = chans
-            programs = progs
-            lastTimelineStart = p.timelineStart
-            layout.configure(rows: rows,
-                             channelCount: chans.count,
-                             totalMinutes: p.totalMinutes,
-                             timelineStart: p.timelineStart,
-                             now: p.now)
-            return true
         }
 
-        /// 4-hour "No guide data available." blocks spanning the timeline, so a
-        /// channel with no guide data still has cells to focus and select. Block
-        /// boundaries come from the timeline start, so ids stay stable.
-        private static func placeholderPrograms(channelId: String, title: String, from start: Date, spanMinutes: Int) -> [UnifiedProgram] {
-            let blockSeconds: TimeInterval = 4 * 3600
-            let end = start.addingTimeInterval(TimeInterval(spanMinutes * 60))
-            var programs: [UnifiedProgram] = []
-            var blockStart = start
-            while blockStart < end {
-                let blockEnd = blockStart.addingTimeInterval(blockSeconds)
-                programs.append(UnifiedProgram(
-                    id: "\(channelId):placeholder:\(Int(blockStart.timeIntervalSince1970))",
-                    channelId: channelId,
-                    title: title,
-                    startTime: blockStart,
-                    endTime: blockEnd
-                ))
-                blockStart = blockEnd
+        /// Programmes (placeholders included) a build may hold and still run on
+        /// the main actor: a few milliseconds.
+        private static let inlineBuildLimit = 4_000
+
+        static func rows(for p: EPGGuide) -> EPGGridRows {
+            EPGGridRows.build(channels: p.channels, programsByChannel: p.programsByChannel,
+                              timelineStart: p.timelineStart, totalMinutes: p.totalMinutes,
+                              pointsPerMinute: EPGTheme.pointsPerMinute,
+                              leadingInset: EPGTheme.channelColumnWidth,
+                              placeholderTitle: String(localized: "No guide data available."))
+        }
+
+        /// One build at a time: a result that newer data has overtaken is dropped
+        /// and the newest data builds next, so a burst of chunks costs one rebuild.
+        private func startBuild() {
+            guard !isBuilding, let p = wanted else { return }
+            wanted = nil
+            isBuilding = true
+            let channels = p.channels, guide = p.programsByChannel
+            let start = p.timelineStart, minutes = p.totalMinutes
+            let ppm = EPGTheme.pointsPerMinute, inset = EPGTheme.channelColumnWidth
+            let title = String(localized: "No guide data available.")
+            Task { [weak self] in
+                let built = await Task.detached(priority: .userInitiated) {
+                    EPGGridRows.build(channels: channels, programsByChannel: guide,
+                                      timelineStart: start, totalMinutes: minutes,
+                                      pointsPerMinute: ppm, leadingInset: inset,
+                                      placeholderTitle: title)
+                }.value
+                guard let self else { return }
+                isBuilding = false
+                if wanted == nil { install(built, for: p) } else { startBuild() }
             }
-            return programs
+        }
+
+        /// Hands finished rows to the layout and reloads. The scroll fix-ups the
+        /// old inline path made after a reload live here.
+        private func install(_ built: EPGGridRows, for p: EPGGuide) {
+            guard let cv = collectionView, let layout = cv.collectionViewLayout as? EPGLayout else { return }
+            installCount += 1
+            let timelineMoved = lastTimelineStart.map { $0 != p.timelineStart } ?? false
+            sections = p.channels
+            programs = built.programs
+            lastTimelineStart = p.timelineStart
+            gridStart = p.timelineStart
+            gridMinutes = p.totalMinutes
+            layout.configure(rows: built.spans,
+                             channelCount: p.channels.count,
+                             totalMinutes: p.totalMinutes,
+                             timelineStart: p.timelineStart,
+                             now: parent.now)
+            cv.reloadData()
+            if parent.transparent, !didRestScroll {
+                didRestScroll = true
+                cv.contentOffset = CGPoint(x: -EPGTheme.channelColumnWidth, y: -layout.gridTopInset)
+            } else if timelineMoved {
+                // The grid now starts at a later half hour, so every x shifted.
+                // Keep "now" at the left edge rather than leaving the offset
+                // where it was, which reads as a jump hours to the right.
+                resetHorizontalScroll()
+            }
+            if let channelId = deferredFocusChannelId {
+                deferredFocusChannelId = nil
+                focusLiveProgramme(channelId: channelId)
+            }
+        }
+
+        /// Focuses the channel's live programme now, or once the pending rows land.
+        func requestLiveFocus(channelId: String) {
+            if isBuilding || wanted != nil {
+                deferredFocusChannelId = channelId
+            } else {
+                focusLiveProgramme(channelId: channelId)
+            }
         }
 
         func numberOfSections(in collectionView: UICollectionView) -> Int { programs.count }
@@ -369,11 +383,11 @@ struct EPGGuide: UIViewRepresentable {
                 return v
             case EPGLayout.kindTime:
                 let v = cv.dequeueReusableSupplementaryView(ofKind: kind, withReuseIdentifier: TimeRulerView.reuseID, for: indexPath) as! TimeRulerView
-                v.configure(start: parent.timelineStart, totalMinutes: parent.totalMinutes, transparent: parent.transparent)
+                v.configure(start: gridStart, totalMinutes: gridMinutes, transparent: parent.transparent)
                 return v
             default:
                 let v = cv.dequeueReusableSupplementaryView(ofKind: kind, withReuseIdentifier: CornerView.reuseID, for: indexPath) as! CornerView
-                v.configure(date: parent.timelineStart, transparent: parent.transparent)
+                v.configure(date: gridStart, transparent: parent.transparent)
                 return v
             }
         }
@@ -388,6 +402,7 @@ struct EPGGuide: UIViewRepresentable {
             currentSection = ip.section
             currentFocusedIsLive = program.isLive(at: now)
             lastFocusedChannelId = channel.id
+            if deferredFocusChannelId != channel.id { deferredFocusChannelId = nil }
             parent.onFocus(channel, program)
 
             let prev = context.previouslyFocusedIndexPath
@@ -493,7 +508,7 @@ struct EPGGuide: UIViewRepresentable {
                 cv.contentOffset.x = lockedX
             }
             let minutesIn = (cv.contentOffset.x + EPGTheme.channelColumnWidth) / EPGTheme.pointsPerMinute
-            let leftDate = parent.timelineStart.addingTimeInterval(Double(minutesIn) * 60)
+            let leftDate = gridStart.addingTimeInterval(Double(minutesIn) * 60)
             if let corner = cv.supplementaryView(forElementKind: EPGLayout.kindCorner,
                                                  at: IndexPath(item: 0, section: 0)) as? CornerView {
                 corner.configure(date: leftDate, transparent: parent.transparent)
@@ -605,8 +620,8 @@ struct EPGGuide: UIViewRepresentable {
             let ppm = Double(EPGTheme.pointsPerMinute)
             let leftMinutes = Double(collectionView.contentOffset.x + EPGTheme.channelColumnWidth) / ppm
             let rightMinutes = leftMinutes + Double(collectionView.bounds.width - EPGTheme.channelColumnWidth) / ppm
-            let left = parent.timelineStart.addingTimeInterval(leftMinutes * 60)
-            let right = parent.timelineStart.addingTimeInterval(rightMinutes * 60)
+            let left = gridStart.addingTimeInterval(leftMinutes * 60)
+            let right = gridStart.addingTimeInterval(rightMinutes * 60)
             if anchor < left { anchor = left }
             if anchor > right { anchor = right }
             return anchor
@@ -677,6 +692,85 @@ struct EPGFocusRequest: Equatable {
 
 // Note: `Array.subscript(safe:)` is defined in MultiStreamViewModel.swift and
 // reused here.
+
+// MARK: - Row build
+
+/// The grid's rows for one data snapshot. Pure value work, so it runs off the
+/// main actor; `programs[i]` is the row `spans[i]` lays out.
+nonisolated struct EPGGridRows: Sendable {
+    let spans: [[EPGLayout.Span]]
+    let programs: [[UnifiedProgram]]
+
+    static func build(channels: [UnifiedChannel], programsByChannel: [String: [UnifiedProgram]],
+                      timelineStart: Date, totalMinutes: Int,
+                      pointsPerMinute ppm: CGFloat, leadingInset: CGFloat,
+                      placeholderTitle: String) -> EPGGridRows {
+        let total = Double(totalMinutes)
+        let minStart = -Double(leadingInset) / Double(ppm)
+        var spans: [[EPGLayout.Span]] = []
+        var programs: [[UnifiedProgram]] = []
+        spans.reserveCapacity(channels.count)
+        programs.reserveCapacity(channels.count)
+
+        for channel in channels {
+            let guide = programsByChannel[channel.id] ?? []
+            let row = guide.isEmpty
+                ? placeholderPrograms(channelId: channel.id, title: placeholderTitle,
+                                      from: timelineStart, spanMinutes: totalMinutes)
+                : guide
+            // Ranges index into the row, so building them copies no programme.
+            var ranges: [(cs: Double, ce: Double, index: Int)] = []
+            ranges.reserveCapacity(row.count)
+            var sorted = true
+            for index in row.indices {
+                let startMin = row[index].startTime.timeIntervalSince(timelineStart) / 60
+                let endMin = row[index].endTime.timeIntervalSince(timelineStart) / 60
+                guard endMin > 0, startMin < total else { continue }
+                let cs = max(minStart, startMin)
+                if let last = ranges.last, cs < last.cs { sorted = false }
+                ranges.append((cs, min(total, endMin), index))
+            }
+            if !sorted { ranges.sort { $0.cs < $1.cs } }
+
+            var rowSpans: [EPGLayout.Span] = []
+            rowSpans.reserveCapacity(ranges.count)
+            for (idx, r) in ranges.enumerated() {
+                let x = CGFloat(r.cs) * ppm
+                var w = CGFloat(r.ce - r.cs) * ppm
+                if idx + 1 < ranges.count {
+                    w = min(w, CGFloat(ranges[idx + 1].cs) * ppm - x)
+                }
+                rowSpans.append(EPGLayout.Span(x: x, width: max(w, 2)))
+            }
+            spans.append(rowSpans)
+            // A row that is all in range and in order is the guide's own array.
+            programs.append(sorted && ranges.count == row.count ? row : ranges.map { row[$0.index] })
+        }
+        return EPGGridRows(spans: spans, programs: programs)
+    }
+
+    /// 4-hour "No guide data available." blocks spanning the timeline, so a
+    /// channel with no guide data still has cells to focus and select. Block
+    /// boundaries come from the timeline start, so ids stay stable.
+    static func placeholderPrograms(channelId: String, title: String, from start: Date, spanMinutes: Int) -> [UnifiedProgram] {
+        let blockSeconds: TimeInterval = 4 * 3600
+        let end = start.addingTimeInterval(TimeInterval(spanMinutes * 60))
+        var programs: [UnifiedProgram] = []
+        var blockStart = start
+        while blockStart < end {
+            let blockEnd = blockStart.addingTimeInterval(blockSeconds)
+            programs.append(UnifiedProgram(
+                id: "\(channelId):placeholder:\(Int(blockStart.timeIntervalSince1970))",
+                channelId: channelId,
+                title: title,
+                startTime: blockStart,
+                endTime: blockEnd
+            ))
+            blockStart = blockEnd
+        }
+        return programs
+    }
+}
 
 // MARK: - Container (collection view + fade under the column)
 
@@ -1364,7 +1458,7 @@ final class EPGCellAttributes: UICollectionViewLayoutAttributes {
 }
 
 final class EPGLayout: UICollectionViewLayout {
-    struct Span { let x: CGFloat; let width: CGFloat }
+    nonisolated struct Span: Sendable { let x: CGFloat; let width: CGFloat }
 
     override class var layoutAttributesClass: AnyClass { EPGCellAttributes.self }
 

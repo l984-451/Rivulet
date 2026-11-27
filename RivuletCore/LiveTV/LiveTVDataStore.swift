@@ -23,8 +23,10 @@ class LiveTVDataStore: ObservableObject {
 
     /// Current EPG data (channelId -> programs)
     @Published var epg: [String: [UnifiedProgram]] = [:] {
-        didSet { rememberEventSlots() }
+        didSet { epgGeneration += 1; rememberEventSlots() }
     }
+    /// Bumped on every guide write, so a merge built off the main actor can tell it went stale.
+    private var epgGeneration = 0
 
     /// Channels whose guide has carried an event slot (a pregame block or "No
     /// game scheduled"), so a guide gap on one means no game is on. Kept
@@ -1250,8 +1252,15 @@ class LiveTVDataStore: ObservableObject {
             }
         }
         guard !isLoadingEPG, !Task.isCancelled else { return false }
+        // A big lineup's merge held the main actor for most of a second per chunk: build it
+        // off it, and merge again in place only if another write landed meanwhile.
+        let base = epg, incoming = newEPG, generation = epgGeneration
+        let merged = await Task.detached(priority: .utility) {
+            Self.merging(incoming, into: base, from: from, to: to)
+        }.value
+        guard !isLoadingEPG, !Task.isCancelled else { return false }
         // No banner on failure: the guide already on screen stays usable.
-        epg = Self.merging(newEPG, into: epg, from: from, to: to)
+        epg = generation == epgGeneration ? merged : Self.merging(incoming, into: epg, from: from, to: to)
         return answered > 0
     }
 

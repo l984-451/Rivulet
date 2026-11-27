@@ -61,33 +61,76 @@ private enum GuideFonts {
     }
 }
 
+// MARK: - Row build
+
+/// One data snapshot the rows are built from. Value types only, so the build
+/// runs off the main actor.
+nonisolated struct IOSGuideSnapshot: Sendable {
+    let channels: [UnifiedChannel]
+    let epg: [String: [UnifiedProgram]]
+    let recordingIds: Set<String>
+    let start: Date
+    let end: Date
+
+    var totalMinutes: CGFloat { CGFloat(end.timeIntervalSince(start) / 60) }
+}
+
+nonisolated struct IOSGuideSpan: Sendable {
+    let program: UnifiedProgram?
+    let startMinute: CGFloat
+    let minutes: CGFloat
+}
+
+nonisolated enum IOSGuideRows {
+    /// Spans clipped to the window. The store keeps each channel's guide sorted.
+    static func build(_ snapshot: IOSGuideSnapshot) -> [[IOSGuideSpan]] {
+        let start = snapshot.start, end = snapshot.end
+        let totalMinutes = snapshot.totalMinutes
+        return snapshot.channels.map { channel in
+            let spans = (snapshot.epg[channel.id] ?? []).compactMap { program -> IOSGuideSpan? in
+                guard program.endTime > start, program.startTime < end else { return nil }
+                let from = max(program.startTime, start)
+                let minutes = CGFloat(min(program.endTime, end).timeIntervalSince(from) / 60)
+                return IOSGuideSpan(program: program, startMinute: CGFloat(from.timeIntervalSince(start) / 60), minutes: minutes)
+            }
+            // No guide data: one block across the window, still tappable.
+            return spans.isEmpty ? [IOSGuideSpan(program: nil, startMinute: 0, minutes: totalMinutes)] : spans
+        }
+    }
+}
+
 // MARK: - Coordinator
 
 @MainActor
 final class IOSLiveGuideCoordinator: NSObject, UICollectionViewDataSource, UICollectionViewDelegate {
-    fileprivate struct Span {
-        let program: UnifiedProgram?
-        let startMinute: CGFloat
-        let minutes: CGFloat
-    }
-
     private static let historyMinutes: TimeInterval = 120
     private static let maxHoursAhead = TimeInterval(LiveTVDataStore.epgMaxHoursAhead)
 
     fileprivate let layout = IOSLiveGuideLayout()
-    fileprivate lazy var collectionView: UICollectionView = makeCollectionView()
+    lazy var collectionView: UICollectionView = makeCollectionView()
     private var guide: IOSLiveGuideView?
-    fileprivate private(set) var channels: [UnifiedChannel] = []
-    fileprivate private(set) var rows: [[Span]] = []
+    private(set) var channels: [UnifiedChannel] = []
+    private(set) var rows: [[IOSGuideSpan]] = []
     private var recordingIds: Set<String> = []
     private var signature = 0
+    private var signatureWork = 0
     private var jumpToken = 0
     private var hasPositioned = false
+    /// The start of the installed rows. `desiredStart` is what the next build uses.
     fileprivate private(set) var windowStart = Date()
+    private var desiredStart = Date()
+    /// The newest data a build has not started on, and whether one runs.
+    private var wanted: IOSGuideSnapshot?
+    private var isBuilding = false
+    /// A jump (animated or not) asked for while rows are pending; it lands with them.
+    private var pendingJump: Bool?
+    private(set) var installCount = 0
+    private var isPending: Bool { isBuilding || wanted != nil }
 
     override init() {
         super.init()
-        resetWindowStart()
+        windowStart = Self.defaultStart()
+        desiredStart = windowStart
     }
 
     private func makeCollectionView() -> UICollectionView {
@@ -111,7 +154,22 @@ final class IOSLiveGuideCoordinator: NSObject, UICollectionViewDataSource, UICol
 
     func update(_ guide: IOSLiveGuideView) {
         self.guide = guide
+        let (newSignature, work) = Self.signature(of: guide)
+        if newSignature != signature {
+            signature = newSignature
+            signatureWork = work
+            rebuild()
+        }
+        if guide.jumpToken != jumpToken {
+            jumpToken = guide.jumpToken
+            jumpToNow(animated: true)
+        }
+    }
+
+    /// Detects data changes, and counts the programmes a build would walk.
+    static func signature(of guide: IOSLiveGuideView) -> (hash: Int, work: Int) {
         var hasher = Hasher()
+        var work = 0
         hasher.combine(guide.loadedThrough)
         hasher.combine(guide.recordingIds)
         for channel in guide.channels {
@@ -121,16 +179,9 @@ final class IOSLiveGuideCoordinator: NSObject, UICollectionViewDataSource, UICol
             hasher.combine(programs?.count)
             hasher.combine(programs?.first?.id)
             hasher.combine(programs?.last?.id)
+            work += max(programs?.count ?? 0, 1)
         }
-        let newSignature = hasher.finalize()
-        if newSignature != signature {
-            signature = newSignature
-            rebuild()
-        }
-        if guide.jumpToken != jumpToken {
-            jumpToken = guide.jumpToken
-            jumpToNow(animated: true)
-        }
+        return (hasher.finalize(), work)
     }
 
     private var windowEnd: Date {
@@ -140,35 +191,63 @@ final class IOSLiveGuideCoordinator: NSObject, UICollectionViewDataSource, UICol
         return min(loaded, now.addingTimeInterval(Self.maxHoursAhead * 3600))
     }
 
-    /// Spans clipped to the window. The store keeps each channel's guide sorted.
+    /// Programmes a build may walk and still run on the main actor: a few milliseconds.
+    private static let inlineBuildLimit = 4_000
+
+    /// Rebuilds the rows. A small guide builds in place; a large one builds off
+    /// the main actor, one build at a time, and the newest data wins.
     private func rebuild() {
         guard let guide else { return }
-        let start = windowStart
-        let end = windowEnd
-        let totalMinutes = CGFloat(end.timeIntervalSince(start) / 60)
-        channels = guide.channels
-        recordingIds = guide.recordingIds
-        rows = guide.channels.map { channel in
-            let spans = (guide.epg[channel.id] ?? []).compactMap { program -> Span? in
-                guard program.endTime > start, program.startTime < end else { return nil }
-                let from = max(program.startTime, start)
-                let minutes = CGFloat(min(program.endTime, end).timeIntervalSince(from) / 60)
-                return Span(program: program, startMinute: CGFloat(from.timeIntervalSince(start) / 60), minutes: minutes)
-            }
-            // No guide data: one block across the window, still tappable.
-            return spans.isEmpty ? [Span(program: nil, startMinute: 0, minutes: totalMinutes)] : spans
+        let snapshot = IOSGuideSnapshot(channels: guide.channels, epg: guide.epg, recordingIds: guide.recordingIds,
+                                        start: desiredStart, end: windowEnd)
+        if signatureWork <= Self.inlineBuildLimit, !isBuilding {
+            wanted = nil
+            install(IOSGuideRows.build(snapshot), for: snapshot)
+        } else {
+            wanted = snapshot
+            startBuild()
         }
-        layout.totalMinutes = totalMinutes
-        layout.timelineStart = start
+    }
+
+    /// A result that newer data has overtaken is dropped and the newest builds
+    /// next, so a burst of guide chunks costs one rebuild.
+    private func startBuild() {
+        guard !isBuilding, let snapshot = wanted else { return }
+        wanted = nil
+        isBuilding = true
+        Task { [weak self] in
+            let built = await Task.detached(priority: .userInitiated) { IOSGuideRows.build(snapshot) }.value
+            guard let self else { return }
+            isBuilding = false
+            if wanted == nil { install(built, for: snapshot) } else { startBuild() }
+        }
+    }
+
+    private func install(_ built: [[IOSGuideSpan]], for snapshot: IOSGuideSnapshot) {
+        installCount += 1
+        channels = snapshot.channels
+        recordingIds = snapshot.recordingIds
+        // Freeing a big old row set takes tens of milliseconds: do it off the main actor.
+        let old = rows
+        Task.detached(priority: .utility) { withExtendedLifetime(old) {} }
+        rows = built
+        windowStart = snapshot.start
+        layout.totalMinutes = snapshot.totalMinutes
+        layout.timelineStart = snapshot.start
         layout.now = Date()
         layout.invalidateLayout()
         collectionView.reloadData()
+        if let animated = pendingJump {
+            pendingJump = nil
+            collectionView.layoutIfNeeded()
+            setLeftEdge(to: Self.floorToHalfHour(Date()), animated: animated)
+        }
     }
 
     // MARK: Time
 
-    private func resetWindowStart() {
-        windowStart = Self.floorToHalfHour(Date()).addingTimeInterval(-Self.historyMinutes * 60)
+    private static func defaultStart() -> Date {
+        floorToHalfHour(Date()).addingTimeInterval(-historyMinutes * 60)
     }
 
     func tick() {
@@ -178,17 +257,19 @@ final class IOSLiveGuideCoordinator: NSObject, UICollectionViewDataSource, UICol
     }
 
     func jumpToNow(animated: Bool) {
-        if Date().timeIntervalSince(windowStart) > (Self.historyMinutes + 30) * 60 {
-            resetWindowStart()
+        if Date().timeIntervalSince(desiredStart) > (Self.historyMinutes + 30) * 60 {
+            desiredStart = Self.defaultStart()
             rebuild()
             collectionView.layoutIfNeeded()
         }
+        // The rows it would move over are still being built: jump when they land.
+        guard !isPending else { pendingJump = animated; return }
         setLeftEdge(to: Self.floorToHalfHour(Date()), animated: animated)
     }
 
     /// Back after hours: the old window starts in the past, so move to Now.
     func jumpToNowIfStale() {
-        guard Date().timeIntervalSince(windowStart) > (Self.historyMinutes + 30) * 60 else { return }
+        guard Date().timeIntervalSince(desiredStart) > (Self.historyMinutes + 30) * 60 else { return }
         collectionView.layoutIfNeeded()
         jumpToNow(animated: false)
     }
@@ -234,7 +315,7 @@ final class IOSLiveGuideCoordinator: NSObject, UICollectionViewDataSource, UICol
         rows[section].count
     }
 
-    fileprivate func span(at indexPath: IndexPath) -> Span? {
+    fileprivate func span(at indexPath: IndexPath) -> IOSGuideSpan? {
         rows[safe: indexPath.section]?[safe: indexPath.item]
     }
 

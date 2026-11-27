@@ -82,6 +82,31 @@ final class CaptionOverlayView: UIView {
         }
     }
 
+    /// Picture Position: the picture moved to the top or bottom edge. Captions
+    /// follow it, and place against the picture rather than a bar it codes.
+    var picturePosition: PicturePosition = .center {
+        didSet {
+            guard picturePosition != oldValue else { return }
+            setNeedsLayout()
+        }
+    }
+
+    /// The item's measured black bars (a remux codes them into the frame).
+    var letterbox: LetterboxReading? {
+        didSet {
+            guard letterbox != oldValue else { return }
+            setNeedsLayout()
+        }
+    }
+
+    /// The title's own nudge on top of the position, in stepper steps.
+    var pictureNudge = 0 {
+        didSet {
+            guard pictureNudge != oldValue else { return }
+            setNeedsLayout()
+        }
+    }
+
     /// The global Height setting, in stepper units. Applies to the default band only.
     var heightUnits: Int {
         didSet {
@@ -316,24 +341,22 @@ final class CaptionOverlayView: UIView {
 
     // MARK: Geometry
 
-    /// The part of the picture on screen. Text captions are placed in it.
+    /// The part of the picture on screen, without any bar the frame codes. Text
+    /// captions are placed in it.
     private func videoRect(in size: CGSize) -> CGRect {
-        pictureRect(in: size).intersection(CGRect(origin: .zero, size: size))
+        layout(in: size).picture.intersection(CGRect(origin: .zero, size: size))
     }
 
-    /// The picture's rect inside `bounds`, aspect-fit, or aspect-fill when zoomed
-    /// (it then overhangs). Matches the engine surface and AVPlayerLayer. Falls
-    /// back to the full bounds when the size is unknown.
+    /// The video frame's rect inside `bounds`, aspect-fit, or aspect-fill when zoomed
+    /// (it then overhangs), moved by Picture Position. Matches the engine surface and
+    /// AVPlayerLayer. Falls back to the full bounds when the size is unknown.
     private func pictureRect(in size: CGSize) -> CGRect {
-        guard videoSize.width > 0, videoSize.height > 0,
-              size.width > 0, size.height > 0 else {
-            return CGRect(origin: .zero, size: size)
-        }
-        let fit = (size.width / videoSize.width, size.height / videoSize.height)
-        let scale = fillsScreen ? max(fit.0, fit.1) : min(fit.0, fit.1)
-        let w = videoSize.width * scale
-        let h = videoSize.height * scale
-        return CGRect(x: (size.width - w) / 2, y: (size.height - h) / 2, width: w, height: h)
+        layout(in: size).frame
+    }
+
+    private func layout(in size: CGSize) -> PictureLayout {
+        PictureLayout.make(container: size, videoSize: videoSize, fillsScreen: fillsScreen,
+                           position: picturePosition, letterbox: letterbox, nudge: pictureNudge)
     }
 
     /// The lowest any cue may sit, placed or not, as a distance from the container
@@ -389,12 +412,18 @@ final class CaptionOverlayView: UIView {
         // `SubtitleImage.position` is normalized to the source video frame, so
         // map it onto the picture, not the bounds.
         for entry in bitmapCues {
-            entry.view.frame = CGRect(
+            var frame = CGRect(
                 x: picture.minX + entry.position.minX * picture.width,
                 y: picture.minY + entry.position.minY * picture.height,
                 width: entry.position.width * picture.width,
                 height: entry.position.height * picture.height
             )
+            // A disc may set a line in a black bar. Picture Position can move that bar
+            // off the screen: the line stays on it, at the edge it left by.
+            if frame.height <= size.height {
+                frame.origin.y = min(max(frame.minY, 0), size.height - frame.height)
+            }
+            entry.view.frame = frame
         }
 
         let unplaced = textCues.filter { $0.placement == nil }

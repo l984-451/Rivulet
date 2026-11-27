@@ -268,6 +268,14 @@ enum SettingsDescriptorStore {
             icon: "hifispeaker.2",
             description: "Plays surround soundtracks as stereo with the subwoofer channel mixed into left and right, for 2.1 speakers on a stereo connection."
         ),
+        PicturePosition.key: SettingDescriptor(
+            icon: "arrow.up.and.down.square",
+            description: "Moves a wide film to the top or bottom of the screen instead of centering it between black bars. Titles with preview thumbnails on the server are placed sooner."
+        ),
+        PicturePosition.showsInPlayerKey: SettingDescriptor(
+            icon: "arrow.up.and.down.square",
+            description: "Shows a Picture Position button in the player's controls, to move the picture while watching."
+        ),
         "dolbyVisionFEL": SettingDescriptor(
             icon: "4k.tv",
             description: "Composes both layers of Dolby Vision Profile 7 FEL on a Dolby Vision TV. Plays without AirPlay or Picture in Picture, and E-AC3 Atmos loses its objects."

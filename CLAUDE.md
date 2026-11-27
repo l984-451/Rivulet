@@ -162,6 +162,7 @@ Standing exceptions:
 - The pause screen is tvOS only: iOS and the Mac app keep their controls up while paused, as the system player does.
 - CarPlay and Apple HomeView are iPhone only, and video only: Apple allows one CarPlay category per app, so music is not offered there.
 - Start from Beginning on Live TV is Plex only: Jellyfin, Emby and IPTV have no recorder session to join.
+- Picture Position is tvOS only: it lines a wide film up with one edge of a fixed screen, a projector's. Emby has no preview images, so its bars are read from the engine's stills.
 
 **The iPhone tab bar holds at most five**: Home, Discover, Library, Live TV (only while a Live TV
 source exists, as tvOS's sidebar) and Search. Music libraries sit under Library, never a tab of

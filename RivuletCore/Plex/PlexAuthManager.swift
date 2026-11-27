@@ -182,9 +182,7 @@ class PlexAuthManager: ObservableObject {
     private func upgradeConnectionIfBetterExists(from url: String) async {
         guard let token = authToken,
               let servers = try? await networkManager.getServers(authToken: token) else { return }
-        let server = servers.first(where: { Self.urlBelongs(url, to: $0) })
-            ?? savedServerName.flatMap { name in servers.first(where: { $0.name == name }) }
-        guard let server,
+        guard let server = selectedServer(in: servers, fallingBackToName: true),
               let best = await findBestConnection(for: server, reuseLastGood: false),
               Self.isPlayableDirectURL(best),
               best != url,
@@ -841,14 +839,27 @@ class PlexAuthManager: ObservableObject {
     }
 
     /// The selected server among `servers`: by machineIdentifier, else the one the
-    /// saved URL belongs to. Installs from before its id or name was saved learn them here.
-    func selectedServer(in servers: [PlexDevice]) -> PlexDevice? {
-        let server = selectedServerMachineID.map { id in servers.first { $0.machineIdentifier == id } }
-            ?? selectedServerURL.flatMap { url in servers.first { Self.urlBelongs(url, to: $0) } }
+    /// saved URL belongs to (then, with `fallingBackToName`, the saved name).
+    /// Installs from before its id or name was saved learn them here.
+    func selectedServer(in servers: [PlexDevice], fallingBackToName: Bool = false) -> PlexDevice? {
+        let server = Self.savedServer(
+            in: servers, machineID: selectedServerMachineID, url: selectedServerURL,
+            name: fallingBackToName ? savedServerName : nil)
         guard let server else { return nil }
         if selectedServerMachineID == nil { userDefaults.set(server.machineIdentifier, forKey: serverMachineIDKey) }
         if savedServerName == nil { userDefaults.set(server.name, forKey: serverNameKey) }
         return server
+    }
+
+    /// The saved server among `servers`. A saved machineIdentifier is the only match:
+    /// a friend's shared server can carry the same name ("Tower") or private address,
+    /// and matching it would send our token there and save its id as ours. Only an
+    /// install that saved no id falls back to the URL, then the name.
+    nonisolated static func savedServer(in servers: [PlexDevice], machineID: String?,
+                                        url: String?, name: String?) -> PlexDevice? {
+        if let machineID { return servers.first { $0.machineIdentifier == machineID } }
+        return url.flatMap { url in servers.first { urlBelongs(url, to: $0) } }
+            ?? name.flatMap { name in servers.first { $0.name == name } }
     }
 
     /// The profile in use was entered with a PIN, so the next launch starts locked.
@@ -1037,17 +1048,11 @@ class PlexAuthManager: ObservableObject {
             connectionError = String(localized: "Cannot connect to Plex server")
 
             // Look for a better connection without clearing credentials, so cached
-            // content still shows. Match the saved server by URL, then by name
-            // (Plex rotates URIs); if neither matches, keep the current selection.
+            // content still shows. Match the saved server by its machine id (by URL,
+            // then name, only when no id was saved); if none matches, keep the selection.
             do {
                 let servers = try await networkManager.getServers(authToken: token)
-                let savedName = savedServerName
-                let matchedServer = servers.first(where: { server in
-                    server.connections?.contains { $0.uri == currentURL } == true
-                }) ?? (savedName.flatMap { name in
-                    servers.first(where: { $0.name == name })
-                })
-                if let currentServer = matchedServer {
+                if let currentServer = selectedServer(in: servers, fallingBackToName: true) {
                     // Try to find a working connection on this server
                     if let workingURL = await findBestConnection(for: currentServer) {
                         selectedServerURL = workingURL

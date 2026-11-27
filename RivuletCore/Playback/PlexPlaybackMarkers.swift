@@ -46,14 +46,16 @@ enum PlexPlaybackMarkers {
     /// episode-level ids IntroDB rejects). Empty for anything else, or when no id is found.
     static func community(
         for item: PlexMetadata, serverURL: String, token: String, network: PlexNetworkManager,
-        lookup: @Sendable (String, Int, Int) async -> [PlexMarker] = { await IntroDBClient().markers(imdbID: $0, season: $1, episode: $2) }
+        lookup: (@Sendable (String, Int, Int) async -> [PlexMarker])? = nil
     ) async -> [PlexMarker] {
         guard item.type == "episode", let showKey = item.grandparentRatingKey,
               let season = item.parentIndex, let episode = item.index else { return [] }
         let show = try? await network.getMetadata(serverURL: serverURL, authToken: token, ratingKey: showKey, includeGuids: true)
         let guids = (show?.Guid ?? []).compactMap(\.id) + [show?.guid].compactMap { $0 }
         guard let imdbID = guids.compactMap(PlexMetadata.extractImdbId(from:)).first else { return [] }
-        return await lookup(imdbID, season, episode)
+        if let lookup { return await lookup(imdbID, season, episode) }
+        let duration = item.duration.map { TimeInterval($0) / 1000 }
+        return await IntroDBClient().markers(imdbID: imdbID, season: season, episode: episode, duration: duration)
     }
 
     /// Plex's markers for `item`, with IntroDB's when the user opted in.

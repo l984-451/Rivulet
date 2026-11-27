@@ -6247,12 +6247,12 @@
         }
       }
     },
-    "Fills in intro and credits markers that Plex is missing, from introdb.app. Only the show’s IMDb ID and episode number are sent." : {
+    "Fills in intro and credits markers that Plex is missing, from introdb.app and TheIntroDB. Only the show’s IMDb ID and episode number are sent." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ergänzt Intro- und Abspannmarker, die in Plex fehlen, über introdb.app. Gesendet werden nur die IMDb-ID der Serie und die Folgennummer."
+            "value" : "Ergänzt Intro- und Abspannmarker, die in Plex fehlen, über introdb.app und TheIntroDB. Gesendet werden nur die IMDb-ID der Serie und die Folgennummer."
           }
         },
         "el" : {

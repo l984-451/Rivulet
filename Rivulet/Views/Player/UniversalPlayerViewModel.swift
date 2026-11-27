@@ -5817,7 +5817,8 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         guard let imdbID = await showIMDBID() else { return }
 
         let generation = itemGeneration
-        let backup = await IntroDBClient().markers(imdbID: imdbID, season: season, episode: episode)
+        let backup = await IntroDBClient().markers(imdbID: imdbID, season: season, episode: episode,
+                                                   duration: metadata.duration.map { TimeInterval($0) / 1000 })
         guard generation == itemGeneration else { return }  // item swapped mid-fetch
 
         let extras = backup.filter { marker in

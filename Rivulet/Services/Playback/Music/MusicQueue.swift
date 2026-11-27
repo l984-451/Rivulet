@@ -589,9 +589,11 @@ final class MusicQueue: ObservableObject {
         // Mark as watched
         if reporter != nil {
             finishReport(at: max(duration, currentTrack?.duration ?? 0))
-        } else if let ref = currentTrack?.ref {
+        } else if let track = currentTrack {
+            // Plex counts a finished track from its timeline; a scrobble on top counted it twice.
             Task {
-                await PlexProgressReporter.shared.markAsWatched(ratingKey: ref.itemID)
+                await PlexProgressReporter.shared.markAsWatched(ratingKey: track.ref.itemID,
+                                                                playsBefore: track.userState.playCount)
             }
         }
 

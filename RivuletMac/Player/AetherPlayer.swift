@@ -622,6 +622,7 @@ final class AetherPlayer: ObservableObject {
         options.audioShaping = Self.audioShaping()
         // Read ahead as far as the engine's disk budget allows.
         options.forwardBufferSegments = .max
+        options.sessionCacheByteBudget = PlaybackDiskBudget.sessionCacheBytes
         // Reopening the same title within the session plays from the segments already fetched.
         options.retainsSessionCacheAfterStop = true
         // Engine takes it only for SDR below the screen's size and switches it off if it can't keep up.

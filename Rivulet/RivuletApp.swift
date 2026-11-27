@@ -18,6 +18,7 @@ import Sentry
 struct RivuletApp: App {
     init() {
         HostPlatform.installUIKit()
+        AetherPlayer.discardsKeptCacheInBackground()
         PlexAPI.setPlayerTitle(UIDevice.current.name)
         StartupTimer.arm()
         StartupTimer.mark("RivuletApp.init")

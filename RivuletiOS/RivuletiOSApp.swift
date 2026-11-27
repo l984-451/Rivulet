@@ -14,6 +14,7 @@ struct RivuletiOSApp: App {
 
     init() {
         HostPlatform.installUIKit()
+        AetherPlayer.discardsKeptCacheInBackground()
         ClientHost.offline = IOSOfflineHost()
         ClientHost.prefetchImage = { _ = await IOSArtworkCache.shared.image(for: $0) }
         #if DEBUG

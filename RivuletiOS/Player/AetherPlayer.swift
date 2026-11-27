@@ -655,6 +655,7 @@ final class AetherPlayer: ObservableObject {
         options.audioShaping = Self.audioShaping()
         // Read ahead as far as the engine's disk budget allows.
         options.forwardBufferSegments = .max
+        options.sessionCacheByteBudget = PlaybackDiskBudget.sessionCacheBytes
         // Reopening the same title within the session plays from the segments already fetched.
         options.retainsSessionCacheAfterStop = true
         // Engine takes it only for SDR below the screen's size and switches it off if it can't keep up.
@@ -1002,6 +1003,14 @@ final class AetherPlayer: ObservableObject {
             pictureInPictureSource = AVPictureInPictureController.ContentSource(playerLayer: layer)
         } else if pictureInPictureSource != nil {
             pictureInPictureSource = nil
+        }
+    }
+
+    /// Leaving the app drops a stopped title's kept read-ahead (#777): it only serves an in-app Resume.
+    static func discardsKeptCacheInBackground() {
+        NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification,
+                                               object: nil, queue: nil) { _ in
+            AetherEngine.discardRetainedSessionCache()
         }
     }
 

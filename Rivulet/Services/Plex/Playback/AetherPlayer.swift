@@ -563,6 +563,14 @@ final class AetherPlayer: PlayerProtocol {
         return screen.currentEDRHeadroom > 1.001
     }
 
+    /// Leaving the app drops a stopped title's kept read-ahead (#777): it only serves an in-app Resume.
+    static func discardsKeptCacheInBackground() {
+        NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification,
+                                               object: nil, queue: nil) { _ in
+            AetherEngine.discardRetainedSessionCache()
+        }
+    }
+
     // MARK: - Background / foreground lifecycle
 
     /// Upstream AetherEngine tears the video pipeline down on tvOS background
@@ -1210,7 +1218,10 @@ final class AetherPlayer: PlayerProtocol {
         options.audioDelaySeconds = AudioSync.seconds()
         options.audioShaping = Self.audioShaping()
         // Read ahead as far as the engine's disk budget allows; live sizes its own window.
-        if !isLive { options.forwardBufferSegments = .max }
+        if !isLive {
+            options.forwardBufferSegments = .max
+            options.sessionCacheByteBudget = PlaybackDiskBudget.sessionCacheBytes
+        }
         // Reopening the same title within the session plays from the segments already fetched.
         options.retainsSessionCacheAfterStop = true
         // New content, so the previous item's aspect ratio describes nothing.

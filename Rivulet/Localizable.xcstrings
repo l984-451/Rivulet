@@ -3215,6 +3215,7 @@
         }
       }
     },
+    "Anime Scores" : {},
     "App Icon" : {
       "localizations" : {
         "de" : {
@@ -12802,6 +12803,7 @@
         }
       }
     },
+    "MyAnimeList score %@" : {},
     "Name" : {
       "localizations" : {
         "de" : {
@@ -19870,6 +19872,7 @@
         }
       }
     },
+    "Shows the MyAnimeList score beside the rating on an anime's pages. The scores are stored inside the app, so nothing is looked up online." : {},
     "Shows the profile picker each time Rivulet opens, and when you come back after more than 30 seconds away: on the Home Screen, in another app or on the screensaver." : {
       "localizations" : {
         "de" : {

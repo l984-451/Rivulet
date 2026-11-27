@@ -545,7 +545,18 @@ enum SettingsContent {
             .header("Extras"),
             toggle("easterEggs", "Easter Eggs", key: EasterEggs.key, default: true)
         ]
+        // Anime Scores follows Rating in the Details group; inserted here so the literal above stays quick to type-check.
+        if let rating = rows.firstIndex(where: { $0.id == "detailRating" }) {
+            rows.insert(contentsOf: animeScoreRows, at: rating + 1)
+        }
         return rows
+    }
+
+    /// Only in a build that carries the scores file.
+    private static var animeScoreRows: [SettingsRowItem] {
+        guard AnimeScores.isBundled else { return [] }
+        return [SettingsRowItem(id: "animeScores", title: "Anime Scores",
+                                kind: .toggle(get: { AnimeScores.isEnabled }, set: { AnimeScores.isEnabled = $0 }))]
     }
 
     /// How Live TV looks and where it sits, on both Appearance and the Live TV

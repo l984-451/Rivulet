@@ -188,6 +188,7 @@ final class PreviewCardView: UICollectionViewCell {
         vignetteContainer.alpha = 0
         chromeView.chromeAlpha = 0
         chromeView.reset()
+        chromeView.transform = .identity
         item = nil
     }
 
@@ -336,9 +337,10 @@ final class PreviewCardView: UICollectionViewCell {
     /// the cell redirects focus into Play.
     var actionFocusEnvironment: UIView? { chromeView.playFocusable }
 
-    /// Fade the hero metadata (chrome) as the user scrolls into the details.
-    /// 1 = full hero, 0 = hidden. Restored to 1 when scroll progress returns to 0.
-    func setHeroChromeAlpha(_ alpha: CGFloat) { chromeView.chromeAlpha = alpha }
+    func setHeroChromeOffset(_ offset: CGFloat) {
+        chromeView.chromeAlpha = 1
+        chromeView.transform = CGAffineTransform(translationX: 0, y: offset)
+    }
 
     /// Make the chrome action buttons (un)focusable — disabled while the user is
     /// in the below-fold so focus can't escape up into them.

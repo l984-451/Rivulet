@@ -7,6 +7,7 @@ import UIKit
 
 final class SeasonPillView: UIControl {
 
+    private let capsuleBackground = UIView()
     private let label = UILabel()
     private var isSelectedSeason = false
     private var isFocusedPill = false
@@ -53,9 +54,11 @@ final class SeasonPillView: UIControl {
 
     private func commonInit() {
         translatesAutoresizingMaskIntoConstraints = false
-        layer.cornerCurve = .continuous
-        layer.borderWidth = 1
-        layer.borderColor = UIColor.clear.cgColor
+
+        capsuleBackground.isUserInteractionEnabled = false
+        capsuleBackground.layer.cornerCurve = .continuous
+        capsuleBackground.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        addSubview(capsuleBackground)
 
         label.translatesAutoresizingMaskIntoConstraints = false
         addSubview(label)
@@ -73,8 +76,10 @@ final class SeasonPillView: UIControl {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        // Capsule: corner radius = half the height.
-        layer.cornerRadius = bounds.height / 2
+        capsuleBackground.bounds = CGRect(origin: .zero, size: bounds.size)
+        capsuleBackground.center = CGPoint(x: bounds.midX, y: bounds.midY)
+        capsuleBackground.layer.cornerRadius = bounds.height / 2
+        updateTransforms()
     }
 
     func configure(label text: String, isSelected: Bool) {
@@ -83,23 +88,44 @@ final class SeasonPillView: UIControl {
         applyStyle()
     }
 
-    /// Selection is independent of focus (spike: selected = white-0.2 fill +
-    /// border; focused = white fill, black text). The host updates selection
-    /// when the user picks a season / scrolls across a season boundary.
     func setSelected(_ selected: Bool) {
         guard isSelectedSeason != selected else { return }
         isSelectedSeason = selected
         applyStyle()
     }
 
-    /// Driven by the host's focus engine once wired.
     func setFocused(_ focused: Bool) {
+        let rowPills = superview?.subviews.compactMap { $0 as? SeasonPillView } ?? [self]
+        if focused {
+            for pill in rowPills where pill !== self {
+                pill.isFocusedPill = false
+                pill.updateTransforms()
+            }
+        }
         isFocusedPill = focused
-        applyStyle()
-        transform = focused ? CGAffineTransform(scaleX: 1.05, y: 1.05) : .identity
+        updateTransforms()
+        let rowHasFocus = rowPills.contains { $0.isFocusedPill }
+        for pill in rowPills {
+            pill.applyStyle(anotherPillFocused: rowHasFocus && !pill.isFocusedPill)
+        }
+    }
+
+    private func updateTransforms() {
+        let widthScale = isFocusedPill && bounds.width > 0 ? (bounds.width + 8) / bounds.width : 1
+        let heightScale = isFocusedPill && bounds.height > 0 ? (bounds.height + 8) / bounds.height : 1
+        capsuleBackground.transform = CGAffineTransform(scaleX: widthScale, y: heightScale)
+        label.transform = CGAffineTransform(scaleX: widthScale, y: widthScale)
     }
 
     private func applyStyle() {
+        let anotherPillFocused = superview?.subviews.contains {
+            guard let pill = $0 as? SeasonPillView else { return false }
+            return pill !== self && pill.isFocusedPill
+        } ?? false
+        applyStyle(anotherPillFocused: anotherPillFocused)
+    }
+
+    private func applyStyle(anotherPillFocused: Bool) {
         // Matches the ATV+ reference: the active season is a bright frosted
         // capsule even when focus is currently on an episode. Focus can scale
         // that same capsule, but selection owns the visible chip.
@@ -110,7 +136,7 @@ final class SeasonPillView: UIControl {
         if isFocusedPill {
             fill = UIColor.white.withAlphaComponent(0.88)
             textColor = .black
-        } else if isSelectedSeason {
+        } else if isSelectedSeason && !anotherPillFocused {
             // Selected but unfocused: translucent grey, white text.
             fill = UIColor.white.withAlphaComponent(0.35)
             textColor = .white
@@ -118,9 +144,8 @@ final class SeasonPillView: UIControl {
             fill = .clear
             textColor = UIColor.white.withAlphaComponent(0.52)
         }
-        backgroundColor = fill
+        capsuleBackground.backgroundColor = fill
         label.textColor = textColor
-        layer.borderWidth = 0
     }
 
     /// The pill's season label.

@@ -38,7 +38,7 @@ final class BackdropPlaneView: UIView {
 
     /// Active panels keyed by movie index.
     private var panels: [Int: Panel] = [:]
-    private let themeVideo = ThemeVideoBackdropView()
+    private let themeVideo: ThemeVideoBackdropView
 
     /// Current corner radius for the window containers. Lerped during morph.
     private var windowCornerRadius: CGFloat = PreviewCarouselGeometry.cornerRadius
@@ -50,7 +50,8 @@ final class BackdropPlaneView: UIView {
     /// controller has exclusive control of the centered panel's frames.
     var isMorphing: Bool = false
 
-    override init(frame: CGRect) {
+    init(frame: CGRect = .zero, themeBackdrop: ThemeBackdrop? = nil) {
+        themeVideo = ThemeVideoBackdropView(backdrop: themeBackdrop)
         super.init(frame: frame)
         // Apple's surround grey; shows in the top strip and the gaps between cards.
         backgroundColor = UIColor(white: 0.16, alpha: 1)

@@ -3,7 +3,7 @@
 
 //  The carousel's below-fold detail, above the hero chrome. In the carousel it shows the
 //  centred card's episode peek, cascading with the chrome; Down scrolls it up over the hero.
-//  The VC owns the blur and chrome fade, driven from `onScrollProgress`.
+//  The VC drives backdrop blur and hero chrome from `onScrollProgress`.
 
 import UIKit
 
@@ -11,27 +11,19 @@ final class ExpandedDetailContainerView: UIView {
 
     // MARK: - Choreography clock
 
-    private(set) var scrollOffset: CGFloat = 0
+    private var scrollFraction: CGFloat = 0
+    private var progressAnchor: (offset: CGFloat, fraction: CGFloat)?
 
-    /// Distance over which the hero fades complete: most of the ~800 pt episode slide.
-    static let reserveDistance: CGFloat = 600
+    var scrollProgress: CGFloat {
+        min(1, max(0, 1.005 * scrollFraction - 0.0025))
+    }
+    var heroTravelDistance: CGFloat { max(0, bounds.height - Self.smallLogoTop) }
 
-    /// Down-press target: scroll past saturation to bring the below-fold up.
-    /// Tuning constant, dialed on-device.
-    static let detailsRest: CGFloat = 420
-
-    var scrollProgress: CGFloat { min(1, max(0, scrollOffset / Self.reserveDistance)) }
-    // Logo fades in mid-slide (off 300→550), after the carousel metadata has
-    // cleared (~off 230), so they don't overlap.
-    private var belowFoldTitleOpacity: CGFloat { min(1, max(0, (scrollOffset - 300) / 250)) }
-
-    /// Called each `apply()` so the VC can drive the layers it owns (blur + chrome).
+    /// Drives the layers owned by the VC (blur + chrome).
     var onScrollProgress: ((CGFloat) -> Void)?
     /// Forwarded up to the host VC to present the About popups.
     var onSelectSynopsis: ((MediaItemDetail) -> Void)?
     var onSelectAdvisory: ((ContentAdvisory) -> Void)?
-
-    private(set) var maxScrollOffset: CGFloat = 0
 
     // MARK: - Layout constants
 
@@ -195,7 +187,6 @@ final class ExpandedDetailContainerView: UIView {
     }
 
     private var spacerHeightConstraint: NSLayoutConstraint!
-    /// Episode-peek top inset = `peekTopGap + reserveDistance · scrollProgress`.
     private var episodesTopConstraint: NSLayoutConstraint!
     private var episodesLeadingConstraint: NSLayoutConstraint!
     private var episodesTrailingConstraint: NSLayoutConstraint!
@@ -388,6 +379,16 @@ final class ExpandedDetailContainerView: UIView {
         belowFoldCollection.onScroll = { [weak self] off in
             self?.driveScrollProgress(fromCollectionOffset: off)
         }
+        belowFoldCollection.onDetailsTopChanged = { [weak self] off in
+            guard let self else { return }
+            if self.belowFoldScrollActive {
+                // Keep the current hero position, then interpolate to either rest in the new geometry.
+                self.progressAnchor = (offset: off, fraction: self.scrollFraction)
+                self.applyHeroProgress(fromOffset: off)
+            } else {
+                self.applyHeroProgress(fromOffset: 0, notifyHero: false)
+            }
+        }
         belowFoldCollection.onSelectSynopsis = { [weak self] d in self?.onSelectSynopsis?(d) }
         belowFoldCollection.onSelectAdvisory = { [weak self] a in self?.onSelectAdvisory?(a) }
 
@@ -409,23 +410,44 @@ final class ExpandedDetailContainerView: UIView {
         if !active { applyHeroProgress(fromOffset: 0) }
     }
 
-    /// Fans the collection's scroll progress out to the hero fades; unlike `apply()` it moves no content.
+    /// Drives the hero layers from the collection's scroll offset.
     func driveScrollProgress(fromCollectionOffset off: CGFloat) {
         guard belowFoldScrollActive else { return }
         applyHeroProgress(fromOffset: off)
     }
 
-    private func applyHeroProgress(fromOffset off: CGFloat) {
-        scrollOffset = off
-        smallTitleLogo.alpha = belowFoldTitleOpacity
-        seasonsHeader.alpha = scrollProgress
-        belowFoldCollection.firstHeaderAlpha = scrollProgress
-        // The logo and pills ride the rail's offset past its details rest, inside the scroll animation.
-        let dy = belowFoldCollection.detailsRestOff - off
-        let scroll = CGAffineTransform(translationX: 0, y: dy)
-        seasonsHeader.transform = scroll
-        smallTitleLogo.transform = scroll
-        onScrollProgress?(scrollProgress)
+    private func applyHeroProgress(fromOffset off: CGFloat, notifyHero: Bool = true) {
+        let rest = belowFoldCollection.detailsRestOff
+        let distance = max(1, rest)
+        if off <= 0 || off >= distance {
+            progressAnchor = nil
+        }
+        if let anchor = progressAnchor {
+            if off <= anchor.offset {
+                scrollFraction = anchor.fraction * (off / anchor.offset)
+            } else {
+                let remaining = (off - anchor.offset) / (distance - anchor.offset)
+                scrollFraction = anchor.fraction + (1 - anchor.fraction) * remaining
+            }
+        } else {
+            scrollFraction = min(1, max(0, off / distance))
+        }
+        let progress = scrollProgress
+        applyRowOpacity(at: progress)
+        // Past details rest, the logo and pills move with the rail.
+        let dy = rest - off
+        let titleY = dy > 0 ? (1 - scrollFraction) * heroTravelDistance : dy
+        seasonsHeader.transform = CGAffineTransform(translationX: 0, y: dy)
+        smallTitleLogo.transform = CGAffineTransform(translationX: 0, y: titleY)
+        belowFoldCollection.setLowerRowsOffset(titleY - dy)
+        if notifyHero { onScrollProgress?(progress) }
+    }
+
+    private func applyRowOpacity(at progress: CGFloat) {
+        let titleOpacity = max(0, 2 * progress - 1)
+        smallTitleLogo.alpha = titleOpacity
+        seasonsHeader.alpha = titleOpacity
+        belowFoldCollection.firstHeaderAlpha = progress
     }
 
     /// After the expand morph: loads cast and related. Stays non-interactive so Down
@@ -478,13 +500,6 @@ final class ExpandedDetailContainerView: UIView {
         return belowFoldCollection
     }
 
-    // MARK: - Layout
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        maxScrollOffset = max(0, contentView.bounds.height - bounds.height)
-    }
-
     // MARK: - Expand inset (driven by the VC during the morph)
 
     /// Widens the episode clip from card width to full bleed. Called inside the morph animator.
@@ -503,29 +518,17 @@ final class ExpandedDetailContainerView: UIView {
 
     // MARK: - Choreography
 
-    func setScrollOffset(_ offset: CGFloat) {
-        scrollOffset = max(0, min(offset, maxScrollOffset == 0 ? offset : maxScrollOffset))
-        apply()
-    }
-
     /// Reset the scroll to the rest (peek) state. Keeps the surface visible and
     /// the episode-peek cascade alpha intact — only the scroll is zeroed.
     func reset() {
-        scrollLink?.invalidate()
-        scrollLink = nil
-        scrollAnim = nil
-        scrollOffset = 0
-        apply()
-    }
-
-    private func apply() {
-        contentView.transform = CGAffineTransform(translationX: 0, y: -scrollOffset)
-        episodesTopConstraint.constant = Self.peekTopGap + Self.reserveDistance * scrollProgress
-        layoutIfNeeded()  // keep the reserve push locked to the translation (§6)
-        smallTitleLogo.alpha = belowFoldTitleOpacity
-        seasonsHeader.alpha = scrollProgress
-        belowFoldCollection.firstHeaderAlpha = scrollProgress
-        onScrollProgress?(scrollProgress)
+        scrollFraction = 0
+        progressAnchor = nil
+        contentView.transform = .identity
+        episodesTopConstraint.constant = Self.peekTopGap
+        layoutIfNeeded()
+        let progress = scrollProgress
+        applyRowOpacity(at: progress)
+        onScrollProgress?(progress)
     }
 
     // MARK: - Episode-peek cascade (chrome-synced; page changes, not scroll)
@@ -558,46 +561,6 @@ final class ExpandedDetailContainerView: UIView {
             belowFoldCollection.onEpisodesApplied = fadeIn
         } else {
             fadeIn()
-        }
-    }
-
-    // MARK: - Scroll animation (CADisplayLink — same mechanism as horizontal paging)
-
-    private var scrollLink: CADisplayLink?
-    private struct ScrollAnim {
-        let start: CGFloat
-        let end: CGFloat
-        let startTime: CFTimeInterval
-        let duration: CFTimeInterval
-        let completion: () -> Void
-    }
-    private var scrollAnim: ScrollAnim?
-
-    func animateScroll(to target: CGFloat, duration: CFTimeInterval, completion: @escaping () -> Void) {
-        let clampedTarget = max(0, maxScrollOffset > 0 ? min(target, maxScrollOffset) : target)
-        scrollLink?.invalidate()
-        scrollAnim = ScrollAnim(
-            start: scrollOffset, end: clampedTarget,
-            startTime: CACurrentMediaTime(), duration: duration, completion: completion
-        )
-        let link = CADisplayLink(target: self, selector: #selector(tickScroll))
-        link.add(to: .main, forMode: .common)
-        scrollLink = link
-    }
-
-    @objc private func tickScroll(_ link: CADisplayLink) {
-        guard let anim = scrollAnim else {
-            link.invalidate(); scrollLink = nil; return
-        }
-        let elapsed = CACurrentMediaTime() - anim.startTime
-        let t = min(1, max(0, elapsed / anim.duration))
-        let eased = t * t * (3 - 2 * t)  // smoothstep
-        setScrollOffset(anim.start + (anim.end - anim.start) * eased)
-        if t >= 1 {
-            link.invalidate(); scrollLink = nil
-            let done = anim.completion
-            scrollAnim = nil
-            done()
         }
     }
 

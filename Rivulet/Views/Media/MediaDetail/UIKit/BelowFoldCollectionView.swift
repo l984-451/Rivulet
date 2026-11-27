@@ -63,6 +63,10 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
 
     /// contentOffset.y + adjustedContentInset.top (0 at rest, grows as scrolled).
     var onScroll: ((CGFloat) -> Void)?
+    var onDetailsTopChanged: ((CGFloat) -> Void)?
+    private var isSyncingDetailsTop = false
+    private var appliedPosterFocusInset: CGFloat = 0
+    private var lowerRowsOffset: CGFloat = 0
     /// Fires when focus lands on an episode cell (the episode), or nil for any
     /// other cell / focus leaving. Drives season-pill tracking in the container.
     var onEpisodeFocused: ((MediaItem?) -> Void)?
@@ -107,6 +111,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     /// fires once when its snapshot is in, so the host's fade waits for content.
     private(set) var isLoadingEpisodes = false
     var onEpisodesApplied: (() -> Void)?
+    var onLateInitialFocusReady: (() -> Void)?
 
     private var episodesByID: [String: MediaItem] = [:]
     private var trailersByID: [String: BelowFoldTrailer] = [:]
@@ -131,6 +136,14 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
 
         collectionView = FocusScrollControlledCollectionView(frame: bounds, collectionViewLayout: makeLayout())
         collectionView.topBand = detailsTopY
+        collectionView.onFocusScrollRequest = { [weak self] target in
+            guard let self, self.offsetLink != nil else { return false }
+            let activeTarget = CGFloat((self.offsetMotion?.target ?? .infinity) / self.offsetMotionScale)
+            if self.collectionView.focusedCellIsTopSection
+                || abs(target - activeTarget) < 1 { return true }
+            self.cancelSlide()
+            return false
+        }
         collectionView.translatesAutoresizingMaskIntoConstraints = false
         collectionView.backgroundColor = .clear
         collectionView.delegate = self
@@ -183,24 +196,48 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         syncDetailsTop()
         // Position the rail at the carousel item's season BEFORE first render
         // (no visible scroll). Retry until the orthogonal scroller is built.
-        if let target = pendingInitialScroll {
+        if pendingInitialScroll != nil {
             collectionView.layoutIfNeeded()   // ensure the orthogonal scroller exists
-            if scrollOrthogonalEpisodes(toItem: target.item, epSection: target.section, animated: false) {
-                pendingInitialScroll = nil
-            }
+            positionInitialEpisodeIfReady()
         }
+    }
+
+    private func positionInitialEpisodeIfReady() {
+        guard let target = pendingInitialScroll,
+              scrollOrthogonalEpisodes(toItem: target.item, epSection: target.section, animated: false) else { return }
+        pendingInitialScroll = nil
     }
 
     /// Moves the inset and focus band to `detailsTopY`, keeping the rows where they are on screen.
     private func syncDetailsTop() {
         let topInset = detailsTopY
         let oldInset = collectionView.contentInset.top
-        guard oldInset != topInset else { return }
-        let y = oldInset == 0 ? -topInset : collectionView.contentOffset.y - (topInset - oldInset)
+        let posterInset = primaryPosterFocusInset
+        let oldPosterInset = appliedPosterFocusInset
+        guard !isSyncingDetailsTop, oldInset != topInset || oldPosterInset != posterInset else { return }
+        let oldY = collectionView.contentOffset.y
+        let oldDetailsY = slideTargetY(.details, topInset: oldInset, posterInset: oldPosterInset)
+        let newDetailsY = slideTargetY(.details, topInset: topInset, posterInset: posterInset)
+        let y: CGFloat
+        if oldInset == 0 {
+            y = -topInset
+        } else if offsetLink == nil, abs(oldY - oldDetailsY) < 0.5 {
+            y = newDetailsY
+        } else {
+            y = oldY - (topInset - oldInset)
+        }
+        offsetMotion?.retarget(
+            to: Double(offsetDestination == .details ? newDetailsY : -topInset) * offsetMotionScale,
+            shiftingPositionBy: Double(y - oldY) * offsetMotionScale
+        )
+        isSyncingDetailsTop = true
+        appliedPosterFocusInset = posterInset
         collectionView.contentInset = UIEdgeInsets(top: topInset, left: 0, bottom: 0, right: 0)
         collectionView.topBand = topInset
         collectionView.collectionViewLayout.invalidateLayout()
         collectionView.setContentOffset(CGPoint(x: 0, y: y), animated: false)
+        isSyncingDetailsTop = false
+        onDetailsTopChanged?(scrollOffsetFromHero)
     }
 
     private func makeLayout() -> UICollectionViewCompositionalLayout {
@@ -261,20 +298,25 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
                     itemH: 355,
                     gap: MediaRowMetrics.tileGap,   // six across on the grid, the seventh peeking
                     header: true,
-                    // Primary on a title with no extras or related: same peek,
-                    // less the header gap, so the strip is the cast row.
-                    topInset: isPrimary ? max(0, peek - 16) : 0,
-                    // The header reserves its own height, so the circles rest 41.5 below its baseline.
+                    // When Cast leads, use the full peek so the slide and focus land at the same offset.
+                    topInset: isPrimary ? peek : 0,
                     headerTopInset: 0,
                     headerHeight: 72,
                     headerBaseline: BelowFoldSectionHeader.castBaseline
                 )
-            case .about: return self.fullWidthSection(height: AboutCollectionCell.height, topInset: isPrimary ? peek : 0)
+            case .about:
+                return self.fullWidthSection(height: AboutCollectionCell.height, topInset: isPrimary ? peek : 24)
             case .info:
                 // Sized to its rows, so a short title leaves no empty band below them.
                 let columnsWidth = env.container.contentSize.width - Self.rowLeading - Self.rowTrailing
-                let height = self.detail.map { InfoColumnsCollectionCell.height(for: $0, columnsWidth: columnsWidth) }
-                return self.fullWidthSection(height: height ?? 605, band: true)
+                let height = self.detail.map { InfoColumnsCollectionCell.height(for: $0, columnsWidth: columnsWidth) } ?? 605
+                let section = self.fullWidthSection(height: height, band: true)
+                if self.sectionKinds.first == .about {
+                    // A short footer still needs enough scrollable space to land About at the focus band.
+                    let aboutHeight = AboutCollectionCell.height + Self.aboutBottomInset
+                    section.contentInsets.bottom = max(0, self.bounds.height - self.detailsTopY - aboutHeight - height)
+                }
+                return section
             }
         }
         return layout
@@ -304,10 +346,12 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         return section
     }
 
+    private static let aboutBottomInset: CGFloat = 56
+
     /// A single full-width block (About / Info columns) — no orthogonal scroll,
     /// left/right gutters matching the rails.
     private func fullWidthSection(height: CGFloat, band: Bool = false,
-                                  topInset: CGFloat = 0) -> NSCollectionLayoutSection {
+                                  topInset: CGFloat = 24) -> NSCollectionLayoutSection {
         let item = NSCollectionLayoutItem(layoutSize: .init(
             widthDimension: .fractionalWidth(1), heightDimension: .absolute(height)))
         let group = NSCollectionLayoutGroup.horizontal(
@@ -315,7 +359,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             subitems: [item])
         let section = NSCollectionLayoutSection(group: group)
         section.contentInsetsReference = .none
-        section.contentInsets = .init(top: 24 + topInset, leading: Self.rowLeading, bottom: 56,
+        section.contentInsets = .init(top: topInset, leading: Self.rowLeading, bottom: Self.aboutBottomInset,
                                       trailing: Self.rowTrailing)
         if band {
             // The cell paints the band itself, so it spans the whole collection
@@ -422,7 +466,10 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
                     // Per-cell focus drives season-pill tracking (fires on every
                     // horizontal move; the collection's didUpdateFocus does not).
                     cell.onFocused = { [weak self] focused in
-                        if focused { self?.pendingInitialFocus = nil; self?.onEpisodeFocused?(ep) }
+                        guard let self, focused else { return }
+                        self.clearPendingInitialFocus()
+                        self.restoreInitialFocusScrollAfterUpdate()
+                        self.onEpisodeFocused?(ep)
                     }
                     // Two focus stops: thumb = play, description = detail page.
                     cell.onPlay = { [weak self] in self?.onPlayEpisode?(ep) }
@@ -554,6 +601,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     /// Load + render the below-fold for `item`. `detail` (if the chrome already
     /// fetched it) supplies cast without a second round-trip.
     func configure(item: MediaItem, detail: MediaItemDetail?) {
+        pendingLateInitialFocus = nil
         loadToken &+= 1
         let token = loadToken
         configuredItem = item
@@ -562,11 +610,13 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             guard let self else { return }
             let content = await self.loader.load(for: item, detail: detail)
             guard self.loadToken == token else { return }
+            let hadRows = !self.sectionKinds.isEmpty
             self.ingest(content)
             self.applySnapshot()
             // The load can finish after the user entered the rail; don't move it under them.
-            if self.collectionView.focusedEpisodeIndexPath == nil {
+            if self.focusedRowPath == nil {
                 self.scrollToInitialEpisode(item: content.initialEpisode ?? item)
+                self.retryEntryFocus(allowRowFallback: !hadRows)
             }
             self.loadRatings(token: token)
             // Chained after ingest, which would otherwise overwrite it with the partial detail.
@@ -574,6 +624,23 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
             guard self.loadToken == token, let advisory else { return }
             self.applyContentAdvisory(advisory)
         }
+    }
+
+    private func retryEntryFocus(allowRowFallback: Bool) {
+        if offsetFocusReady != nil {
+            if offsetLink == nil { handOffEntryFocusIfReady() }
+            return
+        }
+        guard let ready = onLateInitialFocusReady else { return }
+        if pendingInitialFocus != nil {
+            guard prepareInitialFocusScroll() else { return }
+        } else {
+            guard allowRowFallback, !sectionKinds.isEmpty else { return }
+            collectionView.layoutIfNeeded()
+        }
+        let request = offsetRequest
+        ready()
+        if offsetRequest == request { restoreInitialFocusScrollAfterUpdate() }
     }
 
     /// Patch the About cell with the rich advisory after it arrives, without a
@@ -612,6 +679,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     /// Episodes-only load for the carousel-stable peek (per page) — skips the
     /// heavier cast/related fetch until expand.
     func configureEpisodesOnly(item: MediaItem) {
+        pendingLateInitialFocus = nil
         loadToken &+= 1
         let token = loadToken
         // A different item: empty the rail now, so the previous show's
@@ -740,9 +808,21 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         let fresh = Set(episodes.map(\.ref.itemID))
         let gone = Set(episodesByID.keys).subtracting(fresh)
         var snapshot = dataSource.snapshot()
+        var entryChanged = false
         if !gone.isEmpty {
             let pruned = Self.prunedRail(cachedEpisodes, removing: gone)
             let dropped = Set(cachedEpisodes).subtracting(pruned)
+            if let target = pendingInitialFocus,
+               let episode = dataSource.itemIdentifier(for: target) {
+                let updatedTarget = pruned.firstIndex(of: episode).map { IndexPath(item: $0, section: target.section) }
+                if updatedTarget != target {
+                    pendingInitialFocus = updatedTarget
+                    pendingInitialScroll = updatedTarget
+                    pendingLateInitialFocus = nil
+                    currentSeasonFirstEpisode = updatedTarget
+                    entryChanged = true
+                }
+            }
             gone.forEach { episodesByID[$0] = nil }
             cachedEpisodes = pruned
             snapshot.deleteItems(Array(dropped.intersection(snapshot.itemIdentifiers)))
@@ -753,7 +833,14 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         let targets = changed.filter { present.contains($0) }
         guard !targets.isEmpty || !gone.isEmpty else { return }
         if !targets.isEmpty { snapshot.reconfigureItems(targets) }
-        dataSource.apply(snapshot, animatingDifferences: !gone.isEmpty)
+        let load = loadToken
+        let request = offsetRequest
+        dataSource.apply(snapshot, animatingDifferences: !gone.isEmpty) { [weak self] in
+            guard entryChanged, let self, self.loadToken == load, self.offsetRequest == request else { return }
+            self.collectionView.layoutIfNeeded()
+            self.positionInitialEpisodeIfReady()
+            self.retryEntryFocus(allowRowFallback: true)
+        }
     }
 
     /// The rail without the given episodes; a season divider left with no episode after it goes too.
@@ -781,7 +868,19 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         detail = nil
     }
 
+    private var focusedRowPath: IndexPath? {
+        guard let focused = UIFocusSystem.focusSystem(for: collectionView)?.focusedItem as? UIView else { return nil }
+        return collectionView.ownedCell(containing: focused)?.indexPath
+    }
+
     private func ingest(_ content: BelowFoldContent) {
+        let focusedEpisodeID: String?
+        if let path = focusedRowPath,
+           case let .episode(id) = dataSource.itemIdentifier(for: path) {
+            focusedEpisodeID = id
+        } else {
+            focusedEpisodeID = nil
+        }
         detail = content.detail
         showDetail = content.showDetail
         multiSeason = content.seasons.count > 1
@@ -816,8 +915,11 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         collectionRow = content.collection
         shelfOffsets = [:]
 
-        // Last, so a handler reading back sees consistent state. The loader picked the season.
-        let selectedSeasonIndex = content.selectedSeason
+        // The focused episode can already be in a different season when the full load arrives.
+        let focusedSeasonIndex = focusedEpisodeID
+            .flatMap { episodesByID[$0]?.parentRef }
+            .flatMap { ref in content.seasons.firstIndex(where: { $0.ref == ref }) }
+        let selectedSeasonIndex = focusedSeasonIndex ?? content.selectedSeason
             .flatMap { sel in content.seasons.firstIndex(where: { $0.ref.itemID == sel.ref.itemID }) } ?? 0
         onSeasonsLoaded?(content.seasons, selectedSeasonIndex)
     }
@@ -915,8 +1017,7 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
 
     /// Targets the item's own episode (a season's first), positioned in `layoutSubviews` before first render.
     func scrollToInitialEpisode(item: MediaItem) {
-        pendingInitialScroll = nil
-        pendingInitialFocus = nil
+        clearPendingInitialFocus()
         currentSeasonFirstEpisode = nil
         guard let epSection = sectionKinds.firstIndex(of: .episodes) else { return }
         let targetIdx: Int?
@@ -1062,8 +1163,21 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         }
     }
 
+    private var primaryPosterFocusInset: CGFloat {
+        switch sectionKinds.first {
+        case .related?, .collection?:
+            // The nested flow layout centers poster cells in the shelf's vertical focus padding.
+            MediaRowMetrics.focusGrowthPadding / 2
+        default: 0
+        }
+    }
+
     /// The `onScroll` value at the details rest, where the pills sit at their resting Y.
-    var detailsRestOff: CGFloat { max(0, bounds.height - Self.episodePeek - detailsTopY) }
+    var detailsRestOff: CGFloat { max(0, detailsTravel(topInset: detailsTopY, posterInset: primaryPosterFocusInset)) }
+
+    private func detailsTravel(topInset: CGFloat, posterInset: CGFloat) -> CGFloat {
+        bounds.height - Self.episodePeek - topInset + posterInset
+    }
 
     /// False until a load lands: Down must not slide into an empty page, where focus has nowhere to go.
     var hasRows: Bool { !sectionKinds.isEmpty }
@@ -1114,61 +1228,133 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     var episodesJustTookFocus: Bool { collectionView.topSectionJustTookFocus }
 
     /// Slides the episodes up to the details top on the display link (see `offsetLink`).
-    func slideToDetailsTop(animated: Bool, completion: (() -> Void)? = nil) {
-        collectionView.cancelFocusScroll()
+    func slideToDetailsTop(animated: Bool, travelDistance: CGFloat? = nil, onReadyForFocus: (() -> Void)? = nil,
+                           completion: (() -> Void)? = nil) {
         // Scroll so the first episode lands at detailsTopY — which is the focus
         // engine's preferred position (contentInset.top == detailsTopY), so
-        // handing focus in afterward causes no re-scroll bounce.
-        let targetY = max(0, bounds.height - Self.episodePeek - 2 * detailsTopY)
-        guard animated else {
-            cancelSlide()
-            setOffsetY(targetY)
-            completion?()
-            return
-        }
-        animateOffsetY(to: targetY, duration: 0.6, completion: completion)
+        // focus entry and the slide share the same target.
+        animateOffsetY(to: .details, animated: animated, travelDistance: travelDistance,
+                       onReadyForFocus: onReadyForFocus, completion: completion)
     }
 
     /// Reverse of slideToDetailsTop: slide the episodes back down to the hero
     /// peek rest (drives the reverse choreography). Completion fires at the end.
-    func slideToHeroRest(animated: Bool, completion: (() -> Void)? = nil) {
+    func slideToHeroRest(animated: Bool, travelDistance: CGFloat? = nil, completion: (() -> Void)? = nil) {
         collectionView.cancelFocusScroll()
-        let targetY = -detailsTopY
-        guard animated else {
-            cancelSlide()
-            setOffsetY(targetY)
-            completion?()
-            return
-        }
-        animateOffsetY(to: targetY, duration: 0.6, completion: completion)
+        animateOffsetY(to: .hero, animated: animated, travelDistance: travelDistance, completion: completion)
     }
 
     // MARK: - One-clock vertical scroll (CADisplayLink)
 
     // UIView.animate on contentOffset fires scrollViewDidScroll once (traced), so the
     // hero fade would snap. Setting it per frame keeps the slide and fade on one clock.
+    private enum SlideDestination { case details, hero }
+
+    private func slideTargetY(_ destination: SlideDestination, topInset: CGFloat, posterInset: CGFloat) -> CGFloat {
+        switch destination {
+        case .details: max(0, detailsTravel(topInset: topInset, posterInset: posterInset) - topInset)
+        case .hero: -topInset
+        }
+    }
+
+    private var offsetDestination: SlideDestination = .details
     private var offsetLink: CADisplayLink?
-    private var offsetStartY: CGFloat = 0
-    private var offsetTargetY: CGFloat = 0
-    private var offsetStartTime: CFTimeInterval = 0
-    private var offsetDuration: CFTimeInterval = 0.6
+    private var offsetMotion: DetailScrollMotion?
+    private var offsetMotionScale: Double = 1
+    private var offsetRequest: UInt = 0
     private var offsetCompletion: (() -> Void)?
+    private var offsetFocusReady: (() -> Void)?
+    private weak var initialFocusScroller: UIScrollView?
+    private var initialFocusScrollWasEnabled = false
+
+    private func handOffEntryFocusIfReady() {
+        guard let ready = offsetFocusReady, prepareInitialFocusScroll() else { return }
+        offsetFocusReady = nil
+        let request = offsetRequest
+        ready()
+        if offsetRequest == request, offsetLink == nil {
+            restoreInitialFocusScrollAfterUpdate()
+        }
+    }
+
+    private func prepareInitialFocusScroll() -> Bool {
+        guard let target = pendingInitialFocus else { return true }
+        guard realizedFocusTarget(target, in: collectionView) != nil else {
+            pendingLateInitialFocus = target
+            return false
+        }
+        pendingLateInitialFocus = nil
+        guard initialFocusScroller == nil,
+              let scroller = orthogonalScrollView(forSection: target.section) else { return true }
+        initialFocusScroller = scroller
+        initialFocusScrollWasEnabled = scroller.isScrollEnabled
+        // The initial episode is already aligned. Suppress UIKit's second horizontal landing
+        // until this focus update returns, then ordinary rail navigation resumes.
+        scroller.isScrollEnabled = false
+        return true
+    }
+
+    private func restoreInitialFocusScroll() {
+        initialFocusScroller?.isScrollEnabled = initialFocusScrollWasEnabled
+        initialFocusScroller = nil
+    }
+
+    private func restoreInitialFocusScrollAfterUpdate() {
+        guard initialFocusScroller != nil else { return }
+        let request = offsetRequest
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.offsetRequest == request else { return }
+            self.restoreInitialFocusScroll()
+        }
+    }
 
     private func setOffsetY(_ y: CGFloat) {
         collectionView.contentOffset.y = y
     }
 
-    private func animateOffsetY(to targetY: CGFloat, duration: CFTimeInterval, completion: (() -> Void)?) {
-        // Supersede any in-flight scroll; drop its completion (don't double-fire).
-        offsetLink?.invalidate()
-        offsetLink = nil
-        offsetCompletion = nil
-        collectionView.isScrollEnabled = false
-        offsetStartY = collectionView.contentOffset.y
-        offsetTargetY = targetY
-        offsetDuration = max(0.0001, duration)
+    private func retryEntryFocusAtRest(request: UInt) {
+        guard offsetRequest == request, collectionView.focusedEpisodeIndexPath == nil else { return }
+        retryEntryFocus(allowRowFallback: true)
+    }
+
+    private func animateOffsetY(to destination: SlideDestination, animated: Bool, travelDistance: CGFloat?,
+                                onReadyForFocus: (() -> Void)? = nil,
+                                completion: (() -> Void)?) {
+        let targetY = slideTargetY(destination, topInset: detailsTopY, posterInset: primaryPosterFocusInset)
+        restoreInitialFocusScroll()
+        guard animated else {
+            cancelSlide()
+            let request = offsetRequest
+            setOffsetY(targetY)
+            guard offsetRequest == request else { return }
+            offsetFocusReady = onReadyForFocus
+            handOffEntryFocusIfReady()
+            guard offsetRequest == request else { return }
+            if destination == .details, onReadyForFocus != nil {
+                DispatchQueue.main.async { [weak self] in
+                    self?.retryEntryFocusAtRest(request: request)
+                }
+            }
+            completion?()
+            return
+        }
+        offsetRequest &+= 1
+        pendingLateInitialFocus = nil
+        offsetDestination = destination
         offsetCompletion = completion
-        offsetStartTime = CACurrentMediaTime()
+        offsetFocusReady = onReadyForFocus
+        if offsetLink != nil {
+            offsetMotion?.target = Double(targetY) * offsetMotionScale
+            return
+        }
+        collectionView.cancelFocusScroll()
+        collectionView.isScrollEnabled = false
+        // The driver measures outer hero travel; primary artwork has a shorter geometric path.
+        let heroTravel = max(1, travelDistance ?? detailsRestOff)
+        let railTravel = max(1, detailsRestOff)
+        offsetMotionScale = Double(heroTravel / railTravel)
+        offsetMotion = DetailScrollMotion(position: Double(collectionView.contentOffset.y) * offsetMotionScale,
+                                          target: Double(targetY) * offsetMotionScale, time: CACurrentMediaTime())
         let link = CADisplayLink(target: self, selector: #selector(stepOffset))
         link.add(to: .main, forMode: .common)
         offsetLink = link
@@ -1179,28 +1365,47 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     }
 
     func advanceSlide(at time: CFTimeInterval) {
-        guard let link = offsetLink else { return }
-        let elapsed = time - offsetStartTime
-        let t = min(1, max(0, elapsed / offsetDuration))
-        // Quadratic ease-in-out — visually matches UIView's .curveEaseInOut.
-        let eased = t < 0.5 ? 2 * t * t : 1 - pow(-2 * t + 2, 2) / 2
-        setOffsetY(offsetStartY + (offsetTargetY - offsetStartY) * CGFloat(eased))
-        guard t >= 1 else { return }
-        link.invalidate()
-        offsetLink = nil
+        guard let link = offsetLink, var motion = offsetMotion else { return }
+        let request = offsetRequest
+        let finished = motion.advance(at: time)
+        offsetMotion = motion
+        let scale = max(1, traitCollection.displayScale)
+        let position = CGFloat(motion.position / offsetMotionScale)
+        setOffsetY(finished ? CGFloat(motion.target / offsetMotionScale) : (position * scale).rounded() / scale)
+        guard offsetLink === link, offsetRequest == request else { return }
+        let remaining = abs(motion.target - motion.position) / offsetMotionScale
+        let focusRoom = max(0, bounds.height - detailsTopY - max(EpisodeCell.thumbHeight, EpisodeCell.trailerThumbHeight))
+        if remaining <= Double(focusRoom) {
+            handOffEntryFocusIfReady()
+            guard offsetLink === link, offsetRequest == request else { return }
+        }
+        guard finished else { return }
+        stopSlideAnimation()
+        restoreInitialFocusScroll()
         collectionView.isScrollEnabled = true
         let done = offsetCompletion
         offsetCompletion = nil
+        if offsetDestination == .details { retryEntryFocusAtRest(request: request) }
+        guard offsetRequest == request else { return }
         done?()
     }
 
     // A reset or replacement must not hand focus to the superseded destination.
     private func cancelSlide() {
-        offsetLink?.invalidate()
-        offsetLink = nil
+        offsetRequest &+= 1
+        stopSlideAnimation()
         offsetCompletion = nil
+        offsetFocusReady = nil
+        pendingLateInitialFocus = nil
+        restoreInitialFocusScroll()
         collectionView.cancelFocusScroll()
         collectionView.isScrollEnabled = true
+    }
+
+    private func stopSlideAnimation() {
+        offsetLink?.invalidate()
+        offsetLink = nil
+        offsetMotion = nil
     }
 
     deinit { offsetLink?.invalidate() }
@@ -1219,7 +1424,13 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
     /// item's), so the engine doesn't focus item 0 and scroll the rail back.
     /// Cleared once focus lands on an episode.
     private var pendingInitialFocus: IndexPath?
-    func clearPendingInitialFocus() { pendingInitialFocus = nil }
+    private var pendingLateInitialFocus: IndexPath?
+
+    func clearPendingInitialFocus() {
+        pendingInitialScroll = nil
+        pendingInitialFocus = nil
+        pendingLateInitialFocus = nil
+    }
 
     // MARK: - Header lift
 
@@ -1305,10 +1516,58 @@ final class BelowFoldCollectionView: UIView, UICollectionViewDelegate {
         collectionView.finishFocusScroll()
     }
 
+    private var scrollOffsetFromHero: CGFloat {
+        max(0, collectionView.contentOffset.y + collectionView.adjustedContentInset.top)
+    }
+
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        guard scrollView === collectionView else { return }
-        let off = scrollView.contentOffset.y + scrollView.adjustedContentInset.top
-        onScroll?(max(0, off))
+        guard scrollView === collectionView, !isSyncingDetailsTop else { return }
+        onScroll?(scrollOffsetFromHero)
+    }
+
+    func setLowerRowsOffset(_ offset: CGFloat) {
+        guard offset != lowerRowsOffset else { return }
+        lowerRowsOffset = offset
+        for cell in collectionView.visibleCells {
+            guard let indexPath = collectionView.indexPath(for: cell) else { continue }
+            cell.transform = lowerRowTransform(for: indexPath)
+        }
+        let kind = UICollectionView.elementKindSectionHeader
+        for indexPath in collectionView.indexPathsForVisibleSupplementaryElements(ofKind: kind) {
+            collectionView.supplementaryView(forElementKind: kind, at: indexPath)?.transform =
+                CGAffineTransform(translationX: 0, y: lowerRowsOffset)
+        }
+    }
+
+    private func lowerRowTransform(for indexPath: IndexPath) -> CGAffineTransform {
+        guard indexPath.section > 0 else { return .identity }
+        return CGAffineTransform(translationX: 0, y: lowerRowsOffset)
+    }
+
+    func collectionView(_ collectionView: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt indexPath: IndexPath) {
+        cell.transform = lowerRowTransform(for: indexPath)
+        guard pendingInitialScroll?.section == indexPath.section || pendingLateInitialFocus == indexPath else { return }
+        let token = loadToken
+        let request = offsetRequest
+        // Updating scroll or focus here would re-enter UIKit while it is displaying the cell.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.loadToken == token, self.offsetRequest == request else { return }
+            if self.pendingInitialScroll?.section == indexPath.section {
+                self.positionInitialEpisodeIfReady()
+            }
+            guard self.pendingLateInitialFocus == indexPath, self.pendingInitialFocus == indexPath else { return }
+            if self.offsetFocusReady != nil {
+                self.handOffEntryFocusIfReady()
+            } else {
+                self.retryEntryFocus(allowRowFallback: false)
+            }
+        }
+    }
+
+    func collectionView(_ collectionView: UICollectionView, willDisplaySupplementaryView view: UICollectionReusableView,
+                        forElementKind elementKind: String, at indexPath: IndexPath) {
+        view.layer.zPosition = -1
+        view.transform = CGAffineTransform(translationX: 0, y: lowerRowsOffset)
     }
 
     /// Puts a shelf row (Related) back on its tile and arms it, before the focus update

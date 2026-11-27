@@ -99,8 +99,11 @@ nonisolated enum HomeFeed {
                          items: $0.items, pagingKey: $0.pagingKey, isPromoted: $0.isPromoted)
             }
         }
+        // Only My Audio Language leaves titles without it out (`AudioLanguageGate`).
+        var continueWatching = await continuing
+        if let items = continueWatching { continueWatching = await AudioLanguageGate.filter(items) }
         return ServerRows(libraries: libraries, photoLibraries: all.filter { $0.kind == .photos },
-                          continueWatching: await continuing, rowsByLibrary: rows)
+                          continueWatching: continueWatching, rowsByLibrary: rows)
     }
 
     /// A library's own page of rows (its Recommended), in the server's order, empty rows dropped.

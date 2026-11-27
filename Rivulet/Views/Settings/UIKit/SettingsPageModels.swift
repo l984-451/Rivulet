@@ -636,6 +636,11 @@ enum SettingsContent {
             toggle("stereoWithSubwoofer", "Stereo with Subwoofer", key: StereoWithSubwoofer.key, default: false),
         ] + selfBuiltHomeTheaterRows + [
             .header("Filtering"),
+            SettingsRowItem(id: AudioLanguageGate.enabledKey, title: "Only My Audio Language", kind: .toggle(
+                get: { UserDefaults.standard.bool(forKey: AudioLanguageGate.enabledKey) },
+                set: { UserDefaults.standard.set($0, forKey: AudioLanguageGate.enabledKey) },
+                // Continue Watching and Favorites refetch, now with or without the check.
+                didChange: { _, _ in NotificationCenter.default.post(name: .plexDataNeedsRefresh, object: nil) })),
             SettingsRowItem(id: "cat_contentFilter", title: "Content Filtering",
                             kind: .navigationValue(.contentFilter, value: {
                                 SettingsStore.bool(ContentFilterManager.Keys.enabled, default: false) ? String(localized: "On") : String(localized: "Off")

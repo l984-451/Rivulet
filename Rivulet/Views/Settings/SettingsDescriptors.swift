@@ -595,6 +595,10 @@ enum SettingsDescriptorStore {
         ),
 
         // MARK: Content Filtering
+        "onlyPreferredAudioLanguage": SettingDescriptor(
+            icon: "waveform",
+            description: "Hides titles without your Audio Language from Continue Watching and Favorites. Shows return once the next episode is available in your Audio Language."
+        ),
         "cat_contentFilter": SettingDescriptor(
             icon: "hand.raised.fill",
             description: "Mute language and skip scenes during playback without changing the file. Language comes from English subtitles; skips from a filter list."

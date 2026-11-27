@@ -102,6 +102,10 @@ protocol MediaProvider: Sendable, Identifiable {
     func favorites(in library: MediaLibrary, limit: Int) async throws -> [MediaItem]
     /// Marks a movie or show a favorite, or clears it. Plex: five stars, or no rating.
     func setFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws
+    /// Whether each item has an audio track in `language` (a `TrackLanguage.normalize` code): a movie
+    /// or episode for itself, a show for its next unwatched episode (none left: true). An item whose
+    /// tracks are unknown is left out. `AudioLanguageGate` asks. Default: nothing known.
+    func audioLanguageAvailability(_ language: String, for items: [MediaItem]) async -> [MediaItemRef: Bool]
     /// The library's titles on `trending`, in its order, at most `limit`.
     /// Home's hero on a server with no TMDB index of its own. Default: none.
     func trending(in library: MediaLibrary, from trending: [TMDBListItem], limit: Int) async throws -> [MediaItem]
@@ -301,6 +305,7 @@ extension MediaProvider {
     func setFavorite(_ favorite: Bool, for ref: MediaItemRef) async throws {
         throw MediaProviderError.backendSpecific(underlying: "favorites not supported")
     }
+    func audioLanguageAvailability(_ language: String, for items: [MediaItem]) async -> [MediaItemRef: Bool] { [:] }
     func trending(in library: MediaLibrary, from trending: [TMDBListItem], limit: Int) async throws -> [MediaItem] { [] }
     func items(in library: MediaLibrary, sort: SortOption, filter: LibraryFilter, page: Page) async throws -> PagedResult<MediaItem> {
         guard filter.isActive else { return try await items(in: library, sort: sort, page: page) }

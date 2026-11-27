@@ -125,6 +125,7 @@ nonisolated enum PersonalRows {
                 if request.libraries.count > 1 {
                     items.sort { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
                 }
+                items = await AudioLanguageGate.filter(items)
                 if !items.isEmpty {
                     next.append(PersonalRow(id: id, providerID: request.provider.id, title: favoritesTitle(request.kind),
                                             identifier: favoritesIdentifier(request.kind),

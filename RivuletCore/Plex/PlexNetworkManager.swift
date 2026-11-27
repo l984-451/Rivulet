@@ -668,6 +668,39 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
         return container.MediaContainer.Metadata ?? []
     }
 
+    /// Several movies' or episodes' streams in one request: `/library/metadata/<k1>,<k2>,…` with the
+    /// cast, images and the like left out. `PlexProvider.audioLanguageAvailability` reads the audio.
+    func getStreams(serverURL: String, authToken: String, ratingKeys: [String]) async throws -> [PlexMetadata] {
+        guard !ratingKeys.isEmpty,
+              var components = URLComponents(string: "\(serverURL)/library/metadata/\(ratingKeys.joined(separator: ","))") else {
+            return []
+        }
+        components.queryItems = [
+            URLQueryItem(name: "excludeElements",
+                         value: "Role,Director,Writer,Producer,Genre,Country,Image,UltraBlurColors,Location,Field,Guid,Rating"),
+            URLQueryItem(name: "excludeFields", value: "summary")
+        ]
+        guard let url = components.url else { throw PlexAPIError.invalidURL }
+        let container: PlexMediaContainerWrapper = try await request(url, headers: plexHeaders(authToken: authToken))
+        return container.MediaContainer.Metadata ?? []
+    }
+
+    /// A show's next episode to watch (its On Deck) by rating key; nil when none is left.
+    func getNextEpisodeKey(serverURL: String, authToken: String, showRatingKey: String) async throws -> String? {
+        guard var components = URLComponents(string: "\(serverURL)/library/metadata/\(showRatingKey)") else {
+            throw PlexAPIError.invalidURL
+        }
+        components.queryItems = [
+            URLQueryItem(name: "includeOnDeck", value: "1"),
+            URLQueryItem(name: "excludeElements",
+                         value: "Role,Director,Writer,Producer,Genre,Country,Image,UltraBlurColors,Location,Field,Guid,Rating"),
+            URLQueryItem(name: "excludeFields", value: "summary")
+        ]
+        guard let url = components.url else { throw PlexAPIError.invalidURL }
+        let container: PlexMediaContainerWrapper = try await request(url, headers: plexHeaders(authToken: authToken))
+        return container.MediaContainer.Metadata?.first?.OnDeck?.Metadata?.first?.ratingKey
+    }
+
     /// Get full metadata including cast, crew, and extras
     func getFullMetadata(
         serverURL: String,

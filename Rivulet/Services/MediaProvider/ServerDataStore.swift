@@ -219,7 +219,8 @@ final class ServerDataStore: ObservableObject {
         var continuingRow: [CachedHomeHub] = []
         var fetchedContinue: [MediaItem]?
         do {
-            fetchedContinue = try await fetchedContinuing
+            // Only My Audio Language leaves titles without it out (`AudioLanguageGate`).
+            fetchedContinue = await AudioLanguageGate.filter(try await fetchedContinuing)
         } catch {
             DiagLog.error(.servers, "\(provider.kind) continue watching failed: \(DiagLog.describe(error))")
         }

@@ -8,6 +8,12 @@ import SwiftUI
 /// A line starting with "## " is a heading; any other line is a bullet.
 enum IOSChangelog {
     static let entries: [(version: String, lines: [String])] = [
+        ("1.3.1 (134)", [
+            "## Fixes",
+            "Playback no longer fills gigabytes of storage",
+            "Fixed a freeze in the Live TV guide on very large channel lineups",
+            "Libraries open on Recommended without having to switch pages",
+        ]),
         ("1.3.1 (133)", [
             "New Discover tab with popular, upcoming and top rated titles. @priyanshuppal",
             "Versions lists every copy of a title across all your servers. @nachoferre",

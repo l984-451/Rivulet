@@ -155,6 +155,19 @@ struct WhatsNewView: View {
     // MARK: - Changelog Data
 
     static let changelogs: [(version: String, features: [String])] = [
+        ("1.3.1 (134)", [
+            "Click the remote to play and pause, and tap to show the controls",
+            "Live TV has the same controls as movies, with fast forward in the rewind window",
+            "Plex artist pages include singles and EPs",
+            "## Fixes",
+            "Playback no longer fills gigabytes of storage",
+            "Fixed a freeze in the Live TV guide on very large channel lineups",
+            "Live TV channels that stayed black now play",
+            "Jellyfin and Emby links from Siri or a smart home now open the title",
+            "What's On no longer opens with nothing selected",
+            "Detail pages no longer go blank when you scroll down right away",
+            "A Plex song played to the end counts as one play",
+        ]),
         ("1.3.1 (133)", [
             "Versions lists every copy of a title across all your servers. @nachoferre",
             "Say \"next episode\" to Siri to play the next episode. @nachoferre",

@@ -41,6 +41,20 @@ struct IOSLibrarySettingsView: View {
                     Text("Hidden libraries stay on the server and are left out of Library and Home.")
                 }
             }
+            if !browse.discoverableLibraries.isEmpty {
+                Section {
+                    ForEach(browse.discoverableLibraries) { library in
+                        Toggle(isOn: Binding(get: { browse.usesInDiscover(library) },
+                                             set: { browse.setUsesInDiscover(library, $0) })) {
+                            Text(verbatim: browse.labels.title(library.title, providerID: library.providerID))
+                        }
+                    }
+                } header: {
+                    Text("Use in Discover")
+                } footer: {
+                    Text("Discover opens your own copy of a title in these libraries, and For You learns from what you watch in them.")
+                }
+            }
         }
         .navigationTitle("Library")
     }

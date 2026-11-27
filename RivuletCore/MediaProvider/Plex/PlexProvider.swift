@@ -434,28 +434,30 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
 
     // MARK: - Titles by external id
 
-    /// The server's items for `titles`, in title order, as Plex returns them. A title with a plex:// guid
-    /// is asked for as is; one with only a TMDB id first gets its guid from plex.tv. iOS Home's heroes read these.
-    func ownedMetadata(matching titles: [TitleMatch]) async throws -> [PlexMetadata] {
+    /// The server's items for `titles`, in title order, every copy of a title together (`ownedItems`), at most
+    /// `limit` titles. A title with a plex:// guid is asked for as is; one with only a TMDB id first gets its guid
+    /// from plex.tv. Home's heroes and Discover read these.
+    func ownedMetadata(matching titles: [TitleMatch], limit: Int = .max) async throws -> [PlexMetadata] {
         let guids = await PlexTrendingHero.guids(for: titles, accountToken: await accountToken(), lookup: guidLookup)
         guard !guids.isEmpty else { return [] }
         let owned = try await networkManager.findByGuids(serverURL: serverURL, authToken: authToken, guids: guids)
-        return PlexTrendingHero.ordered(owned, by: guids)
+        return PlexTrendingHero.ordered(owned, by: guids, limit: limit)
     }
 
     func ownedItems(matching titles: [TitleMatch], limit: Int) async throws -> [MediaItem] {
         try await plexCall {
-            try await ownedMetadata(matching: titles).prefix(limit).map {
+            try await ownedMetadata(matching: titles, limit: limit).map {
                 PlexMediaMapper.item($0, providerID: id, serverURL: serverURL, authToken: authToken)
             }
         }
     }
 
     /// The library's titles on `trending`. One server-wide guid lookup, then cut to this library:
-    /// by section when the server says which, always by the library's kind.
+    /// by section when the server says which, always by the library's kind. One copy per title.
     func trending(in library: MediaLibrary, from trending: [TMDBListItem], limit: Int) async throws -> [MediaItem] {
         try await plexCall {
-            try await ownedMetadata(matching: trending.map(TitleMatch.init))
+            var seen = Set<String>()
+            return try await ownedMetadata(matching: trending.map(TitleMatch.init))
                 .filter { meta in
                     let kindFits = switch library.kind {
                     case .movies: meta.type == "movie"
@@ -463,6 +465,7 @@ final class PlexProvider: MediaProvider, @unchecked Sendable {
                     default: true
                     }
                     return kindFits && (meta.librarySectionID.map { String($0) == library.id } ?? true)
+                        && seen.insert(meta.guid ?? "").inserted
                 }
                 .prefix(limit)
                 .map { PlexMediaMapper.item($0, providerID: id, serverURL: serverURL, authToken: authToken) }

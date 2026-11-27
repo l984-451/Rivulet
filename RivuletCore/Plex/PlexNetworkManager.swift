@@ -743,11 +743,13 @@ class PlexNetworkManager: NSObject, @unchecked Sendable {
             && URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.contains { $0.name == "guid" } == true
     }
 
-    /// Every owned library item among `guids` (plex:// guids; the server indexes no external ones),
-    /// in one request: `/library/all` reads a comma list as any-of.
+    /// Every owned library item among `guids`, in one request: `/library/all` reads a comma list as any-of.
+    /// The server matches only plex:// guids, but with `includeGuids` it returns each item's external ids,
+    /// so a caller can tell which TMDB title an item is (Discover).
     func findByGuids(serverURL: String, authToken: String, guids: [String]) async throws -> [PlexMetadata] {
         guard !guids.isEmpty, var components = URLComponents(string: "\(serverURL)/library/all") else { return [] }
-        components.queryItems = [URLQueryItem(name: "guid", value: guids.joined(separator: ","))]
+        components.queryItems = [URLQueryItem(name: "guid", value: guids.joined(separator: ",")),
+                                 URLQueryItem(name: "includeGuids", value: "1")]
         guard let url = components.url else { throw PlexAPIError.invalidURL }
         let container: PlexMediaContainerWrapper = try await request(url, headers: plexHeaders(authToken: authToken))
         return container.MediaContainer.Metadata ?? []

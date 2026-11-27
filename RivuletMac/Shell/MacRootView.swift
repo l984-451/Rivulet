@@ -4,7 +4,7 @@
 import AppKit
 import SwiftUI
 
-/// The window: a sidebar of Home, Search, Live TV, Favorites, then each server's libraries and
+/// The window: a sidebar of Home, Discover, Search, Live TV, Favorites, then each server's libraries and
 /// playlists, over a detail column with one NavigationStack per sidebar row.
 struct MacRootView: View {
     /// The launch splash has left; What's New waits for it.
@@ -119,6 +119,13 @@ struct MacRootView: View {
             for key in Array(forwardPaths.keys) { forwardPaths[key] = forwardPaths[key]?.filter { !removed.contains($0.providerID) } }
             if let id = selection?.providerID, removed.contains(id) { selection = .home }
         }
+        // Signing out of Plex takes the Discover row and its pages away: Home takes its place.
+        .onChange(of: plex.showsDiscover) { _, shows in
+            guard !shows else { return }
+            paths[.discover] = nil
+            forwardPaths[.discover] = nil
+            if selection == .discover { selection = .home }
+        }
         .onChange(of: showFavorites) { _, shown in
             if !shown, selection == .favorites { selection = .home }
         }
@@ -155,6 +162,9 @@ struct MacRootView: View {
         List(selection: $selection) {
             Section {
                 Label("Home", systemImage: "house").tag(MacSidebarItem.home)
+                if plex.showsDiscover {
+                    Label("Discover", systemImage: "sparkles").tag(MacSidebarItem.discover)
+                }
                 Label("Search", systemImage: "magnifyingglass").tag(MacSidebarItem.search)
                 Label("Live TV", systemImage: "play.tv").tag(MacSidebarItem.liveTV)
                 if showFavorites, browse.offersFavorites {
@@ -249,6 +259,7 @@ struct MacRootView: View {
         case _ where !browse.hasServers:
             MacSignInLanding()
         case .home: MacHomeView()
+        case .discover: MacDiscoverView()
         case .search: MacSearchView()
         case .favorites: MacFavoritesView()
         case .library(let library): libraryPage(library)
@@ -299,12 +310,13 @@ struct MacRootView: View {
     /// Reopens the row this window had. A library row waits for the libraries to load.
     private func restoreRow() {
         guard !restoredRow else { return }
-        if !["home", "search", "live-tv"].contains(storedRow) {
+        if !["home", "discover", "search", "live-tv"].contains(storedRow) {
             guard !(browse.libraries + browse.photoLibraries).isEmpty, !browse.isLoadingOtherServers else { return }
         }
         restoredRow = true
         guard let row = MacSidebarItem.restore(storedRow, libraries: browse.libraries + browse.photoLibraries) else { return }
         switch row {
+        case .discover where !plex.showsDiscover: return
         case .favorites where !(showFavorites && browse.offersFavorites): return
         case .playlists(let id) where !showPlaylists || browse.playlists[id] == nil: return
         default: selection = row

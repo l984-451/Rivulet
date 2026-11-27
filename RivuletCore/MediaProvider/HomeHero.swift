@@ -142,13 +142,14 @@ final class HomeHeroSources {
         return items
     }
 
-    /// Each server's matches with a backdrop, one server after another in turn, at most ten.
+    /// Each server's matches with a backdrop, one server after another in turn, at most ten. A server's first
+    /// copy of a title stands for it (`ownedItems` returns every copy).
     private func owned(_ titles: [TitleMatch], _ providers: [any MediaProvider]) async -> [MediaItem] {
         let lists = await withTaskGroup(of: (Int, [MediaItem]).self) { group in
             for (index, provider) in providers.enumerated() {
                 group.addTask {
                     let found = (try? await provider.ownedItems(matching: titles, limit: titles.count)) ?? []
-                    return (index, found.filter(HomeHero.hasBackdrop))
+                    return (index, HomeHero.deduplicated(found).filter(HomeHero.hasBackdrop))
                 }
             }
             return await group.reduce(into: [Int: [MediaItem]]()) { $0[$1.0] = $1.1 }

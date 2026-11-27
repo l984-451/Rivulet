@@ -401,7 +401,11 @@ private struct IOSPlexDetailHeader: View {
             : AnyLayout(HStackLayout(spacing: 12))
         return layout {
             // Play shows only where `IOSPlaybackGate` allows it.
-            if canPlay { playButton.layoutPriority(1) }
+            if canPlay {
+                playButton.layoutPriority(1)
+            } else if isCatalogTitle {
+                watchlistButton.layoutPriority(1)
+            }
             HStack(spacing: 12) {
                 if canPlay, item.kind == .show {
                     Button { actions.shuffleShow(item) } label: {
@@ -416,7 +420,7 @@ private struct IOSPlexDetailHeader: View {
                     .buttonBorderShape(.circle)
                     .accessibilityLabel("Shuffle")
                 }
-                if browse.supportsWatchlist(item) {
+                if browse.supportsWatchlist(item), !isCatalogTitle {
                     let onList = onList ?? false
                     circleButton(onList ? "checkmark" : "plus", label: onList ? "Remove from Watchlist" : "Add to Watchlist") {
                         actions.setWatchlisted(item, !onList)
@@ -475,11 +479,22 @@ private struct IOSPlexDetailHeader: View {
 
     private var canPlay: Bool { IOSPlaybackGate.canPlay(item.ref) }
     private var canDownload: Bool { browse.canDownload(item) }
+    /// A TMDB title (Discover) has nothing to play: Watchlist is its main button, as on tvOS.
+    private var isCatalogTitle: Bool { item.isMetadataOnly && browse.supportsWatchlist(item) }
 
-    /// Plex answers from its watchlist; an episode or season stands for its show.
+    private var watchlistButton: some View {
+        let onList = onList ?? false
+        let label: LocalizedStringKey = onList ? "Remove from Watchlist" : "Add to Watchlist"
+        return Button { actions.setWatchlisted(item, !onList) } label: {
+            Label("Watchlist", systemImage: onList ? "checkmark" : "plus")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.glassProminent)
+        .accessibilityLabel(label)
+    }
+
     private func loadWatchlistState() async {
-        guard browse.supportsWatchlist(item), let provider = browse.provider(for: item.ref.providerID) else { return }
-        onList = await provider.isOnWatchlist(item.ref)
+        if let state = await browse.watchlistState(item) { onList = state }
     }
 
     private var playButton: some View {

@@ -13,6 +13,11 @@
 import XCTest
 @testable import Rivulet
 
+private actor LookupCount {
+    private(set) var value = 0
+    func bump() { value += 1 }
+}
+
 @MainActor
 final class PlexProviderSeamTests: XCTestCase {
 
@@ -262,6 +267,50 @@ final class PlexProviderSeamTests: XCTestCase {
                       TitleMatch(kind: .movie, externalIDs: [:], plexGUID: "g/b")]
         let items = try await provider(network).ownedItems(matching: titles, limit: 1)
         XCTAssertEqual(items.map(\.ref.itemID), ["a"])
+    }
+
+    /// Two editions of one title share its guid: both come back, together, and `limit` counts titles.
+    func test_ownedItems_everyCopyOfATitle_limitCountingTitles() async throws {
+        let network = StubNetwork()
+        network.owned = [meta("b", guid: "g/b"), meta("a1", guid: "g/a", section: 9), meta("c", guid: "g/c"),
+                         meta("a2", guid: "g/a", section: 1)]
+        let titles = ["g/a", "g/b", "g/c"].map { TitleMatch(kind: .movie, externalIDs: [:], plexGUID: $0) }
+
+        let all = try await provider(network).ownedItems(matching: titles, limit: 10)
+        XCTAssertEqual(all.map(\.ref.itemID), ["a1", "a2", "b", "c"], "title order, a title's copies together")
+
+        let two = try await provider(network).ownedItems(matching: titles, limit: 2)
+        XCTAssertEqual(two.map(\.ref.itemID), ["a1", "a2", "b"])
+    }
+
+    /// A library's trending row shows a title once, whichever of its copies sit in the library.
+    func test_trending_oneCopyPerTitleInTheLibrary() async throws {
+        let network = StubNetwork()
+        network.owned = [meta("elsewhere", guid: "plex://movie/a", section: 2), meta("a1", guid: "plex://movie/a", section: 1),
+                         meta("a2", guid: "plex://movie/a", section: 1), meta("b", guid: "plex://movie/b", section: 1)]
+        let guids = ["101": "plex://movie/a", "102": "plex://movie/b"]
+        let p = provider(network, lookup: { title, _ in guids[title.externalIDs["tmdb"] ?? ""] })
+        let library = MediaLibrary(id: "1", providerID: "plex:test", title: "Movies", kind: .movies)
+        let items = try await p.trending(in: library, from: [trending(101, .movie), trending(102, .movie)], limit: 10)
+        XCTAssertEqual(items.map(\.ref.itemID), ["a1", "b"])
+    }
+
+    /// Discover asks every Plex server about a row at once: an uncached title goes to plex.tv once.
+    func test_ownedItems_twoServersAskingAtOnceShareOneLookup() async throws {
+        let count = LookupCount()
+        let lookup: @Sendable (TitleMatch, String) async -> String? = { _, _ in
+            await count.bump()
+            try? await Task.sleep(for: .milliseconds(200))
+            return "plex://movie/shared"
+        }
+        let first = provider(StubNetwork(), lookup: lookup)
+        let second = provider(StubNetwork(), lookup: lookup)
+        let titles = [TitleMatch(kind: .movie, externalIDs: ["tmdb": "90210"], plexGUID: nil)]
+        async let a = first.ownedItems(matching: titles, limit: 10)
+        async let b = second.ownedItems(matching: titles, limit: 10)
+        _ = try await (a, b)
+        let lookups = await count.value
+        XCTAssertEqual(lookups, 1)
     }
 
     func test_ownedItems_noGuidsMakesNoRequest() async throws {

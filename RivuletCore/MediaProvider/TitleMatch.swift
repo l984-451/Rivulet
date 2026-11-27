@@ -45,19 +45,25 @@ nonisolated struct TitleMatch: Sendable, Hashable {
         itemKind == kind && externalIDs.contains { ids[$0.key] == $0.value }
     }
 
-    /// Item ids for `titles` in title order, each once, at most `limit`. `owned` is what the
+    /// Item ids for `titles` in title order, every copy of a title together, each id once, at most `limit`
+    /// titles. A title's copies follow its ids by source name, each id's in `owned` order. `owned` is what the
     /// server holds: the item's id, kind and external ids (keys lowercase).
     static func orderedIDs(_ titles: [TitleMatch], among owned: [(id: String, kind: MediaKind, ids: [String: String])],
                            limit: Int) -> [String] {
-        var index: [String: String] = [:]
+        var index: [String: [String]] = [:]
         for item in owned {
-            for (source, value) in item.ids { index["\(item.kind):\(source):\(value)"] = index["\(item.kind):\(source):\(value)"] ?? item.id }
+            for (source, value) in item.ids { index["\(item.kind):\(source):\(value)", default: []].append(item.id) }
         }
         var seen = Set<String>()
         var ids: [String] = []
-        for title in titles where ids.count < limit {
-            let hit = title.externalIDs.sorted { $0.key < $1.key }.lazy.compactMap { index["\(title.kind):\($0.key):\($0.value)"] }.first
-            if let hit, seen.insert(hit).inserted { ids.append(hit) }
+        var matched = 0
+        for title in titles where matched < limit {
+            let copies = title.externalIDs.sorted { $0.key < $1.key }
+                .flatMap { index["\(title.kind):\($0.key):\($0.value)"] ?? [] }
+                .filter { seen.insert($0).inserted }
+            guard !copies.isEmpty else { continue }
+            ids += copies
+            matched += 1
         }
         return ids
     }

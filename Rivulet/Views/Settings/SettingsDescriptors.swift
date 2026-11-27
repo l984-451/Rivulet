@@ -49,6 +49,7 @@ enum SettingsDescriptorStore {
         if id.hasPrefix("alim_") { return descriptors["autoplayLimit"] }
         if id.hasPrefix("plexServer_") { return descriptors["plexServerOption"] }
         if id.hasPrefix("lib_") { return descriptors["libraryRow"] }
+        if id.hasPrefix("dl_") { return descriptors["discoverLibraryRow"] }
         if id.hasPrefix("sb_#livetv") { return descriptors["sidebarLiveTVRow"] }
         if id.hasPrefix("sb_") { return descriptors["sidebarAppRow"] }
         return nil
@@ -121,6 +122,14 @@ enum SettingsDescriptorStore {
         "libraryRow": SettingDescriptor(
             icon: "sidebar.squares.left",
             description: "Select to show or hide this library in the sidebar and on Home. Hold Select to move it up or down."
+        ),
+        "discoverLibraries": SettingDescriptor(
+            icon: "sparkles",
+            description: "Choose the libraries Discover uses for your own copies and For You."
+        ),
+        "discoverLibraryRow": SettingDescriptor(
+            icon: "sparkles",
+            description: "Discover opens your own copy of a title in these libraries, and For You learns from what you watch in them."
         ),
         "appIcon": SettingDescriptor(
             icon: "app.badge",
@@ -690,6 +699,7 @@ enum SettingsDescriptorStore {
         case .iptv: return ("tv.and.mediabox", .systemBlue)
         case .libraries: return ("sidebar.squares.left", .systemPurple)
         case .homeRows: return ("rectangle.grid.1x2", .systemTeal)
+        case .discoverLibraries: return ("sparkles", .systemPurple)
         case .cache: return ("internaldrive", .systemGray)
         case .appIconPicker: return ("app.badge", .systemPurple)
         case .homeHeroPicker: return ("sparkles.rectangle.stack", .systemPurple)

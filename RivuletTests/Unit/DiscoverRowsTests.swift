@@ -42,6 +42,39 @@ final class DiscoverRowsTests: XCTestCase {
         await discover.load()
         XCTAssertTrue(discover.failed)
     }
+
+    // MARK: - Hero
+
+    private func title(_ id: Int, _ type: TMDBMediaType, backdrop: Bool = true) -> MediaItem {
+        TMDBMediaMapper.item(TMDBListItem(id: id, title: "\(type.rawValue) \(id)", overview: nil, posterPath: "/p.jpg",
+                                          backdropPath: backdrop ? "/b.jpg" : nil, releaseDate: nil, voteAverage: nil,
+                                          mediaType: type))
+    }
+
+    private func row(_ section: CuratedSection, _ items: [MediaItem]) -> DiscoverRows.Row {
+        DiscoverRows.Row(section: section, items: items)
+    }
+
+    func test_heroTakesPopularMoviesAndTVInTurnFromThoseRowsOnly() {
+        let rows = [row(.moviePopular, [title(1, .movie), title(2, .movie), title(3, .movie)]),
+                    row(.movieTopRated, [title(9, .movie)]),
+                    row(.tvPopular, [title(1, .tv)])]
+        XCTAssertEqual(DiscoverRows.heroTitles(rows).map(\.title), ["movie 1", "tv 1", "movie 2", "movie 3"])
+    }
+
+    func test_heroPutsTitlesWithABackdropFirstAndStopsAtNine() {
+        let movies = (1...10).map { title($0, .movie, backdrop: $0 != 1) }
+        let shows = (1...10).map { title($0, .tv) }
+        let hero = DiscoverRows.heroTitles([row(.moviePopular, movies), row(.tvPopular, shows)])
+        XCTAssertEqual(hero.count, 9)
+        XCTAssertEqual(hero.map(\.title), ["tv 1", "movie 2", "tv 2", "movie 3", "tv 3", "movie 4", "tv 4", "movie 5", "tv 5"])
+        XCTAssertEqual(DiscoverRows.heroTitles([row(.moviePopular, [title(1, .movie, backdrop: false)])]).map(\.title),
+                       ["movie 1"], "Without a better title, one with no backdrop still shows")
+    }
+
+    func test_heroIsEmptyWithoutItsRows() {
+        XCTAssertTrue(DiscoverRows.heroTitles([row(.movieUpcoming, [title(1, .movie)])]).isEmpty)
+    }
 }
 
 /// Answers each section from a table; a section in `failing` throws.

@@ -148,6 +148,30 @@ final class IOSFixPassTests: XCTestCase {
         XCTAssertEqual(items.map(\.ref.itemID), ["p1", "j2"])
     }
 
+    /// A server answers with every copy of a title (`ownedItems`); its first stands for it, and the servers
+    /// still take turns title by title.
+    @MainActor
+    func test_heroSource_aServersSecondCopyTakesNoTurn() async {
+        func withArt(_ base: MediaItem) -> MediaItem {
+            MediaItem(ref: base.ref, kind: base.kind, title: base.title, sortTitle: nil, overview: nil, year: base.year, runtime: nil,
+                      parentRef: nil, grandparentRef: nil, episodeNumber: nil, seasonNumber: nil, childProgress: nil,
+                      userState: base.userState,
+                      artwork: MediaArtwork(poster: nil, backdrop: URL(string: "http://x/a.jpg"), thumbnail: nil, logo: nil),
+                      parentArtwork: nil, grandparentArtwork: nil, externalIDs: base.externalIDs)
+        }
+        let plex = StubMediaProvider(id: "plex:a", kind: .plex)
+        plex.ownedItemsResult = [withArt(item("dune", title: "Dune", ids: ["tmdb": "5", "plex": "plex://movie/d"])),
+                                 withArt(item("dune-4k", title: "Dune", ids: ["tmdb": "5", "plex": "plex://movie/d"])),
+                                 withArt(item("heat", title: "Heat", ids: ["tmdb": "6"]))]
+        let jf = StubMediaProvider(id: "jellyfin:s", kind: .jellyfin)
+        jf.ownedItemsResult = [withArt(item("j1", provider: "jellyfin:s", title: "Up", ids: ["tmdb": "7"])),
+                               withArt(item("j2", provider: "jellyfin:s", title: "Big", ids: ["tmdb": "8"]))]
+        let sources = HomeHeroSources()
+        sources.trendingTitles = { (5...8).map { TitleMatch(kind: .movie, externalIDs: ["tmdb": "\($0)"], plexGUID: nil) } }
+        let items = await sources.trending(providers: [plex, jf])
+        XCTAssertEqual(items.map(\.ref.itemID), ["dune", "j1", "heat", "j2"])
+    }
+
     // MARK: - Plex routing
 
     func test_plexRoute_selectedExtraUnknownAndNotPlex() {

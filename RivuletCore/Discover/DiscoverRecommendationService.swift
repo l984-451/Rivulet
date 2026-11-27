@@ -7,7 +7,8 @@
 //
 //  Personalized "For You" row on the Discover page. Reuses WatchProfileBuilder
 //  to produce a FeatureProfile from watch history, then queries TMDB /discover
-//  using the top genres/keywords. Filters out items already in the library.
+//  using the top genres. The page drops titles it already has: tvOS through
+//  LibraryGUIDIndex, iOS and Mac through DiscoverOwnership.
 //
 
 import Foundation
@@ -18,22 +19,20 @@ protocol DiscoverFetching: Sendable {
 
 extension TMDBDiscoverService: DiscoverFetching {}
 
-actor DiscoverRecommendationService {
-    static let shared = DiscoverRecommendationService(
-        fetcher: TMDBDiscoverService.shared,
-        libraryIndex: LibraryGUIDIndex.shared
-    )
+struct DiscoverRecommendationService {
+    /// Minimum watched items required before we try to personalize the "For You"
+    /// row. Fewer watches produce noisy recommendations that feel random.
+    static let minimumWatched = 5
+    static let maxItems = 20
 
     private let fetcher: DiscoverFetching
-    private let libraryIndex: LibraryGUIDIndex
     private let coldStartGenreThreshold = 3
-    private let maxItems = 20
 
     // TODO: Genre normalization in WatchProfileBuilder collapses TV-specific genre
     // labels (war & politics, tv movie, reality, soap, kids, talk) into their
     // closest movie equivalents before they reach the profile. As a result the
     // TV-specific IDs below (10762, 10763, 10764, 10766, 10767, 10768) are
-    // currently unreachable through the `forYouRow` path. Revisit when we track
+    // currently unreachable through the For You row. Revisit when we track
     // media-type separately in the profile.
     private static let genreNameToId: [String: Int] = [
         "action": 28, "adventure": 12, "animation": 16, "comedy": 35, "crime": 80,
@@ -44,13 +43,18 @@ actor DiscoverRecommendationService {
         "soap": 10766, "talk": 10767, "war & politics": 10768
     ]
 
-    init(fetcher: DiscoverFetching, libraryIndex: LibraryGUIDIndex) {
+    init(fetcher: DiscoverFetching = TMDBDiscoverService.shared) {
         self.fetcher = fetcher
-        self.libraryIndex = libraryIndex
     }
 
-    /// Returns 0–20 TMDB items not already in the library, ordered by raw fetch order.
-    func forYouRow(profile: FeatureProfile) async -> [TMDBListItem] {
+    /// TMDB's titles for a watch history, owned ones still in: none under `minimumWatched` titles.
+    func candidates(watched: [WatchedTitle]) async -> [TMDBListItem] {
+        guard watched.count >= Self.minimumWatched else { return [] }
+        return await candidates(profile: WatchProfileBuilder.build(from: watched))
+    }
+
+    /// Movies then shows in the profile's top three genres, in TMDB's order, owned ones still in.
+    func candidates(profile: FeatureProfile) async -> [TMDBListItem] {
         let topGenres = profile.topGenres(3)
         guard topGenres.count >= coldStartGenreThreshold else { return [] }
 
@@ -60,15 +64,18 @@ actor DiscoverRecommendationService {
         // Without a name→ID map we omit keyword filters for v1.
         let movies = await fetcher.discover(type: .movie, withGenres: genreIds, withKeywords: [])
         let tvShows = await fetcher.discover(type: .tv, withGenres: genreIds, withKeywords: [])
+        return movies + tvShows
+    }
 
-        let combined = movies + tvShows
-        var filtered: [TMDBListItem] = []
-        for item in combined {
-            if await libraryIndex.lookup(tmdbId: item.id, type: item.mediaType) == nil {
-                filtered.append(item)
+    /// The row: the candidates in order with the owned ones dropped, at most `maxItems`.
+    static func row<Item>(_ candidates: [Item], isOwned: (Item) async -> Bool) async -> [Item] {
+        var row: [Item] = []
+        for item in candidates {
+            if await !isOwned(item) {
+                row.append(item)
             }
-            if filtered.count >= maxItems { break }
+            if row.count >= maxItems { break }
         }
-        return filtered
+        return row
     }
 }

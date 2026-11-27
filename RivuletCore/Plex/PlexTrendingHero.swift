@@ -3,7 +3,7 @@
 
 import Foundation
 
-/// Titles known by TMDB id (trending, watchlist) turned into the plex:// guids a Plex server
+/// Titles known by TMDB id (trending, watchlist, Discover) turned into the plex:// guids a Plex server
 /// indexes: from Plex's metadata host, kept for the session. The server is then asked for
 /// `/library/all?guid=a,b,…` (`findByGuids`).
 enum PlexTrendingHero {
@@ -12,6 +12,8 @@ enum PlexTrendingHero {
 
     /// `kind:tmdb id` → plex:// guid; an empty string is a title Plex has no match for.
     private static var plexGUIDs: [String: String] = [:]
+    /// Lookups under way, so several Plex servers asked about the same titles at once share each request.
+    private static var running: [String: Task<String?, Never>] = [:]
 
     private static func cacheKey(_ title: TitleMatch) -> String? {
         title.externalIDs["tmdb"].map { "\(title.kind):\($0)" }
@@ -24,16 +26,21 @@ enum PlexTrendingHero {
             title.plexGUID == nil && cacheKey(title).map { plexGUIDs[$0] == nil } == true
         }
         if let accountToken {
-            // ponytail: 8 at a time with no cap on the list; TMDB's two trending pages are ~40 titles.
+            // ponytail: 8 at a time with no cap on the list; trending is ~40 titles, and Discover asks a row (~20) at a time.
             for chunk in stride(from: 0, to: missing.count, by: 8).map({ Array(missing[$0..<min($0 + 8, missing.count)]) }) {
-                let found = await withTaskGroup(of: (String, String?).self) { group in
-                    for title in chunk {
-                        guard let key = cacheKey(title) else { continue }
-                        group.addTask { (key, await lookup(title, accountToken)) }
-                    }
-                    // A failed request is asked again next time; only answers are kept.
-                    return await group.reduce(into: [String: String]()) { $0[$1.0] = $1.1 }
+                guard !Task.isCancelled else { break }
+                let lookups = chunk.compactMap { title -> (key: String, task: Task<String?, Never>)? in
+                    guard let key = cacheKey(title) else { return nil }
+                    let task = running[key] ?? Task { await lookup(title, accountToken) }
+                    running[key] = task
+                    return (key, task)
                 }
+                // A failed request is asked again next time; only answers are kept.
+                var found: [String: String] = [:]
+                for lookup in lookups {
+                    if let guid = await lookup.task.value { found[lookup.key] = guid }
+                }
+                for lookup in lookups { running[lookup.key] = nil }
                 plexGUIDs.merge(found) { _, new in new }
             }
         }
@@ -43,10 +50,10 @@ enum PlexTrendingHero {
         }.filter { !$0.isEmpty && seen.insert($0).inserted }
     }
 
-    /// `owned` in `guids` order.
-    static func ordered(_ owned: [PlexMetadata], by guids: [String]) -> [PlexMetadata] {
-        let byGUID = Dictionary(owned.compactMap { item in item.guid.map { ($0, item) } }, uniquingKeysWith: { a, _ in a })
-        return guids.compactMap { byGUID[$0] }
+    /// `owned` in `guids` order, every copy of a title together in the server's order, at most `limit` titles.
+    static func ordered(_ owned: [PlexMetadata], by guids: [String], limit: Int = .max) -> [PlexMetadata] {
+        let copies = Dictionary(grouping: owned) { $0.guid ?? "" }
+        return guids.compactMap { copies[$0] }.prefix(limit).flatMap { $0 }
     }
 
     /// Plex's metadata host: the title's plex:// guid from its TMDB id.

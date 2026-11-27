@@ -6,6 +6,7 @@ import SwiftUI
 /// Go menu (sidebar jumps), Refresh, and Help > What's New. The Playback menu lives in Player/.
 struct MacShellCommands: Commands {
     @ObservedObject var browse: BrowseStore
+    @ObservedObject var plex: PlexSession
     @FocusedBinding(\.macSelection) private var selection: MacSidebarItem??
     @Environment(\.openWindow) private var openWindow
 
@@ -38,6 +39,9 @@ struct MacShellCommands: Commands {
             Divider()
             Button("Home") { selection = .some(.home) }
                 .keyboardShortcut("1")
+            if plex.showsDiscover {
+                Button("Discover") { selection = .some(.discover) }
+            }
             Button("Search") {
                 selection = .some(.search)
                 NotificationCenter.default.post(name: .macFocusSearch, object: nil)

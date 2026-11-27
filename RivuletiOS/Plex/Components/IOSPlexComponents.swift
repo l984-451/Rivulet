@@ -664,6 +664,8 @@ struct IOSPlexRail<Tile: View>: View {
     let kind: IOSShelfGeometry.Kind
     let items: [MediaItem]
     var badge: String? = nil
+    /// The item a tile opens; Discover opens your own copy of a TMDB title.
+    var destination: (MediaItem) -> MediaItem = { $0 }
     @ViewBuilder let tile: (MediaItem, CGFloat) -> Tile
 
     /// Each rail owns its zoom sources; an item can sit in several rows.
@@ -673,7 +675,7 @@ struct IOSPlexRail<Tile: View>: View {
         IOSShelfRow(kind: kind, items: items) {
             IOSPlexShelfHeader(title: title, route: route, badge: badge)
         } tile: { item, width in
-            NavigationLink(value: IOSPlexDetailRoute(item: item, scope: zoomScope)) { tile(item, width) }
+            NavigationLink(value: IOSPlexDetailRoute(item: destination(item), scope: zoomScope, source: item)) { tile(item, width) }
                 .buttonStyle(.plain)
                 .plexContextMenu(item)
         }

@@ -4747,6 +4747,9 @@
         }
       }
     },
+    "Choose the libraries Discover uses for your own copies and For You." : {
+
+    },
     "Choose the one rating shown at the top of a movie or show's details. If a title doesn't have the rating you choose, Rotten Tomatoes is shown instead." : {
       "localizations" : {
         "de" : {
@@ -27141,6 +27144,9 @@
         }
       }
     },
+    "Discover opens your own copy of a title in these libraries, and For You learns from what you watch in them." : {
+
+    },
     "iCloud has a different Plex account" : {
       "localizations" : {
         "de" : {
@@ -27252,6 +27258,9 @@
           }
         }
       }
+    },
+    "Use in Discover" : {
+
     },
     "Your Emby sign-in is shared through iCloud. Sign out of this device only, or of every device?" : {
       "localizations" : {

@@ -17,6 +17,8 @@ final class DiscoverRows {
     private(set) var rows: [Row] = []
     /// The last load found no row to show. No rows and not failed means still loading.
     private(set) var failed = false
+    /// Counts finished loads, so a page can redo what depends on the rows (Discover's ownership check, For You).
+    private(set) var loads = 0
 
     private let source: (any MetadataSource)?
 
@@ -45,11 +47,26 @@ final class DiscoverRows {
             return Row(section: section, items: items)
         }
         failed = rows.isEmpty
+        loads += 1
     }
 
     /// Retry and pull to refresh: a list that just failed is asked for again at once.
     func reload() async {
         await TMDBDiscoverService.shared.forgetListFailures()
         await load()
+    }
+}
+
+extension DiscoverRows {
+    /// Discover's hero, as tvOS's `computeHeroItems`: Popular Movies and Popular TV taken in turn,
+    /// the titles with a backdrop first (so no page goes without art), at most `cap`.
+    static func heroTitles(_ rows: [Row], cap: Int = 9) -> [MediaItem] {
+        let movies = rows.first { $0.section == .moviePopular }?.items ?? []
+        let shows = rows.first { $0.section == .tvPopular }?.items ?? []
+        let mixed = (0..<max(movies.count, shows.count)).flatMap { index in
+            [movies, shows].compactMap { $0.indices.contains(index) ? $0[index] : nil }
+        }.prefix(cap * 2)
+        let withBackdrop = mixed.filter { $0.artwork.backdrop != nil }
+        return Array((withBackdrop + mixed.filter { $0.artwork.backdrop == nil }).prefix(cap))
     }
 }

@@ -44,6 +44,7 @@ extension MacRoute {
 /// A row of the window's sidebar. Selecting one swaps the detail column's stack.
 enum MacSidebarItem: Hashable {
     case home
+    case discover
     case search
     case liveTV
     case favorites
@@ -65,6 +66,7 @@ extension MacSidebarItem {
     var storageKey: String {
         switch self {
         case .home: "home"
+        case .discover: "discover"
         case .search: "search"
         case .liveTV: "live-tv"
         case .favorites: "favorites"
@@ -77,6 +79,7 @@ extension MacSidebarItem {
     static func restore(_ key: String, libraries: [MediaLibrary]) -> MacSidebarItem? {
         switch key {
         case "home": return .home
+        case "discover": return .discover
         case "search": return .search
         case "live-tv": return .liveTV
         case "favorites": return .favorites
@@ -194,6 +197,11 @@ enum MacSettingsKeys {
     static let showPlaylists = "macShowPlaylists"
     /// Shared with tvOS and iOS (iCloud synced).
     static let showFavorites = "showFavoritesTab"
+}
+
+extension PlexSession {
+    /// The sidebar's Discover row and its Go menu item: TMDB's rows, offered with Plex signed in, as on tvOS.
+    var showsDiscover: Bool { isSignedIn }
 }
 
 extension BrowseStore {

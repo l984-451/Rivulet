@@ -29,9 +29,11 @@ struct IOSPlexDetailRoute: Hashable {
     let item: MediaItem
     let sourceID: String
 
-    init(item: MediaItem, scope: String) {
+    /// `source` is the tile tapped when it shows a different item from the one the page opens (Discover's
+    /// TMDB tile for your own copy), so the zoom still starts from it.
+    init(item: MediaItem, scope: String, source: MediaItem? = nil) {
         self.item = item
-        sourceID = Self.sourceID(item, scope: scope)
+        sourceID = Self.sourceID(source ?? item, scope: scope)
     }
 
     static func sourceID(_ item: MediaItem, scope: String) -> String {

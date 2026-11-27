@@ -48,6 +48,8 @@ final class BrowseStore: ObservableObject {
             reloadPersonalRows()
         }
     }
+    /// Libraries the profile left out of Discover (`DiscoverLibraries`).
+    @Published var discoverExcludedLibraries: Set<String> = DiscoverLibraries.excluded()
     /// Bumped on a server or profile switch; the tab stacks rebuild on it.
     @Published private(set) var sessionGeneration = 0
     /// Providers where the account may delete media; asked once per session.
@@ -183,6 +185,7 @@ final class BrowseStore: ObservableObject {
     func contentSessionChanged() {
         favoriteOverrides = [:]
         hiddenSidebarLibraries = SidebarLibraryVisibility.stored()
+        discoverExcludedLibraries = DiscoverLibraries.excluded()
         sessionGeneration += 1
     }
 
@@ -344,8 +347,9 @@ final class BrowseStore: ObservableObject {
         item.kind.plexType != nil && !refreshBlocked.contains(item.ref.providerID)
     }
 
+    /// A TMDB title (Discover) has no server, but goes on the account's Plex watchlist all the same.
     func supportsWatchlist(_ item: MediaItem) -> Bool {
-        registry.provider(for: item.ref.providerID)?.supportsWatchlist == true
+        (item.tmdbID != nil || registry.provider(for: item.ref.providerID)?.supportsWatchlist == true)
             && PlexAuthManager.shared.accountContentToken != nil && item.kind.plexType != nil
     }
 
@@ -388,6 +392,7 @@ final class BrowseStore: ObservableObject {
     /// Without a request, from the ids a list carries: Plex's list of movies and shows.
     func isOnWatchlist(_ item: MediaItem) -> Bool {
         let service = PlexWatchlistService.shared
+        if item.isMetadataOnly { return service.isListed(tmdb: item) }
         return WatchlistMembership.isListed(item, plexGUIDs: Set(service.watchlistItems.compactMap(\.plexGUID)),
                                             contains: { service.contains(guid: $0) })
     }
@@ -403,7 +408,16 @@ final class BrowseStore: ObservableObject {
         await watchStateDidChange()
     }
 
+    /// The title page's answer: a TMDB title from the list held here, a server's title from its
+    /// server (an episode or season stands for its show). Nil when the item can't be listed.
+    func watchlistState(_ item: MediaItem) async -> Bool? {
+        guard supportsWatchlist(item) else { return nil }
+        if item.isMetadataOnly { return isOnWatchlist(item) }
+        return await registry.provider(for: item.ref.providerID)?.isOnWatchlist(item.ref)
+    }
+
     func setWatchlisted(_ on: Bool, item: MediaItem) async throws {
+        if item.isMetadataOnly { return try await PlexWatchlistService.shared.setListed(on, tmdb: item) }
         let provider = try provider(for: item.ref)
         if on { try await provider.addToWatchlist(item.ref) } else { try await provider.removeFromWatchlist(item.ref) }
     }
@@ -463,7 +477,13 @@ final class BrowseStore: ObservableObject {
     /// Episodes and seasons take their show's logo, which list responses omit; the provider finds
     /// and remembers it. Kept here too so a view can draw it on its first frame.
     func logoURL(for item: MediaItem) async -> URL? {
-        guard let provider = registry.provider(for: item.ref.providerID) else { return item.artwork.logo }
+        guard let provider = registry.provider(for: item.ref.providerID) else {
+            // A TMDB title (Discover) takes TMDB's own logo, as on tvOS.
+            guard item.isMetadataOnly, let tmdb = item.heroTMDB else { return item.artwork.logo }
+            let url = await TMDBLogoCache.shared.logoURL(tmdbId: tmdb.id, type: tmdb.type)
+            if let url { logos[item.logoOwner] = url }
+            return url
+        }
         let url = await provider.logoURL(for: item)
         if let url { logos[item.logoOwner] = url }
         return url

@@ -3,15 +3,17 @@
 
 import SwiftUI
 
-/// A hero carousel over a stack of rows: Home, and a library's Recommended page.
+/// A hero carousel over a stack of rows: Home, a library's Recommended page, and Discover.
 /// The caller applies `iosPlexHeroChrome` with the same `heroItems` so the bar steps aside for the hero.
-struct IOSPlexHeroFeed: View {
+struct IOSPlexHeroFeed<Below: View>: View {
     let rows: [MediaHub]
     let heroItems: [MediaItem]
     var banners: [BrowseStore.FailedServer] = []
     let refresh: () async -> Void
     /// The hero's own lists (trending, watchlist) have arrived, so its first page will not change.
     var heroSettled = true
+    /// Under the hub rows: Discover's own rows, which aren't hubs.
+    @ViewBuilder let below: Below
     @EnvironmentObject private var browse: BrowseStore
     @Environment(\.displayScale) private var displayScale
     @Environment(\.launchHeroReady) private var launchHeroReady
@@ -40,6 +42,7 @@ struct IOSPlexHeroFeed: View {
                             IOSPlexShelfView(hub: hub)
                         }
                     }
+                    below
                 }
                 .padding(.bottom, 24)
             }
@@ -76,6 +79,13 @@ struct IOSPlexHeroFeed: View {
 
     private func fullSize(_ proxy: GeometryProxy) -> CGSize {
         CGSize(width: proxy.size.width, height: proxy.size.height + proxy.safeAreaInsets.top)
+    }
+}
+
+extension IOSPlexHeroFeed where Below == EmptyView {
+    init(rows: [MediaHub], heroItems: [MediaItem], banners: [BrowseStore.FailedServer] = [],
+         refresh: @escaping () async -> Void, heroSettled: Bool = true) {
+        self.init(rows: rows, heroItems: heroItems, banners: banners, refresh: refresh, heroSettled: heroSettled, below: { EmptyView() })
     }
 }
 

@@ -59,7 +59,7 @@ nonisolated enum SyncCatalog {
     static let profileFamilies: [String] = [
         "hiddenHomeRowIdentifiers", "homeRowOrder", "homeCollectionPins", "homePlaylistPins", "heroPlaylistPins",
         "homeHeroSources", "showHomeFavoriteMovies", "showHomeFavoriteShows", "showHomeFavoriteChannels", "libraryCollectionPins",
-        "hiddenLibraryKeys", "hiddenSidebarLibraries", "libraryOrder", "libraryOrderAllServers", "librarySortOptions", "libraryViewMode", "libraryUnwatchedOnly",
+        "hiddenLibraryKeys", "hiddenSidebarLibraries", DiscoverLibraries.storeBase, "libraryOrder", "libraryOrderAllServers", "librarySortOptions", "libraryViewMode", "libraryUnwatchedOnly",
         "trackIntent.subtitle", "trackIntent.audio",
     ]
 

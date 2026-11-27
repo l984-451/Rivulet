@@ -88,8 +88,13 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
         if let librariesError { throw librariesError }
         return libraryList
     }
+    /// What `items(in:sort:page:)` answers, by library id, and what each request asked for.
+    var itemsByLibrary: [String: [MediaItem]] = [:]
+    private(set) var itemsRequests: [(library: String, sort: SortOption, page: Page)] = []
     func items(in library: MediaLibrary, sort: SortOption, page: Page) async throws -> PagedResult<MediaItem> {
-        PagedResult(items: [], total: 0, nextPage: nil)
+        itemsRequests.append((library.id, sort, page))
+        let items = itemsByLibrary[library.id] ?? []
+        return PagedResult(items: items, total: items.count, nextPage: nil)
     }
     func children(of itemRef: MediaItemRef) async throws -> [MediaItem] { childrenByParent[itemRef.itemID] ?? [] }
     var searchItems: [MediaItem] = []
@@ -98,12 +103,15 @@ final class StubMediaProvider: MediaProvider, @unchecked Sendable {
         if let searchError { throw searchError }
         return searchItems
     }
-    /// What `ownedItems(matching:limit:)` answers, and the titles it was asked for.
+    /// What `ownedItems(matching:limit:)` answers (or throws), and the titles it was asked for. All of it:
+    /// `limit` counts titles, and a copy's title is whatever the test says.
     var ownedItemsResult: [MediaItem] = []
+    var ownedItemsError: Error?
     private(set) var ownedRequests: [[TitleMatch]] = []
     func ownedItems(matching titles: [TitleMatch], limit: Int) async throws -> [MediaItem] {
         ownedRequests.append(titles)
-        return Array(ownedItemsResult.prefix(limit))
+        if let ownedItemsError { throw ownedItemsError }
+        return ownedItemsResult
     }
     /// What `related(for:kind:)` answers, and the kinds it was asked for.
     var relatedContent = RelatedContent(items: [], collection: nil)

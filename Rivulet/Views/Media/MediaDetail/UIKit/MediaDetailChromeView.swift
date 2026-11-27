@@ -924,15 +924,7 @@ final class MediaDetailChromeView: UIView {
                 let service = PlexWatchlistService.shared
                 if service.contains(guid: guid) || service.contains(tmdbId: tmdbID) {
                     await service.remove(guid: guid)
-                } else {
-                    let entry = PlexWatchlistItem(
-                        id: guid,
-                        title: item.title,
-                        year: item.year,
-                        type: item.kind == .movie ? .movie : .show,
-                        posterURL: item.artwork.poster,
-                        guids: [guid]
-                    )
+                } else if let entry = PlexWatchlistItem(tmdb: item) {
                     await service.add(guid: guid, item: entry)
                 }
                 _ = pill  // keep the pill alive through the await for render

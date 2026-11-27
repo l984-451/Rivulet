@@ -75,7 +75,8 @@ struct MacDetailView: View {
         if detail != nil || shown.overview != nil {
             summaryView.padding(.horizontal, MacMetrics.pageMargin)
         }
-        if isSeries { episodesSection }
+        // A catalog title (TMDB) has no seasons of its own to list.
+        if isSeries, !item.isMetadataOnly { episodesSection }
         MacDetailExtras(detail: detail?.adding(extras: seasonExtras))
         if !members.isEmpty {
             MacRail(title: String(localized: "In This Collection"), kind: .poster, items: members) { member, width in
@@ -195,6 +196,19 @@ struct MacDetailView: View {
 
     private func load() async {
         do {
+            // A title on no server, from a catalog (TMDB), is that catalog's detail alone, as on tvOS.
+            if browse.provider(for: item.ref.providerID) == nil,
+               let source = MetadataSourceRegistry.shared.source(for: item.ref.providerID) {
+                // TMDB answers every failure, a cancelled request included, with "not found".
+                guard let loaded = try? await source.itemDetail(item.ref) else {
+                    if !Task.isCancelled { error = String(localized: "Try again in a moment.") }
+                    return
+                }
+                detail = loaded
+                error = nil
+                loadedRevision = browse.watchStateRevision
+                return
+            }
             let provider = try browse.provider(for: item.ref)
             let loaded = try await provider.fullDetail(for: item.ref)
             detail = loaded

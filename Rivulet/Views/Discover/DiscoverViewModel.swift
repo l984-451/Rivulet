@@ -21,12 +21,8 @@ final class DiscoverViewModel: ObservableObject {
     @Published private(set) var loading = false
 
     private let discoverService = TMDBDiscoverService.shared
-    private let recommendationService = DiscoverRecommendationService.shared
+    private let recommendationService = DiscoverRecommendationService()
     private let libraryIndex = LibraryGUIDIndex.shared
-
-    /// Minimum watched items required before we try to personalize the "For You"
-    /// row. Fewer watches produce noisy recommendations that feel random.
-    private let forYouColdStartMinWatched = 5
 
     /// Cap on hero carousel items. Matches the home page's cap.
     private let heroItemCap = 9
@@ -62,13 +58,41 @@ final class DiscoverViewModel: ObservableObject {
         // features resolve, so it doesn't shift the layout out from under
         // the user. Hides itself on cold-start (too few watched items to
         // produce a meaningful profile).
+        await loadForYou()
+    }
+
+    /// Bumped on each Use in Discover change. A rebuild started before the latest change publishes nothing,
+    /// so an older one that finishes last can't put back the old answer.
+    private var librariesGeneration = 0
+
+    /// Use in Discover changed: what counts as owned, and what For You reads.
+    func discoverLibrariesChanged() async {
+        librariesGeneration += 1
+        await recomputeInLibrarySet()
+        await loadForYou()
+    }
+
+    private func loadForYou() async {
+        let generation = librariesGeneration
         let watchedItems = await collectWatchHistory()
-        if watchedItems.count >= forYouColdStartMinWatched {
-            let profile = await WatchProfileBuilder.build(from: watchedItems)
-            forYou = await recommendationService.forYouRow(profile: profile)
-        } else {
-            forYou = []
+        let candidates = await recommendationService.candidates(watched: watchedItems.map(WatchedTitle.init))
+        let skip = Self.excludedSections
+        let row = await DiscoverRecommendationService.row(candidates) { [libraryIndex] item in
+            await libraryIndex.lookup(tmdbId: item.id, type: item.mediaType, excludingSections: skip) != nil
         }
+        guard generation == librariesGeneration else { return }
+        forYou = row
+    }
+
+    /// The selected Plex server's sections left out of Discover (`DiscoverLibraries`): a copy there isn't owned.
+    static var excludedSections: Set<String> {
+        guard let providerID = MediaProviderRegistry.shared.plexProvider?.id else { return [] }
+        return DiscoverLibraries.libraryIDs(DiscoverLibraries.excluded(), providerID: providerID, selectedPlex: .current)
+    }
+
+    /// The index's copy of a title, outside the libraries left out of Discover.
+    func ownedEntry(tmdbId: Int, type: TMDBMediaType) async -> LibraryGUIDIndex.Entry? {
+        await libraryIndex.lookup(tmdbId: tmdbId, type: type, excludingSections: Self.excludedSections)
     }
 
     func items(for section: TMDBDiscoverSection) -> [TMDBListItem] {
@@ -76,7 +100,7 @@ final class DiscoverViewModel: ObservableObject {
     }
 
     func libraryMatch(for item: TMDBListItem) async -> PlexMetadata? {
-        guard let entry = await libraryIndex.lookup(tmdbId: item.id, type: item.mediaType),
+        guard let entry = await ownedEntry(tmdbId: item.id, type: item.mediaType),
               let serverURL = PlexAuthManager.shared.selectedServerURL,
               let token = PlexAuthManager.shared.selectedServerToken else { return nil }
         return await LibraryGUIDIndex.items(for: [entry], serverURL: serverURL, authToken: token)[entry.ratingKey]
@@ -138,13 +162,16 @@ final class DiscoverViewModel: ObservableObject {
     /// Rebuild `inLibraryTMDBIds` by asking the library index for each fetched item.
     /// This runs after section items load. Single pass, one actor hop per id — cheap.
     private func recomputeInLibrarySet() async {
+        let generation = librariesGeneration
         let allIds = sectionItems.values.flatMap { $0.map { ($0.id, $0.mediaType) } }
+        let skip = Self.excludedSections
         var newSet: Set<Int> = []
         for (id, mediaType) in allIds {
-            if await libraryIndex.lookup(tmdbId: id, type: mediaType) != nil {
+            if await libraryIndex.lookup(tmdbId: id, type: mediaType, excludingSections: skip) != nil {
                 newSet.insert(id)
             }
         }
+        guard generation == librariesGeneration else { return }
         inLibraryTMDBIds = newSet
     }
 
@@ -154,7 +181,8 @@ final class DiscoverViewModel: ObservableObject {
         guard let serverURL = auth.selectedServerURL,
               let token = auth.selectedServerToken else { return [] }
         await dataStore.loadLibrariesIfNeeded()
-        let visibleLibraries = dataStore.visibleVideoLibraries
+        let skip = Self.excludedSections
+        let visibleLibraries = dataStore.visibleVideoLibraries.filter { !skip.contains($0.key) }
 
         var watched: [PlexMetadata] = []
         for library in visibleLibraries.prefix(3) {  // Cap to keep latency sane

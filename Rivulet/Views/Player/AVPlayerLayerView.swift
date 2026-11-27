@@ -15,16 +15,18 @@ import AVFoundation
 struct AVPlayerLayerView: UIViewRepresentable {
     let player: AVPlayer
     var fillsScreen = false
+    var mover: VideoSurfaceMover?
 
-    func makeUIView(context: Context) -> AVPlayerUIView {
+    func makeUIView(context: Context) -> VideoSurfaceContainerView<AVPlayerUIView> {
         let view = AVPlayerUIView(player: player)
         view.playerLayer.videoGravity = fillsScreen ? .resizeAspectFill : .resizeAspect
-        return view
+        mover?.attach(view)
+        return VideoSurfaceContainerView(surface: view)
     }
 
-    func updateUIView(_ uiView: AVPlayerUIView, context: Context) {
-        uiView.playerLayer.player = player
-        uiView.playerLayer.videoGravity = fillsScreen ? .resizeAspectFill : .resizeAspect
+    func updateUIView(_ uiView: VideoSurfaceContainerView<AVPlayerUIView>, context: Context) {
+        uiView.surface.playerLayer.player = player
+        uiView.surface.playerLayer.videoGravity = fillsScreen ? .resizeAspectFill : .resizeAspect
     }
 }
 

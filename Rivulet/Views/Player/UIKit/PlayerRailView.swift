@@ -52,6 +52,10 @@ final class PlayerRailView: UIView {
     let qualityButton = TransportControlButton(
         icon: UIImage(systemName: "dial.medium"), accessibilityLabel: String(localized: "Quality"),
         diameter: Metrics.toolDiameter)
+    /// VOD only: Picture Position, where a letterboxed picture sits.
+    let picturePositionButton = TransportControlButton(
+        icon: UIImage(systemName: "arrow.up.and.down.square"), accessibilityLabel: String(localized: "Picture Position"),
+        diameter: Metrics.toolDiameter)
     /// VOD only, once a relay is configured: the room menu.
     let watchTogetherButton = TransportControlButton(
         icon: UIImage(systemName: "person.2"), accessibilityLabel: String(localized: "Watch Together"),
@@ -103,6 +107,7 @@ final class PlayerRailView: UIView {
     var onUpNext: (() -> Void)?
     var onFilter: (() -> Void)?
     var onQuality: (() -> Void)?
+    var onPicturePosition: (() -> Void)?
     var onWatchTogether: (() -> Void)?
     var onGoLive: (() -> Void)?
     var onRecord: (() -> Void)?
@@ -131,7 +136,7 @@ final class PlayerRailView: UIView {
         skipPillSlot.isHidden = true
         skipPillSlot.isUserInteractionEnabled = false
         [skipPillSlot, multiviewButton, recordButton, goLiveButton, subtitlesButton, audioButton, speedButton, filterButton, qualityButton,
-         watchTogetherButton].forEach {
+         picturePositionButton, watchTogetherButton].forEach {
             toolRow.addArrangedSubview($0)
         }
 
@@ -188,6 +193,7 @@ final class PlayerRailView: UIView {
         upNextButton.onPress = { [weak self] in self?.onUpNext?() }
         filterButton.onPress = { [weak self] in self?.onFilter?() }
         qualityButton.onPress = { [weak self] in self?.onQuality?() }
+        picturePositionButton.onPress = { [weak self] in self?.onPicturePosition?() }
         watchTogetherButton.onPress = { [weak self] in self?.onWatchTogether?() }
         goLiveButton.onPress = { [weak self] in self?.onGoLive?() }
         recordButton.onPress = { [weak self] in self?.onRecord?() }
@@ -202,6 +208,7 @@ final class PlayerRailView: UIView {
         filterButton.isHidden = true
         qualityButton.isHidden = true
         speedButton.isHidden = true
+        picturePositionButton.isHidden = true
         watchTogetherButton.isHidden = true
         // Live TV only, and only in the states that give them meaning.
         goLiveButton.isHidden = true
@@ -222,6 +229,11 @@ final class PlayerRailView: UIView {
     /// Show the Quality menu (VOD only; Live TV never does).
     func setQualityAvailable(_ available: Bool) {
         qualityButton.isHidden = !available
+    }
+
+    /// Show the Picture Position menu (VOD only; Live TV never does).
+    func setPicturePositionAvailable(_ available: Bool) {
+        picturePositionButton.isHidden = !available
     }
 
     func setWatchTogetherAvailable(_ available: Bool) {

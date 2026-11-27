@@ -16,6 +16,7 @@ import AetherEngine
 struct AetherVideoSurfaceView: UIViewRepresentable {
     let player: AetherPlayer
     var fillsScreen = false
+    var mover: VideoSurfaceMover?
 
     @MainActor
     final class Coordinator {
@@ -24,24 +25,25 @@ struct AetherVideoSurfaceView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    func makeUIView(context: Context) -> AetherPlayerView {
+    func makeUIView(context: Context) -> VideoSurfaceContainerView<AetherPlayerView> {
         let view = AetherPlayerView()
         player.bind(view: view)
         player.fillsScreen = fillsScreen
         context.coordinator.boundPlayer = player
-        return view
+        mover?.attach(view)
+        return VideoSurfaceContainerView(surface: view)
     }
 
-    func updateUIView(_ uiView: AetherPlayerView, context: Context) {
+    func updateUIView(_ uiView: VideoSurfaceContainerView<AetherPlayerView>, context: Context) {
         if player.fillsScreen != fillsScreen { player.fillsScreen = fillsScreen }
         guard context.coordinator.boundPlayer !== player else { return }
-        context.coordinator.boundPlayer?.unbind(view: uiView)
-        player.bind(view: uiView)
+        context.coordinator.boundPlayer?.unbind(view: uiView.surface)
+        player.bind(view: uiView.surface)
         context.coordinator.boundPlayer = player
     }
 
-    static func dismantleUIView(_ uiView: AetherPlayerView, coordinator: Coordinator) {
-        coordinator.boundPlayer?.unbind(view: uiView)
+    static func dismantleUIView(_ uiView: VideoSurfaceContainerView<AetherPlayerView>, coordinator: Coordinator) {
+        coordinator.boundPlayer?.unbind(view: uiView.surface)
         coordinator.boundPlayer = nil
     }
 }

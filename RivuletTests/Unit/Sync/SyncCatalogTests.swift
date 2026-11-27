@@ -58,6 +58,7 @@ final class SyncCatalogTests: XCTestCase {
             "plexClientIdentifier", "plexDirectCertificateHashesByAddress", "selectedPlexUserId",
             "homeStreamingQuality", "awayStreamingQuality", "upscaleLowResolution", "audioSyncOffsetMs",
             "subtitleDelayByMedia", "subtitleHeightUnits", "downloadQuality", "iosShowPlaylists",
+            "picturePosition", "picturePositionInPlayer", "pictureNudgeByMedia",
             "recentSearchItems", "iosRecentSearches", "lastSeenBuild", "setupComplete",
             "liveTVRecentChannelIds", "liveTVViewings", "liveTVEventSlotChannelIds",
             // The switch itself and its bookkeeping.

@@ -2973,6 +2973,28 @@
         }
       }
     },
+    "Adjust" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anpassen"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Προσαρμογή"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ajuster"
+          }
+        }
+      }
+    },
     "Ads" : {
       "localizations" : {
         "de" : {
@@ -6370,6 +6392,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Impossible de charger la vidéo"
+          }
+        }
+      }
+    },
+    "Couldn't Measure Picture" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bild konnte nicht vermessen werden"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Δεν ήταν δυνατή η μέτρηση της εικόνας"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Impossible de mesurer l’image"
           }
         }
       }
@@ -10014,6 +10058,28 @@
         }
       }
     },
+    "Full Frame" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Formatfüllend"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Πλήρες κάδρο"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plein cadre"
+          }
+        }
+      }
+    },
     "Full Screen" : {
       "localizations" : {
         "de" : {
@@ -12292,6 +12358,28 @@
         }
       }
     },
+    "Measuring for Picture Position" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bildposition wird ermittelt"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Μέτρηση για τη θέση εικόνας"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mesure pour la position de l’image"
+          }
+        }
+      }
+    },
     "Media" : {
       "localizations" : {
         "de" : {
@@ -12562,6 +12650,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Déplacer"
+          }
+        }
+      }
+    },
+    "Moves a wide film to the top or bottom of the screen instead of centering it between black bars. Titles with preview thumbnails on the server are placed sooner." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verschiebt einen breiten Film an den oberen oder unteren Bildschirmrand, statt ihn zwischen schwarzen Balken zu zentrieren. Titel mit Vorschaubildern auf dem Server werden schneller platziert."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Μετακινεί μια ταινία ευρείας οθόνης στο πάνω ή στο κάτω μέρος της οθόνης αντί να την κεντράρει ανάμεσα σε μαύρες μπάρες. Οι τίτλοι με μικρογραφίες προεπισκόπησης στον διακομιστή τοποθετούνται πιο γρήγορα."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Place un film large en haut ou en bas de l’écran au lieu de le centrer entre des bandes noires. Les titres avec des miniatures d’aperçu sur le serveur sont placés plus vite."
           }
         }
       }
@@ -14728,6 +14838,72 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Photos affichées"
+          }
+        }
+      }
+    },
+    "Picture" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bild"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εικόνα"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Image"
+          }
+        }
+      }
+    },
+    "Picture Position" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bildposition"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Θέση εικόνας"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Position de l’image"
+          }
+        }
+      }
+    },
+    "Picture Position in Player" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bildposition im Player"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Θέση εικόνας στη συσκευή αναπαραγωγής"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Position de l’image dans le lecteur"
           }
         }
       }
@@ -19796,6 +19972,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Demande confirmation avant de fermer la multivue."
+          }
+        }
+      }
+    },
+    "Shows a Picture Position button in the player's controls, to move the picture while watching." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeigt in den Bedienelementen des Players eine Taste „Bildposition“, um das Bild während der Wiedergabe zu verschieben."
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Εμφανίζει ένα κουμπί «Θέση εικόνας» στα χειριστήρια της συσκευής αναπαραγωγής, για μετακίνηση της εικόνας κατά την παρακολούθηση."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Affiche un bouton Position de l’image dans les commandes du lecteur, pour déplacer l’image pendant la lecture."
           }
         }
       }
@@ -26879,6 +27077,93 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "ou rendez-vous sur"
+          }
+        }
+      }
+    },
+    "picturePosition.bottom" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unten"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Bottom"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κάτω"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bas"
+          }
+        }
+      }
+    },
+    "picturePosition.center" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mitte"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Center"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Κέντρο"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Centre"
+          }
+        }
+      }
+    },
+    "picturePosition.top" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Oben"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Top"
+          }
+        },
+        "el" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Πάνω"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Haut"
           }
         }
       }

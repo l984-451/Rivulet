@@ -419,6 +419,196 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         subtitleHeightUnits = SubtitleAdjustments.heightUnits
     }
 
+    // MARK: - Picture Position
+
+    /// Where a letterboxed picture sits (Settings > Playback, and the player's menu).
+    @Published private(set) var picturePosition = PicturePosition.current
+    /// The playing item's black bars, measured from stills while the picture is
+    /// moved off centre. nil until measured, and when the frame has none.
+    @Published private(set) var letterbox: LetterboxReading?
+    private var letterboxTask: Task<Void, Never>?
+    /// This title's own nudge, in stepper steps (positive is up). Sticky per item.
+    @Published private(set) var pictureNudge = 0
+    /// The position was changed from the player's controls on this item, so a slow
+    /// measurement says it is running. One started by the saved setting stays quiet.
+    private var announcesLetterboxScan = false
+    /// Moves the video surface for Picture Position. The player's container drives it,
+    /// in the same animation as the captions.
+    let videoSurfaceMover = VideoSurfaceMover()
+
+    /// Sets the position for this and every later title.
+    func setPicturePosition(_ position: PicturePosition) {
+        PicturePosition.current = position
+        picturePosition = position
+        announcesLetterboxScan = true
+        if position == .center {
+            // Nothing is moved, so nothing is measured.
+            letterboxTask?.cancel()
+            letterboxTask = nil
+        } else {
+            measureLetterboxIfNeeded()
+        }
+    }
+
+    /// The layout the video surface and the captions share.
+    func pictureLayout(in container: CGSize) -> PictureLayout {
+        PictureLayout.make(container: container, videoSize: videoSize, fillsScreen: fillsScreen,
+                           position: picturePosition, letterbox: letterbox, nudge: pictureNudge)
+    }
+
+    /// Steps this title's nudge and persists it, so the item reopens where it was left.
+    func adjustPictureNudge(bySteps steps: Int) {
+        pictureNudge = PictureNudge.clamped(pictureNudge + steps)
+        PictureNudge.setSteps(pictureNudge, forKey: subtitleMediaKey)
+    }
+
+    /// The nudge belongs to the player's Picture Position menu: with the menu off there
+    /// would be no way to undo it, so it rests until the menu is back.
+    private func loadPictureNudge() {
+        pictureNudge = PicturePosition.showsInPlayer ? PictureNudge.steps(forKey: subtitleMediaKey) : 0
+    }
+
+    /// Where saved readings for the playing item go: its server, the item, and for one
+    /// version of it. Two servers number their items alike, so the server is in the key.
+    private var letterboxKeys: (item: String, season: String?)? {
+        switch source {
+        case .provider(let playback):
+            let ref = playback.item.ref
+            let season = playback.item.kind == .episode ? playback.item.parentRef : nil
+            return ("\(ref.providerID):\(ref.itemID)|\(playback.stream.source.id)",
+                    season.map { "\($0.providerID):season:\($0.itemID)" })
+        case .plex:
+            guard let ratingKey = metadata.ratingKey else { return nil }
+            let server = "plex@\(URL(string: serverURL)?.host ?? "")"
+            let season = metadata.type == "episode" ? metadata.parentRatingKey : nil
+            return ("\(server):\(ratingKey)|\(playingMediaID ?? "")", season.map { "\(server):season:\($0)" })
+        }
+    }
+
+    /// The measured picture for the details pane: "2.39:1", or that the frame has no
+    /// bars. nil on Center, where nothing is measured, and until the measurement is in.
+    var pictureSummary: String? {
+        guard picturePosition != .center else { return nil }
+        if let letterbox {
+            let share = letterbox.picture.upperBound - letterbox.picture.lowerBound
+            guard share > 0 else { return nil }
+            return String(format: "%.2f:1", Double(letterbox.frameAspect / share))
+        }
+        guard let key = letterboxKeys?.item, let known = LetterboxReadingStore.shared.reading(for: key),
+              known == nil else { return nil }
+        return String(localized: "Full Frame")
+    }
+
+    /// Reads the item's black bars from scrub stills (the server's, else the engine's),
+    /// once per item and only while the picture is moved. A remux codes its bars into a
+    /// 16:9 frame, so its size alone does not say where the picture is.
+    private func measureLetterboxIfNeeded() {
+        guard picturePosition != .center, letterbox == nil, letterboxTask == nil,
+              !isPlayingCinemaExtra else { return }
+        let keys = letterboxKeys
+        if let key = keys?.item, let known = LetterboxReadingStore.shared.reading(for: key) {
+            letterbox = known
+            return
+        }
+        // The server's stills (Plex's BIF, a provider's trickplay) are cheap, so the whole
+        // film is read. An engine still is a decode: without the server's, only every few
+        // are taken.
+        let times = LetterboxDetector.sampleTimes(
+            duration: duration, count: LetterboxDetector.denseSampleCount(duration: duration))
+        guard !times.isEmpty else { return }
+        // An episode starts where its season sits: a season is nearly always one shape.
+        // Its own measurement still runs, and has the last word.
+        var borrowed: LetterboxReading?
+        if let season = keys?.season, let saved = LetterboxReadingStore.shared.reading(for: season) { borrowed = saved }
+        if let borrowed { letterbox = borrowed }
+        let sparseCount = LetterboxDetector.sparseSampleCount
+        let sparseStride = max(1, (times.count + sparseCount - 1) / sparseCount)
+        let generation = itemGeneration
+        letterboxTask = Task { [weak self] in
+            // Let the start of playback have the link first.
+            try? await Task.sleep(for: .seconds(2))
+            var samples: [LetterboxDetector.Sample] = []
+            // Stills in a row the engine never gave: after two, it is not going to.
+            var misses = 0
+            // The engine stopped giving stills part-way: what was read is used for this
+            // play, and not kept as the film's answer.
+            var cutShort = false
+            // Engine stills take a while. Asked for from the controls, once one shows bars,
+            // say that the measurement is running.
+            var announced = false
+            // Whether the last still came ready from the server (Plex's BIF, a provider's
+            // trickplay). The first still is always asked for, and says.
+            var fromServer = true
+            for (index, time) in times.enumerated() {
+                // Another item, or another version of this one, is not what was being measured.
+                guard let self, !Task.isCancelled, self.itemGeneration == generation,
+                      self.letterboxKeys?.item == keys?.item else { return }
+                if index % sparseStride != 0, !fromServer { continue }
+                var image: CGImage?
+                (image, fromServer) = await self.scrubStill(at: time)
+                // The engine gives no still while playback needs the link (always at the
+                // start): wait and ask again, and leave the link alone between stills.
+                if !fromServer {
+                    var waits = 0
+                    while image == nil, waits < 5, misses < 2 {
+                        try? await Task.sleep(for: .seconds(2))
+                        guard !Task.isCancelled, self.itemGeneration == generation else { return }
+                        (image, fromServer) = await self.scrubStill(at: time)
+                        if fromServer { break }
+                        waits += 1
+                    }
+                    misses = image == nil ? misses + 1 : 0
+                    if misses >= 2 { cutShort = true }
+                    try? await Task.sleep(for: .milliseconds(500))
+                }
+                guard let image else { continue }
+                // The decode and the row scan stay off the main actor: a film's server
+                // stills are a few hundred of them back to back.
+                guard let sample = await Task.detached(priority: .utility, operation: {
+                    LetterboxDetector.sample(image)
+                }).value else { continue }
+                samples.append(sample)
+                if !announced, borrowed == nil, self.announcesLetterboxScan, !fromServer,
+                   sample.bar >= LetterboxDetector.minimumBar, sample.bar <= LetterboxDetector.maximumBar {
+                    announced = true
+                    self.showCompatibilityNotice(
+                        PlaybackNotice(title: String(localized: "Measuring for Picture Position"),
+                                       symbol: "arrow.up.and.down.square"), for: 6)
+                }
+            }
+            guard let self, !Task.isCancelled, self.itemGeneration == generation,
+                  self.letterboxKeys?.item == keys?.item else { return }
+            self.letterboxTask = nil
+            let reading: LetterboxReading?
+            switch LetterboxDetector.outcome(from: samples) {
+            case .unreadable:
+                // Not an answer: an episode keeps its season's place, and the next play
+                // measures again.
+                if announced {
+                    self.showCompatibilityNotice(
+                        PlaybackNotice(title: String(localized: "Couldn't Measure Picture"),
+                                       symbol: "arrow.up.and.down.square"))
+                }
+                return
+            case .fullFrame: reading = nil
+            case .bars(let found): reading = found
+            }
+            if !cutShort, let keys {
+                LetterboxReadingStore.shared.save(reading, for: keys.item)
+                if let season = keys.season { LetterboxReadingStore.shared.saveSeason(reading, for: season) }
+            }
+            self.letterbox = reading
+        }
+    }
+
+    private func resetLetterbox() {
+        letterboxTask?.cancel()
+        letterboxTask = nil
+        letterbox = nil
+        announcesLetterboxScan = false
+        loadPictureNudge()
+    }
+
     /// Current subtitle delay in seconds; positive = subtitles appear later.
     var subtitleDelaySeconds: Double { aetherSubtitleModel.delaySeconds }
 
@@ -458,7 +648,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     /// Bumped when `metadata` swaps to a different item (not on in-place field
     /// fills). UI caching per-item state observes this, since `metadata` is not published.
     @Published private(set) var itemGeneration = 0 {
-        didSet { timeline.begin(); serverEndedPlayback = false }
+        didSet { timeline.begin(); serverEndedPlayback = false; resetLetterbox() }
     }
     var title: String { metadata.title ?? String(localized: "Unknown") }
     var subtitle: String? {
@@ -1403,6 +1593,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
 
         // Sticky per-item subtitle delay (OSD stepper).
         loadStoredSubtitleDelay()
+        loadPictureNudge()
 
         // A provider item plays the stream its provider resolved. Returns
         // before the Plex metadata fetch and ContentRouter, both of which
@@ -2081,6 +2272,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
             }
             updateTrackLists()
             preloadThumbnails()
+            measureLetterboxIfNeeded()
             startControlsHideTimer()
         } catch {
             guard stops == stopCount, generation == itemGeneration,
@@ -2842,7 +3034,11 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
             .dropFirst()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] duration in
-                if duration.isFinite, duration > 0 { self?.duration = duration }
+                guard let self, duration.isFinite, duration > 0 else { return }
+                let known = self.duration > 0
+                self.duration = duration
+                // An item whose metadata had no duration could not be measured at its start.
+                if !known, self.isPlaying { self.measureLetterboxIfNeeded() }
             }
             .store(in: &aetherCancellables)
     }
@@ -3176,17 +3372,22 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
 
     /// A still for a chapter the server has no thumb for: the BIF frame, else an engine decode.
     func chapterStill(at time: TimeInterval) async -> UIImage? {
+        await scrubStill(at: time).image.map { UIImage(cgImage: $0) }
+    }
+
+    /// A still of the item at `time`, and whether the server had it ready (a Plex BIF
+    /// frame, a provider's trickplay tile) rather than the engine decoding it.
+    private func scrubStill(at time: TimeInterval) async -> (image: CGImage?, fromServer: Bool) {
         if case .provider(let playback) = source,
            let still = await providerScrubPreviews.image(at: time, for: playback) {
-            return UIImage(cgImage: still)
+            return (still, true)
         }
         if currentScrubThumbnailSource == .server, let partId = metadata.Media?.first?.Part?.first?.id,
            let image = await PlexThumbnailService.shared.getThumbnail(
                partId: partId, time: time, serverURL: serverURL, authToken: authToken) {
-            return UIImage(cgImage: image)
+            return (image, true)
         }
-        guard let frame = await aetherPlayer?.scrubFrame(atSeconds: time, maxWidth: 640) else { return nil }
-        return UIImage(cgImage: frame)
+        return (await aetherPlayer?.scrubFrame(atSeconds: time, maxWidth: 640), false)
     }
 
     /// Build navigation markers from Plex chapters (preferred) or intro/credits markers (fallback).
@@ -4163,6 +4364,9 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         }
         plexStopDelivery?.allowsReplay = false
         stopCount += 1
+        // A stopped item is not measured: the stills would be fetched for nobody.
+        letterboxTask?.cancel()
+        letterboxTask = nil
         countdownTimer?.invalidate()
         countdownTimer = nil
         countdownSeconds = 0
@@ -5741,8 +5945,11 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     private func applyVersion(_ choice: VersionChoice, to media: [PlexMedia]?, capKbps: Int? = nil) {
         guard let media, !media.isEmpty else { return }
         let selection = VersionRanking.select(choice, in: media, capKbps: capKbps)
+        let playing = playingMediaID
         metadata.Media = selection.media
         playingMediaID = selection.media.first.map { "\($0.id)" }
+        // Another version is another file, with its own bars: its start measures it.
+        if let playing, playing != playingMediaID { resetLetterbox() }
         playingMediaServerIndex = selection.serverIndex
     }
 

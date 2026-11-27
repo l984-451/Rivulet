@@ -19,7 +19,8 @@ enum AppIcon: String, CaseIterable, Identifiable {
         }
     }
 
-    /// The asset catalog set, named in `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES`; nil is the primary icon.
+    /// The asset catalog set; nil is the primary icon. iOS declares these in
+    /// `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES`, tvOS in its Info.plist's `CFBundleAlternateIcons`.
     var assetName: String? {
         switch self {
         case .standard: return nil

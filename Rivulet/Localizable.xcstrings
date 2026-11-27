@@ -2973,6 +2973,9 @@
         }
       }
     },
+    "Adjust" : {
+
+    },
     "Ads" : {
       "localizations" : {
         "de" : {
@@ -6373,6 +6376,9 @@
           }
         }
       }
+    },
+    "Couldn't Measure Picture" : {
+
     },
     "Couldn't Play" : {
       "localizations" : {
@@ -10014,6 +10020,9 @@
         }
       }
     },
+    "Full Frame" : {
+
+    },
     "Full Screen" : {
       "localizations" : {
         "de" : {
@@ -12292,6 +12301,9 @@
         }
       }
     },
+    "Measuring for Picture Position" : {
+
+    },
     "Media" : {
       "localizations" : {
         "de" : {
@@ -12565,6 +12577,9 @@
           }
         }
       }
+    },
+    "Moves a wide film to the top or bottom of the screen instead of centering it between black bars. Titles with preview thumbnails on the server are placed sooner." : {
+
     },
     "Movie" : {
       "localizations" : {
@@ -14731,6 +14746,15 @@
           }
         }
       }
+    },
+    "Picture" : {
+
+    },
+    "Picture Position" : {
+
+    },
+    "Picture Position in Player" : {
+
     },
     "Pinned Collections" : {
       "localizations" : {
@@ -19799,6 +19823,9 @@
           }
         }
       }
+    },
+    "Shows a Picture Position button in the player's controls, to move the picture while watching." : {
+
     },
     "Shows a banner of featured titles at the top of each library." : {
       "localizations" : {
@@ -26700,6 +26727,9 @@
         }
       }
     },
+    "Zoomed" : {
+
+    },
     "age %@" : {
       "localizations" : {
         "de" : {
@@ -26879,6 +26909,39 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "ou rendez-vous sur"
+          }
+        }
+      }
+    },
+    "picturePosition.bottom" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Bottom"
+          }
+        }
+      }
+    },
+    "picturePosition.center" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Center"
+          }
+        }
+      }
+    },
+    "picturePosition.top" : {
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Top"
           }
         }
       }

@@ -634,6 +634,11 @@ enum SettingsContent {
             .header("Home Theater"),
             toggle("upscaleLowResolution", "Upscale SD and 720p", key: AetherPlayer.upscaleKey, default: false),
             toggle("stereoWithSubwoofer", "Stereo with Subwoofer", key: StereoWithSubwoofer.key, default: false),
+            SettingsRowItem(id: PicturePosition.key, title: "Picture Position", kind: .cycle(
+                value: { PicturePosition.current.title },
+                next: { PicturePosition.current = PicturePosition.current.next })),
+            toggle(PicturePosition.showsInPlayerKey, "Picture Position in Player",
+                   key: PicturePosition.showsInPlayerKey, default: false),
         ] + selfBuiltHomeTheaterRows + [
             .header("Filtering"),
             SettingsRowItem(id: "cat_contentFilter", title: "Content Filtering",
@@ -1492,6 +1497,7 @@ enum SettingsContent {
                         await ImageCacheManager.shared.clearAll()
                         ContinueWatchingCardCompositor.clearDisk()
                         ArtworkTitleCheck.clearDisk()
+                        LetterboxReadingStore.shared.clear()
                         await CacheManager.shared.clearAllCache()
                         await reloadFromServer()
                         measureStorage { (vc as? SettingsPageViewController)?.reloadRows() }

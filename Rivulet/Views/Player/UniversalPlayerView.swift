@@ -693,10 +693,16 @@ struct UniversalPlayerView: View {
                 .ignoresSafeArea()
                 .zIndex(0)
 
-            playerLayer
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
-                .zIndex(1)
+            // Picture Position moves the whole surface; CaptionOverlayView
+            // places against the same PictureLayout.
+            GeometryReader { geometry in
+                playerLayer
+                    .offset(y: viewModel.pictureLayout(in: geometry.size).shift)
+                    .animation(.easeInOut(duration: 0.4), value: viewModel.pictureLayout(in: geometry.size).shift)
+            }
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+            .zIndex(1)
 
             // Player controls and overlays (subtitles, loading, controls, etc.)
             playerContentLayer

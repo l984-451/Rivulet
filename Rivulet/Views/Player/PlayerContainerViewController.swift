@@ -651,6 +651,19 @@ class PlayerContainerViewController: UIViewController {
             .sink { [weak self] units in self?.captionOverlay?.heightUnits = units }
             .store(in: &cancellables)
 
+        // Picture Position moves the video; captions move with it, on the same clock.
+        vm.$picturePosition
+            .combineLatest(vm.$letterbox, vm.$pictureNudge)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] position, letterbox, nudge in
+                guard let overlay = self?.captionOverlay else { return }
+                overlay.picturePosition = position
+                overlay.letterbox = letterbox
+                overlay.pictureNudge = nudge
+                UIView.animate(withDuration: 0.4) { overlay.layoutIfNeeded() }
+            }
+            .store(in: &cancellables)
+
         // ASS/SSA track script for the overlay's libass layer.
         vm.$assTrack
             .receive(on: DispatchQueue.main)
@@ -981,6 +994,32 @@ class PlayerContainerViewController: UIViewController {
                     self?.activeRailPanel?.dismissPanel()
                 }),
                 width: CardTrackListView.menuWidth, from: rail.qualityButton)
+        }
+        // Picture Position: where a letterboxed picture sits. Saved for every title.
+        rail.setPicturePositionAvailable(PicturePosition.showsInPlayer)
+        rail.onPicturePosition = { [weak self] in
+            guard let self, let vm = self.viewModel else { return }
+            let positions = PicturePosition.allCases
+            let rows = positions.enumerated().map { index, position in
+                CardTrackListView.Row(title: position.title, subtitle: nil, trackId: index,
+                                      isSelected: position == vm.picturePosition)
+            }
+            self.presentRailPanel(
+                content: CardTrackListView(header: String(localized: "Picture Position"), rows: rows,
+                                           steppers: [
+                    // Adjust: this title's own nudge, sticky per movie/episode (ratingKey).
+                    CardStepperConfig(
+                        title: "Adjust",
+                        value: { [weak vm] in
+                            vm?.fillsScreen == true ? String(localized: "Zoomed") : PictureNudge.formatted(vm?.pictureNudge ?? 0)
+                        },
+                        onStep: { [weak vm] step in vm?.adjustPictureNudge(bySteps: step) }),
+                                           ],
+                                           onSelect: { [weak vm, weak self] index in
+                    if let index, positions.indices.contains(index) { vm?.setPicturePosition(positions[index]) }
+                    self?.activeRailPanel?.dismissPanel()
+                }),
+                width: CardTrackListView.menuWidth, from: rail.picturePositionButton)
         }
         rail.setWatchTogetherAvailable(true)
         rail.onWatchTogether = { [weak self] in self?.presentWatchTogetherMenu() }
@@ -1331,7 +1370,8 @@ class PlayerContainerViewController: UIViewController {
                                                            dolbyVision: vm.aetherPlayer?.dolbyVisionPlayback,
                                                            enhancementLayer: vm.aetherPlayer?.dolbyVisionEnhancementLayer,
                                                            enhanceDialogue: SystemAudioAdjustment.dialogueSummary,
-                                                           upscale: vm.aetherPlayer?.upscaleSummary),
+                                                           upscale: vm.aetherPlayer?.upscaleSummary,
+                                                           picture: vm.pictureSummary),
                 statsProvider: statsProvider)
             return (details, nil)
         }

@@ -419,6 +419,160 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
         subtitleHeightUnits = SubtitleAdjustments.heightUnits
     }
 
+    // MARK: - Picture Position
+
+    /// Where a letterboxed picture sits (Settings > Playback, and the player's menu).
+    @Published private(set) var picturePosition = PicturePosition.current
+    /// The playing item's black bars, measured from stills while the picture is
+    /// moved off centre. nil until measured, and when the frame has none.
+    @Published private(set) var letterbox: LetterboxReading?
+    private var letterboxTask: Task<Void, Never>?
+    /// This title's own nudge, in stepper steps (positive is up). Sticky per item.
+    @Published private(set) var pictureNudge = 0
+    /// The position was changed from the player's controls on this item, so a slow
+    /// measurement says it is running. One started by the saved setting stays quiet.
+    private var announcesLetterboxScan = false
+    /// Readings for this launch, by item, so a replay or a return to the item is instant.
+    private static var letterboxReadings: [String: LetterboxReading?] = [:]
+
+    /// Sets the position for this and every later title.
+    func setPicturePosition(_ position: PicturePosition) {
+        PicturePosition.current = position
+        picturePosition = position
+        announcesLetterboxScan = true
+        measureLetterboxIfNeeded()
+    }
+
+    /// The layout the video surface and the captions share.
+    func pictureLayout(in container: CGSize) -> PictureLayout {
+        PictureLayout.make(container: container, videoSize: videoSize, fillsScreen: fillsScreen,
+                           position: picturePosition, letterbox: letterbox, nudge: pictureNudge)
+    }
+
+    /// Steps this title's nudge and persists it, so the item reopens where it was left.
+    func adjustPictureNudge(bySteps steps: Int) {
+        // Zoomed to fill, the picture does not move: do not count steps nobody can see.
+        guard !fillsScreen else { return }
+        pictureNudge = PictureNudge.clamped(pictureNudge + steps)
+        PictureNudge.setSteps(pictureNudge, forKey: subtitleMediaKey)
+    }
+
+    /// The playing version's key for saved readings.
+    private var letterboxKey: String? {
+        metadata.ratingKey.map { _ in "\(subtitleMediaKey)|\(playingMediaID ?? "")" }
+    }
+
+    /// The measured picture for the details pane: "2.39:1", or that the frame has no
+    /// bars. nil on Center, where nothing is measured, and until the measurement is in.
+    var pictureSummary: String? {
+        guard picturePosition != .center else { return nil }
+        if let letterbox {
+            let share = letterbox.picture.upperBound - letterbox.picture.lowerBound
+            guard share > 0 else { return nil }
+            return String(format: "%.2f:1", Double(letterbox.frameAspect / share))
+        }
+        guard let key = letterboxKey,
+              let known = Self.letterboxReadings[key] ?? LetterboxReadingStore.shared.reading(for: key),
+              known == nil else { return nil }
+        return String(localized: "Full Frame")
+    }
+
+    /// Reads the item's black bars from a few scrub stills (the server's, else the
+    /// engine's), once per item and only while the picture is moved. A remux codes
+    /// its bars into a 16:9 frame, so its size alone does not say where the picture is.
+    private func measureLetterboxIfNeeded() {
+        guard picturePosition != .center, letterbox == nil, letterboxTask == nil else { return }
+        let key = letterboxKey
+        if let key, let known = Self.letterboxReadings[key] ?? LetterboxReadingStore.shared.reading(for: key) {
+            letterbox = known
+            return
+        }
+        // An episode starts where the last one measured in its season sits: a season is
+        // nearly always one shape. Its own measurement still runs, and has the last word.
+        var seasonKey: String?
+        if metadata.type == "episode", let season = metadata.parentRatingKey { seasonKey = "plex:season:\(season)" }
+        var borrowed: LetterboxReading?
+        if let seasonKey, let saved = LetterboxReadingStore.shared.reading(for: seasonKey) { borrowed = saved }
+        if let borrowed { letterbox = borrowed }
+        // The server's stills (Plex's BIF, a provider's trickplay) are cheap, so the whole
+        // film is read. An engine still is a decode: without the server's, only every few
+        // are taken.
+        let times = LetterboxDetector.sampleTimes(
+            duration: duration, count: LetterboxDetector.denseSampleCount(duration: duration))
+        guard !times.isEmpty else { return }
+        let sparseStride = max(1, times.count / LetterboxDetector.sparseSampleCount)
+        let generation = itemGeneration
+        letterboxTask = Task { [weak self] in
+            // Let the start of playback have the link first.
+            try? await Task.sleep(for: .seconds(2))
+            var samples: [LetterboxDetector.Sample] = []
+            // Stills in a row the engine never gave: after two, it is not going to.
+            var misses = 0
+            // Engine stills take a while. Asked for from the controls, once one shows bars,
+            // say that the measurement is running.
+            var announced = false
+            // Whether the last still came ready from the server (Plex's BIF, a provider's
+            // trickplay). The first still is always asked for, and says.
+            var fromServer = true
+            for (index, time) in times.enumerated() {
+                guard let self, !Task.isCancelled, self.itemGeneration == generation else { return }
+                if index % sparseStride != 0, !fromServer { continue }
+                var image: CGImage?
+                (image, fromServer) = await self.scrubStill(at: time)
+                // The engine gives no still while playback needs the link (always at the
+                // start): wait and ask again, and leave the link alone between stills.
+                if !fromServer {
+                    var waits = 0
+                    while image == nil, waits < 5, misses < 2 {
+                        try? await Task.sleep(for: .seconds(2))
+                        guard !Task.isCancelled, self.itemGeneration == generation else { return }
+                        (image, fromServer) = await self.scrubStill(at: time)
+                        if fromServer { break }
+                        waits += 1
+                    }
+                    misses = image == nil ? misses + 1 : 0
+                    try? await Task.sleep(for: .milliseconds(500))
+                }
+                if let image, let sample = LetterboxDetector.sample(image) {
+                    samples.append(sample)
+                    if !announced, borrowed == nil, self.announcesLetterboxScan, !fromServer,
+                       sample.bar >= LetterboxDetector.minimumBar, sample.bar <= LetterboxDetector.maximumBar {
+                        announced = true
+                        self.showCompatibilityNotice(
+                            PlaybackNotice(title: String(localized: "Measuring for Picture Position"),
+                                           symbol: "arrow.up.and.down.square"), for: 6)
+                    }
+                }
+            }
+            guard let self, !Task.isCancelled, self.itemGeneration == generation else { return }
+            self.letterboxTask = nil
+            // Too few stills is a failure to read, not a reading: try again next time.
+            guard samples.count >= LetterboxDetector.minimumSamples else {
+                if announced {
+                    self.showCompatibilityNotice(
+                        PlaybackNotice(title: String(localized: "Couldn't Measure Picture"),
+                                       symbol: "arrow.up.and.down.square"))
+                }
+                return
+            }
+            let reading = LetterboxDetector.reading(from: samples)
+            if let key {
+                Self.letterboxReadings[key] = reading
+                LetterboxReadingStore.shared.save(reading, for: key)
+            }
+            if let seasonKey { LetterboxReadingStore.shared.save(reading, for: seasonKey) }
+            self.letterbox = reading
+        }
+    }
+
+    private func resetLetterbox() {
+        letterboxTask?.cancel()
+        letterboxTask = nil
+        letterbox = nil
+        announcesLetterboxScan = false
+        pictureNudge = PictureNudge.steps(forKey: subtitleMediaKey)
+    }
+
     /// Current subtitle delay in seconds; positive = subtitles appear later.
     var subtitleDelaySeconds: Double { aetherSubtitleModel.delaySeconds }
 
@@ -458,7 +612,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
     /// Bumped when `metadata` swaps to a different item (not on in-place field
     /// fills). UI caching per-item state observes this, since `metadata` is not published.
     @Published private(set) var itemGeneration = 0 {
-        didSet { timeline.begin(); serverEndedPlayback = false }
+        didSet { timeline.begin(); serverEndedPlayback = false; resetLetterbox() }
     }
     var title: String { metadata.title ?? String(localized: "Unknown") }
     var subtitle: String? {
@@ -1403,6 +1557,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
 
         // Sticky per-item subtitle delay (OSD stepper).
         loadStoredSubtitleDelay()
+        pictureNudge = PictureNudge.steps(forKey: subtitleMediaKey)
 
         // A provider item plays the stream its provider resolved. Returns
         // before the Plex metadata fetch and ContentRouter, both of which
@@ -2081,6 +2236,7 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
             }
             updateTrackLists()
             preloadThumbnails()
+            measureLetterboxIfNeeded()
             startControlsHideTimer()
         } catch {
             guard stops == stopCount, generation == itemGeneration,
@@ -3176,17 +3332,22 @@ final class UniversalPlayerViewModel: ObservableObject, WatchTogetherPlayer {
 
     /// A still for a chapter the server has no thumb for: the BIF frame, else an engine decode.
     func chapterStill(at time: TimeInterval) async -> UIImage? {
+        await scrubStill(at: time).image.map { UIImage(cgImage: $0) }
+    }
+
+    /// A still of the item at `time`, and whether the server had it ready (a Plex BIF
+    /// frame, a provider's trickplay tile) rather than the engine decoding it.
+    private func scrubStill(at time: TimeInterval) async -> (image: CGImage?, fromServer: Bool) {
         if case .provider(let playback) = source,
            let still = await providerScrubPreviews.image(at: time, for: playback) {
-            return UIImage(cgImage: still)
+            return (still, true)
         }
         if currentScrubThumbnailSource == .server, let partId = metadata.Media?.first?.Part?.first?.id,
            let image = await PlexThumbnailService.shared.getThumbnail(
                partId: partId, time: time, serverURL: serverURL, authToken: authToken) {
-            return UIImage(cgImage: image)
+            return (image, true)
         }
-        guard let frame = await aetherPlayer?.scrubFrame(atSeconds: time, maxWidth: 640) else { return nil }
-        return UIImage(cgImage: frame)
+        return (await aetherPlayer?.scrubFrame(atSeconds: time, maxWidth: 640), false)
     }
 
     /// Build navigation markers from Plex chapters (preferred) or intro/credits markers (fallback).

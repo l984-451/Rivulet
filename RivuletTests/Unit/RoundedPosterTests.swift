@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // Copyright (C) 2025-2026 Bain Gurley
 
+import Testing
+import UIKit
 import XCTest
 @testable import Rivulet
 
@@ -60,5 +62,88 @@ final class RoundedPosterTests: XCTestCase {
             XCTAssertEqual(image.cgImage?.bitsPerComponent, 8)
             XCTAssertEqual(image.cgImage?.bitsPerPixel, 32)
         }
+    }
+}
+
+@MainActor
+struct CastArtworkTests {
+    @Test func preparesCircularArtworkOffMainAndReusesRenderedImage() async throws {
+        let url = try #require(URL(string: "https://example.invalid/\(UUID().uuidString)"))
+        let source = sourceImage()
+        try #require(CastArtwork.cached(for: url, side: 64, scale: 2, source: source) == nil)
+        let image = try #require(await CastArtwork.image(for: url, side: 64, scale: 2) { _ in
+            Self.expectBackgroundThread()
+            return source
+        })
+        let pixels = try #require(image.cgImage)
+        #expect(pixels.width == 128)
+        #expect(pixels.height == 128)
+        #expect(pixels.bitsPerComponent == 8)
+        #expect(alpha(image, x: 0, y: 0) == 0)
+        #expect(alpha(image, x: 64, y: 64) == 255)
+        #expect(alpha(image, x: 64, y: 4) == 255)
+        #expect(alpha(image, x: 4, y: 64) == 255)
+        let cached = await CastArtwork.image(for: url, side: 64, scale: 2) { _ in
+            return source
+        }
+        #expect(cached === image)
+        #expect(CastArtwork.cached(for: url, side: 64, scale: 2, source: source) === image)
+        #expect(CastArtwork.cached(for: url, side: 64, scale: 1, source: source) == nil)
+        #expect(CastArtwork.cached(for: url, side: 96, scale: 2, source: source) == nil)
+    }
+
+    @Test func refreshedOrClearedSourceCannotReuseTheOldCircle() async throws {
+        let url = try #require(URL(string: "https://example.invalid/\(UUID().uuidString)"))
+        let firstSource = sourceImage()
+        let nextSource = sourceImage(color: .blue)
+        let first = try #require(await CastArtwork.image(for: url, side: 64, scale: 1) { _ in firstSource })
+        #expect(CastArtwork.cached(for: url, side: 64, scale: 1, source: nil) == nil)
+        #expect(CastArtwork.cached(for: url, side: 64, scale: 1, source: nextSource) == nil)
+        let cleared = await CastArtwork.image(for: url, side: 64, scale: 1) { _ in nil }
+        #expect(cleared == nil)
+        let refreshed = try #require(await CastArtwork.image(for: url, side: 64, scale: 1) { _ in nextSource })
+        #expect(refreshed !== first)
+        #expect(CastArtwork.cached(for: url, side: 64, scale: 1, source: firstSource) == nil)
+        #expect(CastArtwork.cached(for: url, side: 64, scale: 1, source: nextSource) === refreshed)
+        #expect(first.pngData() != refreshed.pngData())
+    }
+
+    @Test func cancellationAfterLoadingDoesNotPublishArtwork() async throws {
+        let url = try #require(URL(string: "https://example.invalid/\(UUID().uuidString)"))
+        let source = sourceImage()
+        let task = Task {
+            await CastArtwork.image(for: url, side: 64, scale: 1) { _ in
+                withUnsafeCurrentTask { $0?.cancel() }
+                return source
+            }
+        }
+        #expect(await task.value == nil)
+        #expect(CastArtwork.cached(for: url, side: 64, scale: 1, source: source) == nil)
+        let retried = await CastArtwork.image(for: url, side: 64, scale: 1) { _ in source }
+        #expect(retried != nil)
+    }
+
+    private func sourceImage(color: UIColor = .red) -> UIImage {
+        UIGraphicsImageRenderer(size: CGSize(width: 200, height: 100)).image { context in
+            color.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 200, height: 100))
+        }
+    }
+
+    nonisolated private static func expectBackgroundThread() {
+        #expect(Thread.isMainThread == false)
+    }
+
+    private func alpha(_ image: UIImage, x: Int, y: Int) -> UInt8 {
+        guard let cgImage = image.cgImage else { return 0 }
+        var pixel = [UInt8](repeating: 0, count: 4)
+        pixel.withUnsafeMutableBytes { buffer in
+            let context = CGContext(data: buffer.baseAddress, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                                    space: CGColorSpaceCreateDeviceRGB(),
+                                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+            context?.draw(cgImage, in: CGRect(x: -x, y: y - cgImage.height + 1,
+                                             width: cgImage.width, height: cgImage.height))
+        }
+        return pixel[3]
     }
 }

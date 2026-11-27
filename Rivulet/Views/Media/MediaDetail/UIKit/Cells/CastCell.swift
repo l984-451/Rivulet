@@ -21,6 +21,7 @@ final class CastCell: UIView {
     private let subtitleLabel = UILabel()
 
     private var imageToken: UInt64 = 0
+    private var imageLoadTask: Task<Void, Never>?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -92,17 +93,25 @@ final class CastCell: UIView {
 
         imageToken &+= 1
         let token = imageToken
-        let cached = imageURL.flatMap { ImageCacheManager.shared.cachedImage(for: $0) }
-        photoView.image = cached.map(Self.circular) ?? Self.placeholder
-        guard let imageURL, cached == nil else { return }
-        Task { [weak self] in
-            let image = await ImageCacheManager.shared.image(for: imageURL)
-            await MainActor.run {
-                guard let self, self.imageToken == token, let image else { return }
-                self.photoView.image = Self.circular(image)
-            }
+        imageLoadTask?.cancel()
+        imageLoadTask = nil
+        let side = Self.circleSize
+        let scale = traitCollection.displayScale
+        let cached = imageURL.flatMap {
+            CastArtwork.cached(for: $0, side: side, scale: scale,
+                               source: ImageCacheManager.shared.cachedImage(for: $0))
+        }
+        photoView.image = cached ?? Self.placeholder
+        guard let imageURL else { return }
+        imageLoadTask = Task { [weak self] in
+            // Even on a rendered cache hit, loading the source schedules a stale-artwork check.
+            let image = await CastArtwork.image(for: imageURL, side: side, scale: scale)
+            guard !Task.isCancelled, let self, self.imageToken == token, let image else { return }
+            if self.photoView.image !== image { self.photoView.image = image }
         }
     }
+
+    deinit { imageLoadTask?.cancel() }
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -132,18 +141,6 @@ final class CastCell: UIView {
         subtitleLabel.transform = drop
     }
 
-    /// Aspect-fills `image` into the circle with transparent corners, so the focus effect is round.
-    private static func circular(_ image: UIImage) -> UIImage {
-        let side = circleSize
-        return UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: .layeredArtwork()).image { _ in
-            UIBezierPath(ovalIn: CGRect(x: 0, y: 0, width: side, height: side)).addClip()
-            let scale = max(side / image.size.width, side / image.size.height)
-            let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-            image.draw(in: CGRect(x: (side - size.width) / 2, y: (side - size.height) / 2,
-                                  width: size.width, height: size.height))
-        }
-    }
-
     /// Dark circle with a person glyph, for people with no photo.
     private static let placeholder: UIImage = {
         let side = circleSize
@@ -157,4 +154,53 @@ final class CastCell: UIView {
             }
         }
     }()
+}
+
+nonisolated enum CastArtwork {
+    private final class Entry {
+        weak var source: UIImage?
+        let image: UIImage
+
+        init(source: UIImage, image: UIImage) {
+            self.source = source
+            self.image = image
+        }
+    }
+
+    private static let cache: NSCache<NSString, Entry> = {
+        let cache = NSCache<NSString, Entry>()
+        cache.totalCostLimit = 32 << 20
+        return cache
+    }()
+
+    static func cached(for url: URL, side: CGFloat, scale: CGFloat, source: UIImage?) -> UIImage? {
+        guard let source, let entry = cache.object(forKey: key(for: url, side: side, scale: scale)),
+              entry.source === source else { return nil }
+        return entry.image
+    }
+
+    @concurrent
+    static func image(for url: URL, side: CGFloat, scale: CGFloat,
+                      load: @Sendable (URL) async -> UIImage? = { await ImageCacheManager.shared.image(for: $0) }) async -> UIImage? {
+        guard !Task.isCancelled else { return nil }
+        guard let source = await load(url), !Task.isCancelled else { return nil }
+        if let hit = cached(for: url, side: side, scale: scale, source: source) { return hit }
+        let format = UIGraphicsImageRendererFormat.layeredArtwork(scale: scale)
+        format.opaque = false
+        let image = UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: format).image { _ in
+            UIBezierPath(ovalIn: CGRect(x: 0, y: 0, width: side, height: side)).addClip()
+            let fill = max(side / source.size.width, side / source.size.height)
+            let size = CGSize(width: source.size.width * fill, height: source.size.height * fill)
+            source.draw(in: CGRect(x: (side - size.width) / 2, y: (side - size.height) / 2,
+                                   width: size.width, height: size.height))
+        }
+        guard !Task.isCancelled else { return nil }
+        let cost = image.cgImage.map { $0.bytesPerRow * $0.height } ?? 0
+        cache.setObject(Entry(source: source, image: image), forKey: key(for: url, side: side, scale: scale), cost: cost)
+        return image
+    }
+
+    private static func key(for url: URL, side: CGFloat, scale: CGFloat) -> NSString {
+        "\(side)#\(scale)#\(url.absoluteString)" as NSString
+    }
 }

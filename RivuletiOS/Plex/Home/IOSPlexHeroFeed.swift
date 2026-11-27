@@ -42,6 +42,7 @@ struct IOSPlexHeroFeed: View {
                     }
                 }
                 .padding(.bottom, 24)
+                .background(RefreshSpinnerOffset(offset: hero ? proxy.safeAreaInsets.top : 0))
             }
             .ignoresSafeArea(edges: hero ? .top : [])
             .onScrollGeometryChange(for: Bool.self) { scroll in
@@ -76,6 +77,39 @@ struct IOSPlexHeroFeed: View {
 
     private func fullSize(_ proxy: GeometryProxy) -> CGSize {
         CGSize(width: proxy.size.width, height: proxy.size.height + proxy.safeAreaInsets.top)
+    }
+}
+
+/// Under a hero the scroll view runs to the top of the screen, and pull to refresh draws its
+/// spinner there, behind the bar. This lowers the spinner by `offset` and draws it in front of
+/// the content, since the hero now sits where it lands. SwiftUI offers no placement for it.
+private struct RefreshSpinnerOffset: UIViewRepresentable {
+    let offset: CGFloat
+
+    func makeUIView(context: Context) -> Probe { Probe() }
+
+    func updateUIView(_ probe: Probe, context: Context) {
+        probe.offset = offset
+    }
+
+    final class Probe: UIView {
+        var offset: CGFloat = 0 {
+            didSet { if offset != oldValue { apply() } }
+        }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            // The refresh control is attached in the same update, so look once it has finished.
+            Task { @MainActor [weak self] in self?.apply() }
+        }
+
+        private func apply() {
+            var view = superview
+            while let current = view, !(current is UIScrollView) { view = current.superview }
+            guard let control = (view as? UIScrollView)?.refreshControl else { return }
+            control.layer.sublayerTransform = CATransform3DMakeTranslation(0, offset, 0)
+            control.layer.zPosition = offset > 0 ? 1 : 0
+        }
     }
 }
 

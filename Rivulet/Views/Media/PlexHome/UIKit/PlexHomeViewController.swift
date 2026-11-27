@@ -27,6 +27,7 @@ nonisolated struct HomeSectionID: Hashable, Sendable {
     /// Favorites-mode-only: the two rows, movies then shows.
     static let favoriteMovies = HomeSectionID(raw: "favorites.movies")
     static let favoriteShows = HomeSectionID(raw: "favorites.shows")
+    static let favoriteAlbums = HomeSectionID(raw: "favorites.albums")
     /// Library-mode-only: the library's Collections shelf. Each library key
     /// has its own cached controller, so the id cannot collide.
     static let libraryCollections = HomeSectionID(raw: "collections")
@@ -1550,7 +1551,7 @@ final class PlexHomeViewController: UIViewController {
             // Every server's favorites, merged by title, in page 0.
             fetchPage = { start in
                 guard start == 0 else { return ([], nil) }
-                let items = await FavoritesFeed.load(from: PersonalHomeRows.providers)
+                let items = await FavoritesFeed.load(from: PersonalHomeRows.providers, includeAlbums: true)
                 return (items, items.count)
             }
         } else if case .playlist(let playlist) = mode {
@@ -1678,7 +1679,7 @@ final class PlexHomeViewController: UIViewController {
     /// Repaints both favorites rows in place: a reload keeps their ids, not their tiles.
     private func reconfigureFavoriteTiles() {
         var snap = dataSource.snapshot()
-        let ids = [HomeSectionID.favoriteMovies, .favoriteShows]
+        let ids = [HomeSectionID.favoriteMovies, .favoriteShows, .favoriteAlbums]
             .filter(snap.sectionIdentifiers.contains)
             .flatMap { snap.itemIdentifiers(inSection: $0) }
         guard !ids.isEmpty else { return }
@@ -4772,16 +4773,19 @@ final class PlexHomeViewController: UIViewController {
         if case .playlists = mode {
             return gridItems.isEmpty ? [] : [.grid(items: mapGridSlots(gridItems))]
         }
-        // Every server's favorites as Home's rows: Movies, then Shows, each by title.
-        // A Recently Added-kind row, so tap, tile menu and captions are Home's.
+        // Every server's favorites as Home's rows: Movies, then Shows, then Albums, each by title.
+        // A Recently Added-kind row, so tap, tile menu and captions are Home's; the Albums row's
+        // square tiles open the album page (`openMusicIfNeeded`).
         if case .favorites = mode {
             let items = gridItems.compactMap { $0 }
             func row(_ id: HomeSectionID, _ title: String, _ items: [MediaItem]) -> [HomeSectionData] {
                 items.isEmpty ? [] : [.hub(id: id, title: title, items: items, isContinueWatching: false,
                                            hubKey: nil, hubIdentifier: nil)]
             }
-            return row(.favoriteMovies, String(localized: "Movies"), items.filter { $0.kind == .movie })
-                + row(.favoriteShows, String(localized: "Shows"), items.filter { $0.kind != .movie })
+            let videos = items.filter { $0.isMusic != true }
+            return row(.favoriteMovies, String(localized: "Movies"), videos.filter { $0.kind == .movie })
+                + row(.favoriteShows, String(localized: "Shows"), videos.filter { $0.kind != .movie })
+                + row(.favoriteAlbums, String(localized: "Albums"), items.filter { $0.isMusic == true })
         }
         // Title, Play and Shuffle ride the header cell; `topSectionIndex` keeps Menu dismissing.
         if case .playlist(let playlist) = mode {

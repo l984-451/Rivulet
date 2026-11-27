@@ -48,6 +48,7 @@ enum SettingsPage: Hashable, CaseIterable {
     case root
     case appearance, playback, music, liveTV, photos, servers, about
     case plex, plexServerDetail, jellyfin, emby, iptv, libraries, cache
+    case jellyfinAddUser, jellyfinRemoveUser, embyAddUser, embyRemoveUser
     case homeRows
     case liveTVSourceDetail, liveTVFavorites
     case addLiveTVSource, addXtream, addDispatcharr, addTvheadend, addThreadfin, addPlaylistURL
@@ -72,6 +73,8 @@ enum SettingsPage: Hashable, CaseIterable {
         case .plexServerDetail: return String(localized: "Server")
         case .jellyfin: return String(localized: "Jellyfin Server")
         case .emby: return String(localized: "Emby Server")
+        case .jellyfinAddUser, .embyAddUser: return String(localized: "Add User")
+        case .jellyfinRemoveUser, .embyRemoveUser: return String(localized: "Remove User")
         case .iptv: return String(localized: "Live TV Sources")
         case .liveTVSourceDetail: return String(localized: "Source Details")
         case .liveTVFavorites: return String(localized: "Favorites")

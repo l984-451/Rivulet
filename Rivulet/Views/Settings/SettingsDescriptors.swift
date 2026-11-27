@@ -34,6 +34,8 @@ enum SettingsDescriptorStore {
         // so they cannot have their own entry. Fall back on the row KIND, which
         // is what the panel wants to explain anyway.
         if id.hasPrefix("homeRow_") { return descriptors["homeRowItem"] }
+        if id.hasPrefix("embyUser_") || id.hasPrefix("jellyfinUser_") { return descriptors["serverUserRow"] }
+        if id.hasPrefix("embyRemove_") || id.hasPrefix("jellyfinRemove_") { return descriptors["serverUserRemoveRow"] }
         if id.hasPrefix("pinnedCollection_") { return descriptors["pinnedCollection"] }
         if id.hasPrefix("homePlaylist_") { return descriptors["homePlaylist"] }
         if id.hasPrefix("fav_") { return descriptors["liveTVFavoriteRow"] }
@@ -446,6 +448,30 @@ enum SettingsDescriptorStore {
             icon: "arrow.clockwise",
             description: "Reload this server's libraries and Home rows now."
         ),
+        "serverUserRow": SettingDescriptor(
+            icon: "person.crop.circle",
+            description: "Switch to this user. Each user has their own Continue Watching, watched state and favorites."
+        ),
+        "serverUserRemoveRow": SettingDescriptor(
+            icon: "person.crop.circle.badge.minus",
+            description: "Remove this user from Rivulet. The user stays on the server."
+        ),
+        "embyAddUser": SettingDescriptor(
+            icon: "person.badge.plus",
+            description: "Sign in another user of this server, for example a child's, and switch between users from the profile in the sidebar."
+        ),
+        "embyRemoveUser": SettingDescriptor(
+            icon: "person.crop.circle.badge.minus",
+            description: "Remove a user you added from Rivulet."
+        ),
+        "jellyfinAddUser": SettingDescriptor(
+            icon: "person.badge.plus",
+            description: "Sign in another user of this server, for example a child's, and switch between users from the profile in the sidebar."
+        ),
+        "jellyfinRemoveUser": SettingDescriptor(
+            icon: "person.crop.circle.badge.minus",
+            description: "Remove a user you added from Rivulet."
+        ),
         "embySignOut": SettingDescriptor(
             icon: "rectangle.portrait.and.arrow.right",
             description: "Sign out of this \(embyName) server and remove its saved credentials."
@@ -687,6 +713,8 @@ enum SettingsDescriptorStore {
         case .plexServerDetail: return ("server.rack", .systemOrange)
         case .jellyfin: return ("server.rack", .systemPurple)
         case .emby: return ("server.rack", .systemGreen)
+        case .jellyfinAddUser, .jellyfinRemoveUser: return ("person.2.fill", .systemPurple)
+        case .embyAddUser, .embyRemoveUser: return ("person.2.fill", .systemGreen)
         case .iptv: return ("tv.and.mediabox", .systemBlue)
         case .libraries: return ("sidebar.squares.left", .systemPurple)
         case .homeRows: return ("rectangle.grid.1x2", .systemTeal)

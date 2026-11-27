@@ -193,6 +193,7 @@ enum JellyfinSession {
         let scope = CredentialScope.server(providerID: account.providerID)
         let token = CredentialRegistry.shared.token(for: scope)
         await CredentialRegistry.shared.clearToken(for: scope)
+        await removeAllSavedUsers(transport: transport)
         UserDefaults.standard.removeObject(forKey: accountKey)
         MediaProviderRegistry.shared.populateFromCurrentAuth()
         MusicProviderRegistry.shared.populateFromCurrentAuth()

@@ -43,6 +43,8 @@ struct TVSidebarView: View {
     /// A profile was entered through the picker; any other close re-presents it.
     @State private var profileChosen = false
     @State private var showProfileSwitcher = false
+    /// A Jellyfin or Emby user was switched to from the panel: Home, not the reopened sidebar.
+    @State private var serverProfileSwitched = false
     /// The last profile entered, and the sidebar close a switch away from it asks for.
     @State private var lastProfileId: Int?
     @State private var sidebarCollapseRequest = 0
@@ -124,7 +126,7 @@ struct TVSidebarView: View {
             hiddenKeys: librarySettings.hiddenLibraryKeys,
             profileName: profileName,
             profileAvatar: profileManager.selectedUser?.thumb.flatMap { URL(string: $0) },
-            canSwitchProfile: profileManager.hasMultipleProfiles,
+            canSwitchProfile: profileManager.hasMultipleProfiles || ServerUserProfiles.canSwitch,
             hasMediaServer: isSignedInToAnyServer,
             playlistServers: PlaylistServer.current(visiblePlaylistProviders),
             nowPlaying: nowPlayingFeed.track)
@@ -152,7 +154,7 @@ struct TVSidebarView: View {
                 }
 
                 if newTab == .account {
-                    if profileManager.hasMultipleProfiles {
+                    if profileManager.hasMultipleProfiles || ServerUserProfiles.canSwitch {
                         showProfileSwitcher = true
                     }
                     return  // Never store .account — selectedTab stays unchanged
@@ -206,6 +208,8 @@ struct TVSidebarView: View {
         .onChange(of: showProfileSwitcher) { _, shown in
             if shown {
                 switcherProfileId = profileManager.selectedUser?.id
+            } else if serverProfileSwitched {
+                serverProfileSwitched = false
             } else if switcherProfileId == profileManager.selectedUser?.id {
                 sidebarProfileRowRequest += 1
             }
@@ -440,11 +444,22 @@ struct TVSidebarView: View {
         }
         // Compact profile switcher popup (from sidebar account tab)
         .fullScreenCover(isPresented: $showProfileSwitcher) {
-            ProfileSwitcherPopup(
-                isPresented: $showProfileSwitcher,
-                profileManager: profileManager
-            )
-            .presentationBackground(.clear)
+            // Plex Home profiles first; Jellyfin and Emby users when Plex has none to switch to.
+            if profileManager.hasMultipleProfiles {
+                ProfileSwitcherPopup(
+                    isPresented: $showProfileSwitcher,
+                    profileManager: profileManager
+                )
+                .presentationBackground(.clear)
+            } else {
+                ServerProfileSwitcherPopup(isPresented: $showProfileSwitcher) {
+                    // A switch to another user arrives at Home with the sidebar closed, as a Plex one does.
+                    serverProfileSwitched = true
+                    selectedTab = .home
+                    sidebarCollapseRequest += 1
+                }
+                .presentationBackground(.clear)
+            }
         }
     }
 

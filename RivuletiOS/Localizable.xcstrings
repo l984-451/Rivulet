@@ -1,6 +1,26 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Add another user of this server, for example a child's, to switch between users here. Each user has their own Continue Watching, watched state and favorites." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Füge einen weiteren Benutzer dieses Servers hinzu, etwa für ein Kind, um hier zwischen den Benutzern zu wechseln. Jeder Benutzer hat sein eigenes „Weiter ansehen“, eigene Gesehen-Markierungen und Favoriten."
+          }
+        }
+      }
+    },
+    "Add User" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Benutzer hinzufügen"
+          }
+        }
+      }
+    },
     "%lld hr" : {
       "localizations" : {
         "de" : {
@@ -59,6 +79,16 @@
         }
       }
     },
+    "Enter the username." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gib den Benutzernamen ein."
+          }
+        }
+      }
+    },
     "Couldn't Load Discover" : {
 
     },
@@ -99,6 +129,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Carte"
+          }
+        }
+      }
+    },
+    "On a device signed in to %@ as the user to add, open Settings, choose Quick Connect and enter this code." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffne auf einem Gerät, das als hinzuzufügender Benutzer bei %@ angemeldet ist, die Einstellungen, wähle Quick Connect und gib diesen Code ein."
           }
         }
       }
@@ -645,6 +685,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Retirer des favoris"
+          }
+        }
+      }
+    },
+    "Users" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Benutzer"
           }
         }
       }

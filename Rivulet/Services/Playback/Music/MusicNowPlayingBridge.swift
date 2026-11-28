@@ -139,7 +139,7 @@ final class MusicNowPlayingBridge {
         let playTarget = center.playCommand.addTarget { _ in
             Task { @MainActor in
                 guard !MusicQueue.shared.videoOwnsNowPlaying else { return }
-                MusicQueue.shared.play()
+                MusicQueue.shared.remotePlay()
             }
             return .success
         }
@@ -148,7 +148,7 @@ final class MusicNowPlayingBridge {
         let pauseTarget = center.pauseCommand.addTarget { _ in
             Task { @MainActor in
                 guard !MusicQueue.shared.videoOwnsNowPlaying else { return }
-                MusicQueue.shared.pause()
+                MusicQueue.shared.remotePause()
             }
             return .success
         }

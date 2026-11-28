@@ -256,13 +256,38 @@ final class MusicQueue: ObservableObject {
     }
 
     func togglePlayPause() {
+        guard acceptsTransport() else { return }
         // During a scan the press means "play from here", whatever the state under it.
         if scanLevel != 0 { return play() }
-        if playbackState == .playing {
+        // The player's own state, not `playbackState`: that copy follows a main-queue hop
+        // later, so a second event in between read a resume as still paused, or the reverse.
+        if player.state == .playing {
             pause()
         } else {
             play()
         }
+    }
+
+    /// The remote's Play and Pause commands, deduped with the toggle.
+    func remotePlay() {
+        guard acceptsTransport() else { return }
+        play()
+    }
+
+    func remotePause() {
+        guard acceptsTransport() else { return }
+        pause()
+    }
+
+    /// One Play/Pause press can reach the queue twice: as the Now Playing screen's press and as
+    /// an MPRemoteCommand. Video drops the second through `PlaybackInputCoordinator`; music had
+    /// nothing, so a resume could toggle straight back to pause and need a second press.
+    private var lastTransportAt: TimeInterval = -.infinity
+    private func acceptsTransport() -> Bool {
+        let now = ProcessInfo.processInfo.systemUptime
+        guard now - lastTransportAt >= InputConfig.transportDedupeWindow else { return false }
+        lastTransportAt = now
+        return true
     }
 
     func stop() {
